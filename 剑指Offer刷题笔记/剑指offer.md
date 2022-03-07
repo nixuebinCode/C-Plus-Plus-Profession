@@ -66,7 +66,7 @@ bool findNum(int a[][], int rows, int columns, int number){
 
 ### 解题思路
 
-> 最直观的做法是从头到尾扫描字符串，每次碰到空格就进行替换。由于是1个字符替换成3个，每替换一次，必须把空格后面的所有字符向后移动2位。![image-20220223163636530](https://github.com/nixuebinCode/C-Study-Note/blob/main/%E5%89%91%E6%8C%87Offer%E5%88%B7%E9%A2%98%E7%AC%94%E8%AE%B0/images/image-20220223163636530.png)
+> 最直观的做法是从头到尾扫描字符串，每次碰到空格就进行替换。由于是1个字符替换成3个，每替换一次，必须把空格后面的所有字符向后移动2位。![image-20220223163636530](/images/image-20220223163636530.png)
 >
 > 假设字符串的长度是n 。对每个空格字符，需要移动后面O(n) 个字符，因此对于含有O(n)个空格字符的字符串而言， 总的时间效率是O(n<sup>2</sup>)
 
@@ -80,7 +80,7 @@ bool findNum(int a[][], int rows, int columns, int number){
 
 重复上述步骤直至P1 = P2。
 
- ![image-20220223165733077](https://github.com/nixuebinCode/C-Study-Note/blob/main/%E5%89%91%E6%8C%87Offer%E5%88%B7%E9%A2%98%E7%AC%94%E8%AE%B0/images/image-20220223165733077.png)
+ ![image-20220223165733077](/images/image-20220223165733077.png)
 
 ### 代码实现
 
@@ -174,7 +174,7 @@ void PrintListReversingly_Recursively(ListNode* pHead){
 
 输入某二叉树的前序遍历和中序遍历的结果，请重建出该二叉树。假设输入的前序遍历和中序遍历的结果中都不含重复的数字。例如输入前序遍历序列{1, 2, 4, 7, 3, 5, 6, 8}和中序遍历序列{4, 7, 2, 1, 5, 3, 8, 6}，则重建出图所示的二叉树并输出它的头结点。二叉树节点的定义如下：
 
- ![image-20220226160048561](https://github.com/nixuebinCode/C-Study-Note/blob/main/%E5%89%91%E6%8C%87Offer%E5%88%B7%E9%A2%98%E7%AC%94%E8%AE%B0/images/image-20220226160048561.png)
+ ![image-20220226160048561](/images/image-20220226160048561.png)
 
 ```c++
 struct BinaryTreeNode{
@@ -255,7 +255,7 @@ int main(){
 
 ### 解题思路
 
- ![image-20220227164117831](https://github.com/nixuebinCode/C-Study-Note/blob/main/%E5%89%91%E6%8C%87Offer%E5%88%B7%E9%A2%98%E7%AC%94%E8%AE%B0/images/image-20220227164117831.png)
+ ![image-20220227164117831](/images/image-20220227164117831.png)
 
 考虑下面三种情况：
 
@@ -329,7 +329,7 @@ private:
 当stack2不为空时，在stack2中的栈顶元素是最先进入队列的元素，可以弹出。
 当stack2为空时，我们把stack1中的元素逐个弹出并压入stack2，由于先进入队列的元素被压入stack1的底端，经过弹出和压入操作后就储与stack2的顶端，可以弹出。
 
- ![image-20220302211220257](https://github.com/nixuebinCode/C-Study-Note/blob/main/%E5%89%91%E6%8C%87Offer%E5%88%B7%E9%A2%98%E7%AC%94%E8%AE%B0/images/image-20220302211220257.png)
+ ![image-20220302211220257](/images/image-20220302211220257.png)
 
 ### 代码实现
 
@@ -430,13 +430,13 @@ long long Fabonacci(unsigned n){
 
 按照上述思路，第一个指针总是指向前面的递增序列，第二个指针总是指向后面的递增序列，最终第一个指针将指向前面的递增序列的最后一个元素，第二个指针将指向后面的递增序列的第一个元素。也就是它们最终会指向两个相邻的元素，而第二个指针指向的刚好是最小的元素。
 
- ![image-20220306203814878](https://github.com/nixuebinCode/C-Study-Note/blob/main/%E5%89%91%E6%8C%87Offer%E5%88%B7%E9%A2%98%E7%AC%94%E8%AE%B0/images/image-20220306203814878.png)
+ ![image-20220306203814878](/images/image-20220306203814878.png)
 
 按照定义还有一个特例：如果把排序数组的前面的0个元素搬到最后面，即排序数组本身，这仍是数组的一个旋转，此时第一个元素小于最后一个元素，直接返回第一个元素即可。
 
 此外，如果第一个指针和第二个指针指向的元素，以及它们中间的元素都相等，我们则无法确定中间的元素是位于第一个递增序列，还是第二个递增序列，也就无法移动两个指针来缩小查找的范围，此时，我们不得不采用顺序查找的方法。
 
- ![image-20220306204542755](https://github.com/nixuebinCode/C-Study-Note/blob/main/%E5%89%91%E6%8C%87Offer%E5%88%B7%E9%A2%98%E7%AC%94%E8%AE%B0/images/image-20220306204542755.png)
+ ![image-20220306204542755](/images/image-20220306204542755.png)
 
 ### 代码实现
 
