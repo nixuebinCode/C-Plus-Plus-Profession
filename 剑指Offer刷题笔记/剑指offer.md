@@ -544,5 +544,3 @@ bool hasPathCore(const char *matrix, int rows, int cols, int row, int col,
     return hasPath;
 }
 ```
-
-![image-20220307224553333](C:\Users\nixuebin\AppData\Roaming\Typora\typora-user-images\image-20220307224553333.png)
