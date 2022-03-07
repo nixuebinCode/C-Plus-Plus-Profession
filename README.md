@@ -1,1 +1,1 @@
-# C-Study-Note
+# C++ Study Note
