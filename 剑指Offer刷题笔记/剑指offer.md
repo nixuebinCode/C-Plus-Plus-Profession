@@ -387,7 +387,7 @@ $$
 >
 >这种解法存在严重的效率问题，以求解f(10)为例，可以用树形结构来表示这种依赖关系，如图
 >
-> ![image-20220304172107092](https://github.com/nixuebinCode/C-Study-Note/blob/main/%E5%89%91%E6%8C%87Offer%E5%88%B7%E9%A2%98%E7%AC%94%E8%AE%B0/images/image-20220304172107092.png)
+> ![image-20220304172107092](/images/image-20220304172107092.png)
 >
 >我们不难发现，在这棵树中有很多节点是重复的，而且重复的节点数会随着n的增大而急剧增加
 
@@ -545,3 +545,4 @@ bool hasPathCore(const char *matrix, int rows, int cols, int row, int col,
 }
 ```
 
+![image-20220307224553333](C:\Users\nixuebin\AppData\Roaming\Typora\typora-user-images\image-20220307224553333.png)
