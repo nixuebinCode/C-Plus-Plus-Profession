@@ -115,4 +115,162 @@ std::cout << ctb[0]; // calls const TextBlock::operator[]
   }
   ```
 
+**Compilers enforce bitwise constness, but you should program using logical constness.**
+
 ### Avoiding Duplication in const and Non-const Member Functions
+
+Sometimes, there may be duplicate processes in both const and non-const member functions.  In this case, the const version of operator[] does exactly what the non-const version does, it just has a const-qualified return type. So having the non-const operator[] call the const version is a safe way to avoid code duplication, even though it requires a cast.
+
+```c++
+class TextBlock {
+public:
+	...
+	const char& operator[](std::size_t position) const // same as before
+	{
+		...
+		...
+		...
+		return text[position];
+	}
+	char& operator[](std::size_t position) // now just calls const op[]
+	{
+		return const_cast<char&>(static_cast<const TextBlock&>(*this)[position]); 	// cast away const on op[]'s return type;
+ 																					// add const to *this's type;
+                                 													// call const version of op[]
+
+    }
+	...
+};
+```
+
+We have two casts
+
+* one to add const to *this (so that our call to operator[] will call the const version)
+* the second to remove the const from the const operator[]'s return value
+
+The cast that adds const is just forcing a safe conversion (from a non-const object to a const one), so we use a static_cast for that.
+
+The one that removes const can be accomplished only via a const_cast, so we don't really have a choice there.
+
+Having a const member function call a non-const one is wrong: A const member function promises never to change the logical state of its object, but a non-const member function makes no such promise. If you were to call a non-const function from a const one, you'd run the risk that the object you'd promised not to modify would be changed.
+
+**When const and non-const member functions have essentially identical implementations, code duplication can be avoided by having the non-const version call the const version.**
+
+## Item4: Make sure that objects are initialized before they're used
+
+### non-member objects of built-in types
+
+For non-member objects of built-in types, you'll need to initialize your objects manually.
+
+```c++
+int x = 0; 									// manual initialization of an int
+const char * text = "A C-style string"; 	// manual initialization of a pointer
+double d; 									// "initialization" by reading from
+std::cin >> d; 								// an input stream
+```
+
+### member objects
+
+For almost everything else, the responsibility for initialization falls on constructors. The rule there is simple: make sure that all constructors initialize everything in the object. But it's important not to confuse assignment with initialization.
+
+```c++
+ABEntry::ABEntry(const std::string& name, const std::string& address, const std::list<PhoneNumber>& phones)
+{
+	theName = name; 		// these are all
+							// assignments,
+	theAddress = address; 	// not initializations
+	thePhones = phones;
+	numTimesConsulted = 0;
+}
+```
+
+Inside the ABEntry constructor, theName, theAddress, and thePhones aren't being initialized, they're being assigned. Initialization took place earlier — when their default constructors were automatically called prior to entering the body of the ABEntry constructor.
+
+This isn't true for numTimesConsulted, because it's a built-in type. For it, there's no guarantee it was initialized at all prior to its assignment.
+
+We should use the member initialization list:
+
+```c++
+ABEntry::ABEntry(const std::string& name, const std::string& address, const std::list<PhoneNumber>& phones)
+					: theName(name),
+					theAddress(address), 	// these are now all
+											//initializations
+					thePhones(phones),
+					numTimesConsulted(0)
+{} // the ctor body is now empty
+```
+
+* The assignment-based version first called default constructors to initialize theName, theAddress, and thePhones, then promptly assigned new values on top of the default-constructed ones. All the work performed in those default constructions was therefore wasted.
+* The member initialization list approach avoids that problem, because the arguments in the initialization list are used as constructor arguments for the various data members.
+* Many classes have multiple constructors, and each constructor has its own member initialization list. If there are many data members and/or base classes, the existence of multiple initialization lists introduces undesirable repetition (in the lists) and boredom (in the programmers). In such cases, moving the assignments to a single (typically private) function that all the constructors call may be helpful.
+* **Within a class, data members are initialized in the order in which they are declared regardless of the order in the member initialization list.**
+
+### non-local static objects defined in different translation units
+
+A static object is one that exists from the time it's constructed until the end of the program.
+
+* global objects
+* objects defined at namespace scope
+* objects declared static inside classes
+* objects declared static inside functions
+* objects declared static at file scope
+
+Static objects inside functions are known as local static objects (because they're local to a function), and the other kinds of static objects are known as non-local static objects.
+
+A translation unit(编译单元) is the source code giving rise to a single object file(单一目标文件). It's basically a single source file, plus all of its #include files.
+
+**The relative order of initialization of non-local static objects defined in different translation units is undefined.**
+
+```c++
+class FileSystem { // from your library’s header file
+public:
+	...
+	std::size_t numDisks() const; // one of many member functions
+	...
+};
+extern FileSystem tfs; 	// declare object for clients to use
+						// ("tfs" = "the filesystem"); definition is in some .cpp file in your library
+```
+
+```c++
+class Directory { // created by library client
+public:
+	Directory( params );
+	...
+};
+Directory::Directory( params )
+{
+	...
+	std::size_t disks = tfs.numDisks(); // use the tfs object
+	...
+}
+Directory tempDir( params ); // directory for temporary files
+```
+
+Now the importance of initialization order becomes apparent: unless tfs is initialized before tempDir, tempDir's constructor will attempt to use tfs before it's been initialized.
+
+**Solution: move each non-local static object into its own function, where it's declared static. These functions return references to the objects they contain. Clients then call the functions instead of referring to the objects.**
+
+This approach is founded on C++'s guarantee that local static objects are initialized when the object's definition is first encountered during a call to that function.
+
+```c++
+class FileSystem { ... }; 	// as before
+FileSystem& tfs() 			// this replaces the tfs object; it could be
+{ 							// static in the FileSystem class
+	static FileSystem fs; 	// define and initialize a local static object
+	return fs; 				// return a reference to it
+}
+class Directory { ... }; 			// as before
+Directory::Directory( params ) 		// as before, except references to tfs are
+{ 									// now to tfs()
+	...
+	std::size_t disks = tfs().numDisks();
+	...
+}
+Directory& tempDir() 					// this replaces the tempDir object; it
+{ 										// could be static in the Directory class
+	static Directory td; ( params ); 	// define/initialize local static object
+	return td;							// return reference to it
+}
+```
+
