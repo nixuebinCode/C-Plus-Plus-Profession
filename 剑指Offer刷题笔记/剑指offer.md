@@ -544,3 +544,54 @@ bool hasPathCore(const char *matrix, int rows, int cols, int row, int col,
     return hasPath;
 }
 ```
+
+***
+
+## 面试题13：机器人的运动范围
+
+### 题目
+
+地上有一个m行n列的方格。一个机器人从坐标(0, 0)的格子开始移动，它每次可以向左、右、上、下移动一格，但不能进入行坐标和列坐标的数位之和大于k的格子。例如，当k为18时，机器人能够进入放个(35, 37)，因为3+5+3+7=18。但它不能进入方格(35, 38)，因为3+5+3+8=19。请问该机器人能够到达多少个格子？
+
+### 解题思路
+
+与12题类似，属于典型的回溯法求解问题，不同的是，这里机器人的初始位置是给定了的，即坐标(0, 0)，只需要依次检查每个格子相邻的格子是否满足要求，如果满足要求，则将最终结果+1。
+
+### 代码实现
+
+```c++
+int countGridCore(int threshold, int rows, int cols, int row, int col, bool *visited);
+
+int calDigit(int num){
+    if(num / 10 == 0)
+        return num;
+    return num % 10 + calDigit(num / 10);
+}
+
+int countGrid(int threshold, int rows, int cols){
+    if(rows <=0 || cols <= 0){
+        return 0;
+    }
+    bool *visited = new bool[rows * cols];
+    memset(visited, 0, rows * cols);
+    int count = countGridCore(threshold, rows, cols, 0, 0, visited);
+
+    delete[] visited;
+    return count;
+}
+
+int countGridCore(int threshold, int rows, int cols, int row, int col, bool *visited){
+    int count = 0;
+    if(row >= 0 && row < rows && col >= 0 && col < cols
+        && !visited[row * cols + col] && (calDigit(row) + calDigit(col)) <= threshold){
+        visited[row * cols + col] = true;
+        count = 1 + countGridCore(threshold, rows, cols, row + 1, col, visited)
+                + countGridCore(threshold, rows, cols, row - 1, col, visited)
+                + countGridCore(threshold, rows, cols, row, col + 1, visited)
+                + countGridCore(threshold, rows, cols, row, col - 1, visited);
+        
+    }
+    return count;
+}
+```
+
