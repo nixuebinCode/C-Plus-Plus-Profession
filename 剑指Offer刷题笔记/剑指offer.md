@@ -589,9 +589,72 @@ int countGridCore(int threshold, int rows, int cols, int row, int col, bool *vis
                 + countGridCore(threshold, rows, cols, row - 1, col, visited)
                 + countGridCore(threshold, rows, cols, row, col + 1, visited)
                 + countGridCore(threshold, rows, cols, row, col - 1, visited);
-        
     }
     return count;
 }
 ```
+
+***
+
+## 面试题14：剪绳子
+
+### 题目
+
+给你一根长度为n的绳子，请把绳子剪成m段(m，n都是整数，n>1并且m>1)，每段绳子的长度记为k[0]，k[1]，...，k[m]。请问k[0]×k[1]×...×k[m]可能的最大乘积是多少？例如，当绳子的长度是8时，我们把它剪成长度分别为2，3，3的三段，此时得到的最大乘积是18。
+
+### 解法思路一：动态规划
+
+> 如果面试题是求一个问题的最优解（通常是求最大值或者最小值），而且该问题能够分解成若干子问题，并且子问题之间还有重叠的更小的子问题，就可以考虑用动态规划来解决这个问题
+>
+> 可以应用动态规划求解问题的四个特点
+>
+> * 整体问题可以分解为若干子问题
+> * 整体问题的最优解是依赖各个子问题的最优解
+> * 这些子问题之间还有相互重叠的更小的子问题
+> * 从上往下分析问题，从下往上求解问题，并把已经解决的子问题的最优解存储下来
+
+首先定义函数f(n)为把长度为n的绳子剪成若干段后，各段长度乘积的最大值。
+
+在剪第一刀的时候，剪出来的第一段绳子可能的长度为1,2,3...,n-1，因此f(n) = max( f(i) × f(n-i) )，0<i<n。
+
+根据动态规划问题的第四个特点，我们从下往上求解问题，也就是说我们先得到f(2)，f(3)，再得到f(4)，f(5)，直到得到f(n)：
+
+* n=2时，绳子只可能剪成长度为1的两端，因此f(2)=1
+* n=3时，可能把绳子剪成长度分别为1和2的两段，或者长度都为1的三段，由于1×2>1×1×1，因此f(3)=2
+* 当计算f(4)时，依次计算f(1)×f(3)，f(2)×f(2)，取最大值
+* 当计算f(5)时，依次计算f(1)×f(4)，f(2)×f(3)，取最大值
+* 当计算f(6)时，依次计算f(1)×f(5)，f(2)×f(4)，f(3)×f(3)，取最大值
+* ...当计算f(i)时，依次计算f(1)×f(i-1)，f(2)×f(i-2)，...，f(i/2)×f(i-i/2)，取最大值
+
+### 代码实现
+
+```c++
+int maxProduct(int length){
+    if(length < 2)
+        return 0;
+    if(length == 2)
+        return 1;
+    if(length == 3)
+        return 2;
+    int *product = new int[length + 1];     // 数组中第i个元素，表示把长度为i的绳子剪成若干段之后各段长度乘积的最大值，即f(i)
+    product[0] = 0;
+    product[1] = 1;
+    product[2] = 2;                         
+    product[3] = 3;
+    int max, temp = 0;
+    for(int i = 4; i < length + 1; i++){    // 求出f(length)的值，从f(4)开始从下往上算
+        max = 0;
+        for(int j = 1; j <= i / 2; j++){    // 依次计算f(1)×f(i-1)，f(2)×f(i-2)，...，f(i/2)×f(i-i/2)，取最大值
+            temp = product[j] * product[i - j];
+            if(max < temp)
+                max = temp;
+        }
+        product[i] = max;
+    }
+    delete[] product;
+    return product[length];
+}
+```
+
+**这里需要注意的是，对于product[2]，因为题目要求至少剪一刀，因此f(2)应当返回1，但是实际上我们可以不剪，即2>1×1，因此product[2] = 2；同理f(3)也可以不剪，3>f(3)，因此product[3] = 3**
 
