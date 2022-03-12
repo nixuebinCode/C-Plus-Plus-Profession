@@ -425,3 +425,213 @@ struct NoCopy {
 };
 ```
 
+***
+
+## Item 7: Declare destructors virtual in polymorphic base classes
+
+### Virtual destructors in polymorphic base classes
+
+Suppose we create a TimeKeeper base class along with derived classes for different approaches to timekeeping.
+
+And we have a factory function — a function that returns a base class pointer to a newly-created derived class object — can be used to return
+a pointer to a timekeeping object
+
+```c++
+class TimeKeeper {
+public:
+	TimeKeeper();
+	~TimeKeeper();
+	...
+};
+class AtomicClock: public TimeKeeper { ... };
+class WaterClock: public TimeKeeper { ... };
+class WristWatch: public TimeKeeper { ... };
+
+TimeKeeper* getTimeKeeper(); 	// returns a pointer to a dynamically
+								// allocated object of a class derived from TimeKeeper
+```
+
+The problem is that getTimeKeeper returns a pointer to a derived class object (e.g., AtomicClock), that object is being deleted via a base class pointer (i.e., a TimeKeeper* pointer), and the base class (TimeKeeper) has a non-virtual destructor.
+
+C++ specifies that when a derived class object is deleted through a pointer to a base class with a nonvirtual destructor, results are undefined:
+**The derived part of the object is never destroyed.** 
+**However, the base class part (i.e., the TimeKeeper part) typically would be destroyed, thus leading to a curious “partially destroyed” object.**
+**This is an excellent way to leak resources, corrupt data structures, and spend a lot of time with a debugger.**
+
+### In some cases, making the destructor virtual may be a bad idea
+
+When a class is not intended to be a base class, making the destructor virtual is usually a bad idea.
+
+```c++
+class Point { // a 2D point
+public:
+	Point(int xCoord, int yCoord);
+	~Point();
+private:
+	int x, y;
+};
+```
+
+The implementation of virtual functions requires that objects carry information that can be used at runtime to determine which virtual functions should be invoked on the object.
+
+This information typically takes the form of a pointer called a vptr (“virtual table pointer”). The vptr points to an array of function pointers called a vtbl (“virtual table”).
+
+When a virtual function is invoked on an object, the actual function called is determined by following the object's vptr to a vtbl and then looking up the appropriate function pointer in the vtbl.
+
+**If the Point class contains a virtual function, objects of that type will increase in size. Addition of a vptr to Point will thus increase its size by 50–100%!**
+
+The standard string type and STL container types contain no virtual functions, so we should never inherit from those classes.
+
+### Pure virtual destructor
+
+Recall that pure virtual functions result in abstract classes — classes that can't be instantiated.
+
+Sometimes, however, you have a class that you'd like to be abstract, but you don't have any pure virtual functions. The solution is simple: declare a pure virtual destructor in the class you want to be abstract.
+
+```c++
+class AWOV {
+public:
+	virtual ~AWOV() = 0; // declare pure virtual destructor
+};
+```
+
+**There is one twist, however: you must provide a definition for the pure virtual destructor:**
+
+```c++
+AWOV::~AWOV() {} // definition of pure virtual dtor
+```
+
+*The way destructors work is that the most derived class's destructor is called first, then the destructor of each base class is called. Compilers will generate a call to ~AWOV from its derived classes' destructors, so you have to be sure to provide a body for the function. If you don't, the linker will complain.*
+
+***
+
+## Item 8: Prevent exceptions from leaving destructors
+
+Premature program termination or undefined behavior can result from destructors emitting exceptions.
+
+C++ does not like destructors that emit exceptions!
+
+```c++
+class Widget {
+public:
+	...
+	~Widget() { ... } // assume this might emit an exception
+};
+void doSomething()
+{
+	std::vector<Widget> v;
+	...
+} // v is automatically destroyed here
+```
+
+Suppose v has ten Widgets in it, and during destruction of the first one, an exception is thrown. The other nine Widgets still have to be destroyed (otherwise any resources they hold would be leaked), so v should invoke their destructors. But suppose that during those calls, a second Widget destructor throws an exception. Now there are two simultaneously active exceptions, and that's one too many for C++.
+
+Depending on the precise conditions under which such pairs of simultaneously active exceptions arise, program execution either terminates or yields undefined behavior.
+
+### What should you do if your destructor needs to perform an operation that may fail by throwing an exception?
+
+Suppose you're working with a class for database connections. And you have a resource-managing class for DBConnection that calls close in its desturctor.
+
+```c++
+class DBConnection {
+public:
+	...
+	static DBConnection create(); // function to return DBConnection objects
+	void close(); 	// close connection;
+					//throw an exception if closing fails
+};
+
+class DBConn { 	// class to manage DBConnection objects
+public:
+	...
+	~DBConn() // make sure database connections are always closed
+	{
+		db.close();
+	}
+private:
+	DBConnection db;
+};
+```
+
+This is fine as long as the call to close succeeds, but if the call yields an exception, DBConn's destructor will propagate that exception. That's a problem, because destructors that throw mean trouble.
+
+#### Solution 1
+
+Terminate the program if close throws, typically by calling `abort`
+
+```c++
+DBConn::~DBConn()
+{ 
+	try {
+		db.close();
+    }
+	catch (...) {
+		make log entry that the call to close failed;
+		std::abort();
+	}
+}
+```
+
+Calling abort may forestall undefined behavior.
+
+### Solution 2
+
+Swallow the exception arising from the call to close.
+
+```c++
+DBConn::~DBConn()
+{
+    try {
+		db.close();
+    }
+	catch (...) {
+		make log entry that the call to close failed;
+	}
+}
+```
+
+In general, swallowing exceptions is a bad idea, because it suppresses important information — something failed!
+
+For this to be a viable option, the program must be able to reliably continue execution even after an error has been encountered and ignored.
+
+### Solution 3
+
+Neither of approaches above is especially appealing. The problem with both is that the program has no way to react to the condition that led to close
+throwing an exception in the first place.
+
+A better strategy is to design DBConn's interface so that its clients have an opportunity to react to problems that may arise.
+
+```c++
+class DBConn {
+public:
+	...
+	void close() // new function for client use
+	{
+        db.close();
+		closed = true;
+	}
+	~DBConn()
+	{
+    	if (!closed) {	// close the connection if the client didn't
+			try { 
+				db.close();
+			}
+			catch (...) { // if closing fails, note that and terminate or swallow
+				make log entry that call to close failed;
+				...
+			}
+		}
+	}
+private:
+	DBConnection db;
+	bool closed;
+};
+```
+
+The rule is that:
+
+If an operation may fail by throwing an exception and there may be a need to handle that exception, the exception has to come from some non-destructor function.
+
+In this example, telling clients to call close themselves doesn't impose a burden on them; it gives them an opportunity to deal with errors they would otherwise have no chance to react to.
+
+If they don't find that opportunity useful (perhaps because they believe that no error will really occur), they can ignore it, relying on DBConn's destructor to call close for them. If an error occurs at that point — if close does throw — they're in no position to complain if DBConn swallows the exception or terminates the program.

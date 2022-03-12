@@ -727,3 +727,103 @@ int NUmberOf1(int n){
 }
 ```
 
+***
+
+## 面试题16：数值的整数次方
+
+### 题目
+
+实现函数double Power(double base, int exponent)，求base的exponent次方。不得使用库函数，同时不需要考虑大数问题。
+
+### 解题思路
+
+> 这道题目看似简单，但是首先要考虑清除各种可能的情况，并不是直接exponent个base相乘就可以。如果exponent是负数怎么办？能想到的解决方法是先对exponent取绝对值，计算完之后再取倒数，那么又很自然地想到如果要对0取倒数怎么办，因此如果base为0，exponent为负数，程序就会出错。
+>
+> 接下来要考虑的是如何处理错误，一般有以下三种方式
+>
+> * 函数用返回值来告知调用者是否出错
+> * 当错误发生时设置一个全局变量，调用者可以分析这个全局变量，从而得知出错的原因
+> * 当函数运行出错时，我们就抛出一个异常，还可以根据不同的出错原因定义不同的异常类型
+>
+> ![image-20220312100827464](images\image-20220312100827464.png)
+>
+> 根据上述思路写出代码：
+>
+> ```c++
+> bool equal(double num1, double num2){       // 注意：由于double精度问题，不能直接用==比较两个double
+>     if ((num1 - num2 > -0.0000001) && (num1 - num2 < 0.0000001))
+>         return true;
+>     else
+>         return false;
+> }
+> 
+> double PowerPositive(double base, int exponent){
+>     double result = 1.0;
+>     while(exponent--){
+>         result *= base;
+>     }
+>     return result;
+> }
+> 
+> double Power(double base, int exponent){
+>     g_InvalidInput = false;
+>     if(equal(base, 0.0) && exponent < 0){   // 底数为0，指数为负数
+>         g_InvalidInput = true;
+>         return 0.0;
+>     }
+>     if(exponent < 0){
+>         return 1.0 / PowerPositive(base, -exponent);
+>     }
+>     else{
+>         return PowerPositive(base, exponent);
+>     }
+> }
+> ```
+
+题目做到这里，思考一个问题：假如输入的exponent为32，那么我们需要做31次乘法。但是如果我们已经知道了一个数的16次方，那么只需要在16次方的基础上再平方一次就可以了，同理16次方是在8次方的基础上再平方一次就可以了...即有下面的公式：
+$$
+a^n =\begin{cases}a^{n/2}·a^{n/2},& \text a为偶数\\a·a^{(n-1)/2}·a^{(n-1)/2},& \text a为奇数\end{cases}
+$$
+
+### 代码实现
+
+```c++
+double PowerPositive(double base, int exponent){
+    double result = 1.0;
+    if(exponent == 0)
+        return 1.0;
+    if(exponent == 1)
+        return base;
+        
+    if(exponent % 2){   // exponent为奇数
+        result *= base * PowerPositive(base, exponent - 1);
+    }
+    else{               // exponent为偶数
+        result *= PowerPositive(base, exponent / 2);
+        result *= result;
+    }
+    return result;
+}
+```
+
+另外注意两个细节，当代码中出现%，/的时候可以考虑能否用位运算代替它们，例如可以用exponent >> 1代替exponent / 2。再例如可以利用exponent & 1来判断exponent是奇数还是偶数。
+
+```c++
+double PowerPositive(double base, int exponent){
+    double result = 1.0;
+    if(exponent == 0)
+        return 1.0;
+    if(exponent == 1)
+        return base;
+
+    if(exponent & 1){   // exponent二进制位最后一位是1，即exponent为奇数
+        result *= base * PowerPositive(base, exponent - 1);
+    }
+    else{               // exponent为偶数
+        result *= PowerPositive(base, exponent >> 1);
+        result *= result;
+    }
+    return result;
+}
+```
+
