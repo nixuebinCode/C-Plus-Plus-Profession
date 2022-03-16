@@ -1107,3 +1107,165 @@ std::tr1::shared_ptr<Widget> pw(new Widget); // store newed object in a smart po
 processWidget(pw, priority()); // this call won't leak
 ```
 
+## Item 18: Make interfaces easy to use correctly and hard to use incorrectly
+
+Developing interfaces that are easy to use correctly and hard to use incorrectly requires that you consider the kinds of mistakes that clients might make.
+
+For example, suppose you're designing the constructor for a class representing dates in time.
+
+```c++
+class Date {
+public:
+	Date(int month, int day, int year);
+	...
+};
+
+Date d(30, 3, 1995); // Oops! Should be "3, 30" , not "30, 3"
+Date d(3, 40, 1995); // Oops! Should be "3, 30" , not "3, 40"
+```
+
+Many client errors can be prevented by the introduction of **new types**. The judicious introduction of new types can work wonders for the prevention of interface usage errors: 
+
+```c++
+struct Day {
+    explicit Day(int d)
+        :val(d) {}
+    int val;
+};
+struct Month {
+    explicit Month(int m)
+        :val(m) {}
+    int val;
+};
+struct Year{
+	explicit Year(int y)
+    	:val(y) {}
+	int val;
+};
+class Date {
+public:
+	Date(const Month& m, const Day& d, const Year& y);
+	...
+};
+
+Date d(30, 3, 1995); // error! wrong types
+Date d(Day(30), Month(3), Year(1995)); // error! wrong types
+Date d(Month(3), Day(30), Year(1995)); // okay, types are correct
+```
+
+### Predefine the set of all valid Months
+
+Moreover, there are only 12 valid month values, so the Month type should reflect that. One way to do this would be to use an enum to represent the month, but enums are not as type-safe as we might like. For example, enums can be used like ints. A safer solution is to predefine the set of all valid Months:
+
+```c++
+class Month {
+public:
+	static Month Jan() { return Month(1); } 	// functions returning all valid Month values
+	static Month Feb() { return Month(2); } 	// using functions instead of objects to represent specific months
+												// because reliable initialization of non-local static objects can be 			
+    											// problematic
+	... 										
+	static Month Dec() { return Month(12); } 	
+	... // other member functions
+private:
+	explicit Month(int m); // prevent creation of new Month values
+	...
+};
+Date d(Month::Mar(), Day(30), Year(1995));
+```
+
+### Restrict what can be done with a type
+
+A common way to impose restrictions is to add const. **Unless there's a good reason not to, have your types behave consistently with the built-in types**.
+
+For example, const-qualifying the return type from operator* can prevent clients from making this error for user-defined types:
+
+```c++
+if (a * b = c) ... // oops, meant to do a comparison!
+```
+
+### Any interface that requires that clients remember to do something is prone to incorrect use
+```c++
+Investment* createInvestment(); // from Item 13; parameters omitted for simplicity
+```
+
+Item 13 shows how clients can store createInvestment's return value in a smart pointer like auto_ptr or tr1::shared_ptr, thus turning over to the smart pointer the responsibility for using delete. But what if clients forget to use the smart pointer? We should have the factory function return a smart pointer in the first place instead:
+
+```c++
+tr1::shared_ptr<Investment> createInvestment(); // from Item 13; parameters omitted for simplicity
+```
+
+Moreover, suppose clients who get an Investment* pointer from createInvestment are expected to pass that pointer to a function called getRidOfInvestment instead of using delete on it. The implementer of createInvestment can forestall such problems by returning a tr1::shared_ptr with
+getRidOfInvestment bound to it as its deleter.
+
+```c++
+std::tr1::shared_ptr<Investment> createInvestment()
+{
+	std::tr1::shared_ptr<Investment> retVal(static_cast<Investment*>(0), getRidOfInvestment);
+	retVal = ... ; // make retVal point to the correct object
+	return retVal;
+}
+```
+
+An especially nice feature of tr1::shared_ptr is that it automatically uses its per-pointer deleter to eliminate another potential client error, the “cross-DLL
+problem.” This problem crops up when an object is created using new in one dynamically linked library (DLL) but is deleted in a different DLL. tr1::shared_ptr avoids the problem, because its default deleter uses delete from the same DLL where the tr1::shared_ptr is created.
+
+## Item 19: Treat class design as type design
+
+In C++, defining a new class defines a new type. You should therefore approach class design with the same care that language designers lavish on the design of the language's built-in types.
+
+When you design your class, consider the following questions:
+
+* **How should objects of your new type be created and destroyed?**
+
+  The design of your class's constructors and destructor, as well as its memory allocation and deallocation functions (operator new, operator new[], operator delete, and operator delete[])
+
+* **How should object initialization differ from object assignment?**
+
+  The differences between your constructors and your assignment operators
+
+* **What does it mean for objects of your new type to be passed by value?**
+
+  <font color='red'>The copy constructor defines how pass-by-value is implemented for a type.</font>
+
+* **What are the restrictions on legal values for your new type?**
+
+  The error checking you'll have to do inside your member functions
+
+  The exceptions your functions throw
+
+* **Does your new type fit into an inheritance graph?**
+
+  If you inherit from existing classes, you are constrained by the design of those classes
+
+  If you wish to allow other classes to inherit from your class, that affects whether the functions you declare are virtual, especially your destructor
+
+* **What kind of type conversions are allowed for your new type?**
+
+  * If you wish to allow objects of type T1 to be implicitly converted into objects of type T2
+    * Write a type conversion function in class T1 (e.g., operator T2)
+    * Write nonexplicit constructor in class T2 that can be called with a single argument
+  * If you wish to allow explicit conversions only
+    * Write functions to perform the conversions
+
+* **What operators and functions make sense for the new type?**
+
+  Which functions you'll declare for your class
+
+* **What standard functions should be disallowed?**
+
+  Those are the ones you'll need to declare private
+
+* **Who should have access to the members of your new type?**
+
+  This question helps you determine which members are public, which are protected, and which are private.
+
+  It also helps you determine which classes and/or functions should be friends, as well as whether it makes sense to nest one class inside another.
+
+* **How general is your new type?**
+
+  Perhaps you're defining a whole family of types. If so, you don't want to define a new class, you want to define a new **class template**
+
+* **Is a new type really what you need?**
+
+  If you're defining a new derived class only so you can add functionality to an existing class, perhaps you'd better achieve your goals by simply defining one or more non-member functions or templates.
