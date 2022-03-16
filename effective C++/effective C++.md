@@ -574,7 +574,7 @@ DBConn::~DBConn()
 
 Calling abort may forestall undefined behavior.
 
-### Solution 2
+#### Solution 2
 
 Swallow the exception arising from the call to close.
 
@@ -594,7 +594,7 @@ In general, swallowing exceptions is a bad idea, because it suppresses important
 
 For this to be a viable option, the program must be able to reliably continue execution even after an error has been encountered and ignored.
 
-### Solution 3
+#### Solution 3
 
 Neither of approaches above is especially appealing. The problem with both is that the program has no way to react to the condition that led to close
 throwing an exception in the first place.
@@ -635,3 +635,475 @@ If an operation may fail by throwing an exception and there may be a need to han
 In this example, telling clients to call close themselves doesn't impose a burden on them; it gives them an opportunity to deal with errors they would otherwise have no chance to react to.
 
 If they don't find that opportunity useful (perhaps because they believe that no error will really occur), they can ignore it, relying on DBConn's destructor to call close for them. If an error occurs at that point — if close does throw — they're in no position to complain if DBConn swallows the exception or terminates the program.
+
+## Item 9: Never call virtual functions during construction or destruction
+
+Suppose you've got a class hierarchy for modeling stock transactions:
+
+```c++
+class Transaction { // base class for all transactions
+public:
+	Transaction();
+	virtual void logTransaction() const = 0; // make type-dependent log entry
+	...
+};
+Transaction::Transaction() // implementation of base class ctor
+{
+	...
+	logTransaction(); // as final action, log this transaction
+}
+
+class BuyTransaction: public Transaction { // derived class
+public:
+	virtual void logTransaction() const; // how to log transactions of this type
+	...
+};
+
+class SellTransaction: public Transaction { // derived class
+public:
+	virtual void logTransaction() const; // how to log transactions of this type
+	...
+};
+
+
+```
+
+When the code `BuyTransaction b;` is executed, a BuyTransaction constructor will be called, but first, a Transaction constructor must be called.
+Base class parts of derived class objects are constructed before derived class parts are. The last line of the Transaction constructor calls the virtual function logTransaction. 
+The version of logTransaction that's called is the one in Transaction, not the one in BuyTransaction — even though the type of object being created is BuyTransaction.
+
+There's a good reason for this seemingly counterintuitive behavior. Because base class constructors execute before derived class constructors, derived
+class data members have not been initialized when base class constructors run. If virtual functions called during base class construction went down to
+derived classes, the derived class functions would almost certainly refer to local data members, but those data members would not yet have been initialized.
+
+The same reasoning applies during destruction. Once a derived class destructor has run, the object's derived class data members assume undefined
+values, so C++ treats them as if they no longer exist. Upon entry to the base class destructor, the object becomes a base class.
+
+### how to ensure that the proper version of logTransaction is called each time an object in the Transaction hierarchy is created
+
+Turn logTransaction into a non-virtual function in Transaction, then require that derived class constructors pass the necessary log information to the
+Transaction constructor. Having derived classes pass necessary construction information up to base class constructors.
+
+```c++
+class Transaction {
+public:
+	explicit Transaction(const std::string& logInfo);
+	void logTransaction(const std::string& logInfo) const; // now a non-virtual func
+	...
+};
+Transaction::Transaction(const std::string& logInfo)
+{
+	...
+	logTransaction(logInfo); // now a non-virtual call
+}
+
+class BuyTransaction: public Transaction {
+public:
+	BuyTransaction( parameters )
+		: Transaction(createLogString( parameters )) // pass log info to base class constructor
+	{ ... }
+private:
+	static std::string createLogString( parameters );
+};
+```
+
+**The (private) static function createLogString**
+
+* Using a helper function to create a value to pass to a base class constructor is often more convenient (and more readable).
+* By making the function static, there's no danger of accidentally referring to the nascent BuyTransaction object's as-yet-uninitialized data
+  members. 
+
+***
+
+## Item 10: Have assignment operators return a reference to *this
+Assignment returns a reference to its left-hand argument, and that's the convention you should follow when you implement assignment operators for your classes
+
+This convention applies to all assignment operators, not just the standard form.
+
+```c++
+class Widget {
+public:
+	...
+	Widget& operator=(const Widget& rhs) // return type is a reference to the current class
+	{ 
+		...
+		return *this; // return the lefthand object
+	}
+	Widget& operator+=(const Widget& rhs) // the convention applies to +=, -=, *=, etc.
+	{
+		...
+		return *this;
+	}
+	Widget& operator=(int rhs) // it applies even if the operator's parameter type is unconventional
+	{
+		... 
+		return *this;	
+	}
+	...
+};
+```
+
+## Item 11: Handle assignment to self in operator=
+
+In the implementation of operator=, you may fall into the trap of accidentally releasing a resource before you're done using it, if you don't consider the self assignment.
+
+```c++
+class Bitmap { ... };
+class Widget {
+	...
+private:
+	Bitmap *pb; // ptr to a heap-allocated object
+};
+
+Widget& Widget::operator=(const Widget& rhs) // unsafe impl. of operator=
+{
+	delete pb; // stop using current bitmap
+	pb = new Bitmap(*rhs.pb); // start using a copy of rhs's bitmap
+	return *this;
+}
+```
+
+When *this (the target of the assignment) and rhs are the same object, the delete not only destroys the bitmap for the current object, it destroys the bitmap for rhs, too.
+
+
+
+### The traditional way to prevent this error is to check for assignment to self via an identity test at the top of operator=
+
+```c++
+Widget& Widget::operator=(const Widget& rhs)
+{
+	if (this == &rhs) return *this; // identity test: if a self-assignment, do nothing
+	delete pb;
+	pb = new Bitmap(*rhs.pb);
+	return *this;
+}
+```
+
+This version continues to have exception trouble. In particular, if the “new Bitmap” expression yields an exception (either because there is insufficient memory for the allocation or because Bitmap's copy constructor throws one), the Widget will end up holding a pointer to a deleted Bitmap.
+
+###  Making operator= exception-safe typically renders it self-assignment-safe, too. 
+A careful ordering of statements can yield exception-safe (and self-assignment-safe) code. We just have to be careful not to delete pb until after we've copied what it points to.
+
+```c++
+Widget& Widget::operator=(const Widget& rhs)
+{
+	Bitmap *pOrig = pb; // remember original pb
+	pb = new Bitmap(*rhs.pb);
+	delete pOrig; // delete the original pb
+	return *this;
+}
+```
+
+### Use the technique known as “copy and swap.”
+
+```c++
+class Widget {
+	...
+	void swap(Widget& rhs); // exchange *this's and rhs's data;
+};
+Widget& Widget::operator=(const Widget& rhs)
+{
+	Widget temp(rhs); // make a copy of rhs's data
+	swap(temp); // swap *this's data with the copy's
+	return *this;
+}
+```
+
+A variation on this theme：
+
+```c++
+Widget& Widget::operator=(Widget rhs) 	// rhs is a copy of the object passed in
+{ 										// note pass by val
+	swap(rhs); 							// swap *this's data with the copy's
+	return *this;
+}
+```
+
+It takes advantage of the facts that
+
+* A class's copy assignment operator may be declared to take its argument by value
+* Passing something by value makes a copy of it
+
+## Item 12: Copy all parts of an object
+
+In well-designed object-oriented systems that encapsulate the internal parts of objects, only two functions copy objects: the aptly named **copy constructor** and **copy assignment operator**. We'll call these the copying functions.
+
+If you add a data member to a class, you need to make sure that you update the copying functions, too.
+
+#### Copying functions in inheritance
+
+```c++
+void logCall(const std::string& funcName); // make a log entry
+class Customer {
+public:
+	...
+	Customer(const Customer& rhs);
+	Customer& operator=(const Customer& rhs);
+	...
+private:
+	std::string name;
+};
+
+class PriorityCustomer: public Customer { // a derived class
+public:
+	...
+	PriorityCustomer(const PriorityCustomer& rhs);
+	PriorityCustomer& operator=(const PriorityCustomer& rhs);
+	...
+private:
+	int priority;
+};
+PriorityCustomer::PriorityCustomer(const PriorityCustomer& rhs)
+		: priority(rhs.priority)
+{
+	logCall("PriorityCustomer copy constructor");
+}
+PriorityCustomer& PriorityCustomer::operator=(const PriorityCustomer& rhs)
+{
+	logCall("PriorityCustomer copy assignment operator");
+	priority = rhs.priority;
+	return *this;
+}
+```
+
+The problem is that every PriorityCustomer also contains a copy of the data members it inherits from Customer, and those data members are not being copied at all.
+
+Priority Customer's copy constructor specifies no arguments to be passed to its base class constructor (i.e., it makes no mention of Customer on its member initialization list), so **the Customer part of the PriorityCustomer object will be initialized by the Customer constructor taking no arguments** —by the default constructor. (Assuming it has one. If not, the code won't compile.) That constructor will perform a default initialization for name and lastTransaction.
+
+Any time you take it upon yourself to write copying functions for a derived class, you must take care to also copy the base class parts. Those parts are
+typically private, so **derived class copying functions must invoke their corresponding base class functions**
+
+```c++
+PriorityCustomer::PriorityCustomer(const PriorityCustomer& rhs)
+	: Customer(rhs), // invoke base class copy ctor
+	  priority(rhs.priority)
+{
+	logCall("PriorityCustomer copy constructor");
+}
+PriorityCustomer& PriorityCustomer::operator=(const PriorityCustomer& rhs)
+{
+	logCall("PriorityCustomer copy assignment operator");
+	Customer::operator=(rhs); // assign base class parts
+	priority = rhs.priority;
+	return *this;
+}
+```
+
+## Item 13: Use objects to manage resources
+
+A resource is something that, once you're done using it, you need to return to the system. For example, dynamically allocated memory, file descriptors, mutex locks, fonts and brushes in graphical user interfaces (GUIs), database connections, and network sockets.
+
+Suppose we have such class as below and a factory function: 
+
+```c++
+class Investment { ... }; // root class of hierarchy of investment types
+Investment* createInvestment(); // return ptr to dynamically allocated
+								// object in the Investment hierarchy;
+								// the caller must delete it
+void f()
+{
+	Investment *pInv = createInvestment(); // call factory function
+	... // use pInv
+	delete pInv; // release object
+}
+```
+
+There are several ways f could fail to delete the investment object it gets from createInvestment:
+
+* There might be a premature return statement somewhere inside the “...” part of the function
+* If the uses of createInvestment and delete were in a loop, and the loop was prematurely exited by a break or goto statement
+* Some statement inside the “...” might throw an exception
+
+We can fix this problem by putting resources inside objects, and then we can rely on C++'s automatic destructor invocation to make sure that the resources are released.
+
+The smart pointer's destructor automatically calls delete on what it points to:
+
+```c++
+void f()
+{
+	std::auto_ptr<Investment> pInv(createInvestment()); // call factory function
+	... 												// use pInv as before
+} // automatically delete pInv via auto_ptr's dtor
+
+// auto_ptr在C++11中已经弃用，可用shared_ptr和unique_ptr代替
+```
+
+auto_ptrs have an unusual characteristic: copying them (via copy constructor or copy assignment operator) sets them to null, and the copying pointer assumes sole ownership of the resource!
+
+An alternative to auto_ptr is a reference-counting smart pointer (RCSP). An RCSP is a smart pointer that keeps track of how many objects point to a
+particular resource and automatically deletes the resource when nobody is pointing to it any longer.
+
+*Both auto_ptr and tr1::shared_ptr use delete in their destructors, not delete []. That means that using auto_ptr or tr1::shared_ptr with dynamically allocated arrays is a bad idea*
+
+### Two critical aspects of using objects to manage resources
+
+* Resources are acquired and immediately turned over to resource managing objects.
+* Resource-managing objects use their destructors to ensure that resources are released.
+
+## Item 14: Think carefully about copying behavior in resource-managing classes
+Sometimes, we need to create our own resource-managing classes when the resources are not heap-based.
+
+```c++
+void lock(Mutex *pm); // lock mutex pointed to by pm
+void unlock(Mutex *pm); // unlock the mutex
+```
+
+To make sure that you never forget to unlock a Mutex you've locked, you'd like to create a class to manage locks.
+
+```c++
+class Lock {
+public:
+	explicit Lock(Mutex *pm): mutexPtr(pm) { lock(mutexPtr); } // acquire resource
+	~Lock() { unlock(mutexPtr); } // release resource
+private:
+	Mutex *mutexPtr;
+};
+
+Mutex m; 			// define the mutex you need to use
+...
+{ 					// create block to define critical section
+	Lock ml(&m); 	// lock the mutex
+	... 			// perform critical section operations
+} 					// automatically unlock mutex at end of block
+```
+
+The problem is that when a Lock object is copied, what should happen? Typically you have the choices:
+
+* **Prohibit copying**
+
+* **Reference-count the underlying resource**
+
+  Copying an RAII*(Resource Acquisition Is Initialization)* object should increment the count of the number of objects referring to the resource.
+
+  We can implement this behavior by containing a shared_ptr data member, and specify the deleter of shared_ptr
+
+  ```c++
+  class Lock {
+  public:
+  	explicit Lock(Mutex *pm) 		// init shared_ptr with the Mutex
+  		: mutexPtr(pm, unlock) 		// to point to and the unlock func
+  	{ 								// as the deleter
+  		lock(mutexPtr.get());
+  	}
+  private:
+  	std::tr1::shared_ptr<Mutex> mutexPtr; // use shared_ptr instead of raw pointer
+  };
+  ```
+
+  The Lock class no longer declares a destructor. The synthetized destructor automatically invokes the destructor of the class's non-static data members. In this case, that is mutexPtr. And mutexPtr's destructor will automatically call its deleter -- unlock.
+
+* **Copy the underlying resource**
+
+  Copying the resource-managing object should also copy the resource it wraps. That is, copying a resource-managing object performs a “deep copy.”
+
+* **Transfer ownership of the underlying resource**
+
+  As auto_ptr, ownership of the resource is transferred from the copied object to the copying object.
+
+## Item 15: Provide access to raw resources in resource managing classes
+In a perfect world, you'd rely on resource managing classes for all your interactions with resources. But many APIs refer to resources directly, you'll have to bypass resource-managing objects and deal with raw resources. For example, tr1::shared_ptr and auto_ptr both offer a get member function to perform an explicit conversion, i.e., to return (a copy of) the raw pointer inside the smart pointer object.
+
+Similarly because it is sometimes necessary to get at the raw resource inside an RAII object, some RAII class designers grease the skids by offering an conversion function.
+
+```c++
+FontHandle getFont(); 				// from C API—params omitted for simplicity
+void releaseFont(FontHandle fh); 	// from the same C API
+
+class Font { 	// RAII class
+public:
+	explicit Font(FontHandle fh) 	// acquire resource;
+		: f(fh) 					// use pass-by-value
+	{} 
+	~Font() { releaseFont(f); } 	// release resource
+private:
+	FontHandle f; // the raw font resource
+};
+```
+
+Assuming there's a large font-related C API that deals entirely with FontHandles, there will be a frequent need to convert from Font objects to FontHandles. 
+
+* **The Font class could offer an explicit conversion function such as get:**
+
+  ```c++
+  class Font {
+  public:
+  	...
+  	FontHandle get() const { return f; } // explicit conversion function
+  	...
+  };
+  ```
+
+* **The alternative is to have Font offer an implicit conversion function to its FontHandle**
+
+  ```c++
+  class Font {
+  public:
+  	...
+  	operator FontHandle() const // implicit conversion function
+  		{ return f; }
+  ...
+  };
+  ```
+
+Often, an explicit conversion function like get is the preferable path, because it minimizes the chances of unintended type conversions. Sometime, however, the naturalness of use arising from implicit type conversions will tip the scales in that direction
+
+## Item 16: Use the same form in corresponding uses of new and delete
+When you employ a new expression (i.e., dynamic creation of an object via a use of new), two things happen：
+
+* memory is allocated
+* one or more constructors are called for that memory
+
+When you employ a delete expression (i.e., use delete), two other things happen:
+
+* one or more destructors are called for the memory
+* the memory is deallocated
+
+If you use brackets in your use of delete(`delete []`), delete assumes an array is pointed to. Otherwise, it assumes that a single object is pointed to.
+
+```c++
+std::string *stringPtr1 = new std::string;
+std::string *stringPtr2 = new std::string[100];
+...
+delete stringPtr1; // delete an object
+delete [] stringPtr2; // delete an array of objects
+```
+
+if you used the “[]” form on stringPtr1, the result is undefined: delete would read some memory and interpret what it read as an array size, then start invoking that many destructors.
+
+if you didn't use the “[]” form on stringPtr2, it would lead to too few destructors being called.
+
+## Item 17: Store newed objects in smart pointers in standalone statements
+Consider the code below:
+
+```c++
+int priority();
+void processWidget(std::tr1::shared_ptr<Widget> pw, int priority);
+processWidget(new Widget, priority());		// error: shared_ptr's constructor taking a raw pointer is explicit 
+processWidget(std::tr1::shared_ptr<Widget>(new Widget), priority());	// ok
+```
+
+The last statement will compile, and before processWidget can be called, compilers must generate code to do these three things:
+
+* Call priority
+* Execute “new Widget”
+* Call the tr1::shared_ptr constructor
+
+The “`new Widget`” expression must be executed before the tr1::shared_ptr constructor can be called, but **the call to priority can be performed first, second, or third in C++.**
+
+If If compilers choose to perform it second, we end up with this sequence of operations:
+
+* Execute “new Widget”
+* Call priority
+* Call the tr1::shared_ptr constructor
+
+Here that is the problem, if the call to priority yields an exception, the pointer returned from “new Widget” will be lost, because it won't have been stored in the tr1::shared_ptr we were expecting.
+
+**A leak in the call to processWidget can arise because an exception can intervene between the time <font color='red'>a resource is created</font> (via “new Widget”) and the time that <font color='red'>resource is turned over to a resource-managing object</font>.**
+
+The way to avoid problems like this is simple: use a separate statement to create the Widget and store it in a smart pointer, then pass the smart pointer to processWidget:
+
+```c++
+std::tr1::shared_ptr<Widget> pw(new Widget); // store newed object in a smart pointer in a standalone statement
+processWidget(pw, priority()); // this call won't leak
+```
+

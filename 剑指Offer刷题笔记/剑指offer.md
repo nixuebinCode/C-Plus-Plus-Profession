@@ -827,3 +827,237 @@ double PowerPositive(double base, int exponent){
 }
 ```
 
+***
+
+## 面试题17：打印从1到最大的n位数
+
+### 题目
+
+输入数字n，按顺序打印出从1到最大的n位十进制数。比如输入3，则打印出1、2、3一直到最大的3位数999。
+
+### 解题思路一
+
+注意：这里题目中没有给出n的范围，需要考虑n很大，int和long long无法表示的情况，即<font color='red'>大数问题</font>。
+
+解决大数问题，最常用也是最容易的方法是用字符串或数组表示大数，即字符串中的每个字符是'0'~'9'之间的某一个字符，用来表示数字中的一位，当实际数字不够n位的时候，在字符串的前半部分补0。
+
+接下来最重要的是在字符串表达的数字上模拟加法，即每次加1，并且判断该数字什么时候到达了最大数字"99...9"，有以下两种方法：
+
+* 利用库函数strcmp直接比较加1后的字符串和"99...9"，每次比较的时间复杂度为O(n)
+* 我们在模拟字符串加法时，需要记录每一位的进位，可以发现只有当字符串表示的数字是"99..99"的时候，再增加1，才会导致第1位（数组下标为0）产生进位，我们可以利用这一点来判断，比较的时间复杂度则为O(1)
+
+### 代码实现
+
+```c++
+bool Increment(char *numStr, int n){
+    int takeover = 1;   // 进位
+    for(int i = n - 1; n != -1; --i){
+        
+
+        int sum = numStr[i] - '0' + takeover;
+        if(sum < 10){
+            numStr[i] = '0' + sum;
+            break;
+        }
+        else{               // 产生进位
+            if(i == 0){     // 当第一位产生进位时，说明字符串表示的数字已达99...999
+                return false;
+            }
+            takeover = 1;
+            numStr[i] = '0' + sum - 10;
+        }
+    }
+    return true;
+}
+
+void PrintToMaxOfNDigits(int n){
+    if(n <= 0){
+        return;
+    }
+
+    // 创建n+1位的字符串以表示n为整数
+    char *numStr = new char[n + 1];
+    memset(numStr, '0', n);
+    numStr[n] = '\0';
+
+    // 每次给数字加1，并打印，直至到达最大的数字
+    while(Increment(numStr, n)){
+        bool isBeginning0 = true;
+        for(int i = 0; i < n; i++){ // 打印字符串表示的数字
+            if(numStr[i] == '0' && isBeginning0){
+                continue;
+            }
+            else{
+                isBeginning0 = false;
+                cout << numStr[i];
+            }
+        }
+        cout << endl;
+    }
+    delete[] numStr;
+}
+```
+
+### 解题思路二
+
+如果我们在数字前面补0，就会发现n位所有十进制数其实就是n个从0到9的全排列。也就是说我们把数字的每一位都从0到9排列一遍，就得到了所有的十进制数。
+
+全排列用递归很容易表达，数字的每一位都可能是0~9中的一个数，然后设置下一位。递归结束的条件是我们已经设置了数字的最后一位。
+
+### 代码实现
+
+```c++
+void PrintNumber(char* number, int n)
+{
+    bool isBeginning0 = true;
+    for(int i = 0; i < n; i++){ // 打印字符串表示的数字
+        if(number[i] == '0' && isBeginning0){
+            continue;
+        }
+        else{
+            isBeginning0 = false;
+            cout << number[i];
+        }
+    }
+    cout << endl;
+}
+
+void Print1ToMaxOfNDigitsRecursively(char* number, int n, int index)    // index表示当前位
+{
+    if(index == n - 1){             // 如果当前位为最后一位，则打印数字
+        PrintNumber(number, n);
+        return;
+    }
+    // 如果当前位不是最后一位，则设置下一位
+    for(int i = 0; i < 10; i++){    // 设置数字的当前位为0~9
+        number[index + 1] = '0' + i;    
+        Print1ToMaxOfNDigitsRecursively(number, n, index + 1); // 设置下一位的下一位
+    }
+}
+
+void Print1ToMaxOfNDigits_2(int n)
+{
+    if(n <= 0)
+        return;
+    char *num = new char[n + 1];
+
+    for(int i = 0; i < 10; i++){    // 设置数字的最高位为0~9
+        num[0] = '0' + i;
+        Print1ToMaxOfNDigitsRecursively(num, n, 0); // 设置下一位
+    }
+
+    delete[] num;
+}
+```
+
+***
+
+## 面试题18-1：在O(1)时间内删除链表节点
+
+### 题目
+
+给定单向链表的头指针和一个节点指针，定义一个函数在O(1)时间内删除该节点。链表节点与函数的定义如下：
+
+```c++
+struct ListNode
+{
+	int m_nValue;
+	ListNode* m_pNext;
+};
+void DeleteNode(ListNode** pListHead, ListNode* pToBeDeleted);
+```
+
+### 解题思路
+
+在单向链表中删除一个节点，常规的做法无疑是从链表的头节点开始，顺序遍历查找要删除的节点，并在链表中删除该节点。这种思路由千需要顺序查找，时间复杂度自然就是O(n ) 了。
+
+换一种思路，我们要删除节点i , 先把 i 的下一个节点 j 的内容复制到 i , 然后把 i 的指针指向节点 j 的下一个节点。此时再删除节点 j 其效果刚好是把节点 i 删除了。
+
+另外需要考虑特殊情况：
+
+* 如果要删除的节点位于链表的尾部， 那么它就没有下一个节点，我们只能从头节点开始顺序遍历
+* 如果链表中只有一个节点，而我们又要删除链表的头节点（ 也是尾节点），那么，此时我们在删除节点之后，还需要把链表的头节点设置为nullptr
+
+### 代码实现
+
+```c++
+void DeleteNode(ListNode** pListHead, ListNode* pToBeDeleted){
+	if(pListHead == nullptr || pToBeDeleted == nullptr)
+		return;
+	if(pToBeDeleted->m_pNext != nullptr){	// 待删除的节点不是尾节点
+		ListNode* next = pToBeDeleted->m_pNext;
+		pToBeDeleted->m_nValue = next->m_nValue;
+		pToBeDeleted->m_pNext = next->m_pNext;
+		delete next;
+		next = nullptr;
+	}
+	else if(*pListHead == pToBeDeleted){	// 待删除的节点是尾节点,且是头节点，即链表只有一个节点
+		delete pToBeDeleted;
+		pToBeDeleted = nullptr;
+		*pListHead = nullptr;
+	}	
+	else{									// 待删除的节点是尾节点,且不是头节点
+		ListNode* pre = *pListHead;
+		while(pre->m_pNext != pToBeDeleted)
+			pre = pre->m_pNext;
+		pre->m_pNext = pToBeDeleted->m_pNext;
+		delete pToBeDeleted;
+		pToBeDeleted = nullptr;
+	}
+}
+```
+
+***
+
+## 面试题18-2：删除链表中重复的节点
+
+### 题目
+
+在一个排序的链表中，如何删除重复的节点？例如
+
+输入: 1->2->3->3->4->4->5
+输出: 1->2->5
+
+输入: 1->1->1->2->3
+输出: 2->3
+
+### 解题思路
+
+在处理链表时，有两种情况要考虑进去：第一，需不需要修改头节点；第二待处理节点为链尾节点。**如果需要修改头节点，那么就不能传入pHead*，而要传入pHead****，因为我们要修改的是指向头节点的指针，既然要修改指针，传递的参数必须是指针的指针才行。
+
+我们可以从头遍历链表，用pre指针记录当前遍历节点的前继节点，当当前节点的值与下一个节点的值相等时，就可以让pre指向下一个大于当前节点的节点。
+
+### 代码实现
+
+```c++
+void deleteDuplication(ListNode **pHead){
+    if(pHead == nullptr)
+        return;
+    ListNode* pPre = nullptr;   			// 前继指针初始置为nullptr，可以用来判断当前遍历的节点是否为头节点
+    ListNode* pNode = *pHead;
+    while(pNode != nullptr){
+        ListNode* pNext = pNode->m_pNext;
+        if(pNext != nullptr && pNext->m_nValue == pNode->m_nValue){ //如果该节点为重复节点
+            int dupliVal = pNode->m_nValue; 						// 重复的值
+            while(pNode != nullptr && pNode->m_nValue == dupliVal){ // 删除后面所有等于重复值的节点
+                delete pNode;
+                pNode = nullptr;
+                pNode = pNext;
+                if(pNext != nullptr)        // 注意这里加非空判断，否则当链表所有节点的值都相同时，pNext可能为空，再取pNext->m_pNext时会报错
+                    pNext = pNext->m_pNext;
+            }
+            if(pPre == nullptr){            // 重复的节点位于头节点
+                *pHead = pNode;
+            }
+            else{
+                pPre->m_pNext = pNode;
+            }
+        }
+        else{								// 如果当前节点非重复节点，同时前进pNode和pPre
+            pPre = pNode;
+            pNode = pNext;
+        }
+    }
+}
+```
+
