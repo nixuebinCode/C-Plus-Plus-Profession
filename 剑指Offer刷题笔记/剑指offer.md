@@ -1061,3 +1061,61 @@ void deleteDuplication(ListNode **pHead){
 }
 ```
 
+***
+
+## 面试题19：正则表达式匹配
+
+### 题目
+
+请实现一个函数用来匹配包含'.'和'*'的正则表达式。模式中的字符'.'表示任意一个字符，而'\*'表示它前面的字符可以出现任意次(包含0次)。在本题中，匹配是指字符串的所有字符匹配整个模式。例如，字符串“aaa”与模式”a.a“和”ab\*ac\*a“匹配，但与”aa.a“和”ab\*a“均不匹配。
+
+### 解题思路
+
+普通的比较两个字符串是否相等，本质上也是利用了划分小问题的思想，比如比较”abc“和”abde“，先比较两者的第一个字符，相等，则继续比较两个子字符串”bc“和”bde“...**直到两者有一个为空或者都为空**(递归终止条件)。
+
+此题只是在普通的比较上增加了特殊规则而已，如下：
+
+* 模式的下一个字符P[j+1]不是*，则情况比较简单，只需要比较当前字符串和模式的字符即可
+  * 若当前比较地字符匹配，即S[i] == P[j] || P[j] == .
+    * 可以把S[i],P[j]砍掉，继续比较下一个子串
+  * 否则
+    * 返回false
+* 模式的下一个字符P[j+1]是*
+  * 首先因为*可以表示前面的字符出现0次，那么相当于把P[j]和P[j+1]砍掉，再继续比较字符串与剩余的模式
+    * 比如abc和d*abd，可以把d\*砍掉，继续比较abc和abd
+  * 如果不砍掉P[j]和P[j+1]，即*前面的字符至少出现一次，比如abc和a\*bc
+    * 如果S[i] == P[j] || P[j] == .
+      * 因为*前面的字符可以出现任何次，则将字符串往前前进一个，继续和模式比较，即比较bc和a\*bc
+    * 否则返回false
+* 最后考虑递归终止条件：即s或p为空时
+  * p为空，s为空
+    * 返回true
+  * p为空，s不为空
+    * 返回false
+
+### 代码实现
+
+```c++
+bool regularMatch(const char* str, const char* pattern){
+    if(str == nullptr || pattern == nullptr)
+        return false;
+
+    if(*pattern == '\0')
+        return (*str == '\0');
+
+    bool firstMatch = *str != '\0' && (*str == *pattern || *pattern == '.');
+    // bool firstMatch = (*str == *pattern || *pattern == '.');			// 注意这里需要加一个*str != '\0'。否则当比较""和".*a"时
+    																	// firstMatch会等于true，导致执行regularMatch(str + 1, 																			// pattern)，此时str就会发生越界
+    if(*(pattern + 1) != '*'){   // 模式的下一个字符不是*时
+        if(firstMatch)
+            return regularMatch(str + 1, pattern + 1);
+        else
+            return false;
+    }
+    else{                       // 模式的下一个字符是*时
+        return (regularMatch(str, pattern + 2))   // *前面的字符出现0次，砍掉pattern的前两个字符
+                || (firstMatch && regularMatch(str + 1, pattern));  
+    }
+}
+```
+
