@@ -1269,3 +1269,141 @@ When you design your class, consider the following questions:
 * **Is a new type really what you need?**
 
   If you're defining a new derived class only so you can add functionality to an existing class, perhaps you'd better achieve your goals by simply defining one or more non-member functions or templates.
+
+## Item 20: Prefer pass-by-reference-to-const to pass-by value
+
+Unless you specify otherwise, function parameters are initialized with copies of the actual arguments, and function callers get back a copy of the value returned by the function. **These copies are produced by the objects' copy constructors.** Moreover, after the function ends, each constructor call is matched by a destructor call.
+
+Pass by reference-to-const is much more efficient: no constructors or destructors are called, because
+no new objects are being created.
+
+### Passing parameters by reference also avoids the slicing problem.
+
+When a derived class object is passed (by value) as a base class object, the base class copy constructor is called, and the specialized features that make the object behave like a derived class object are “sliced” off.
+
+```c++
+class Window {
+public:
+	...
+	std::string name() const; // return name of window
+	virtual void display() const; // draw window and contents
+};
+class Window-WithScrollBars: public Window {
+public:
+	...
+	virtual void display() const;
+};
+```
+
+Now suppose you'd like to write a function to print out a window's name and then display the window. Here's the wrong way to write such a function
+
+```c++
+void printNameAndDisplay(Window w) // incorrect! parameter may be sliced!
+{
+	std::cout << w.name();
+	w.display();
+}
+Window-WithScrollBars wwsb;
+printNameAndDisplay(wwsb);
+```
+
+The parameter w will be constructed as a Window object, Inside printNameAndDisplay, w will always act like an object of class Window, regardless of the type of object passed to the function. In particular, the call to display inside printNameAndDisplay will always call Window::display, never Window-WithScrollBars::display.
+
+```c++
+void printNameAndDisplay(const Window& w) // fine, parameter won't be sliced
+{
+	std::cout << w.name();
+	w.display();
+}
+```
+
+### For built-in types and STL iterator and function object types, pass-by-value is usually appropriate
+
+References are typically implemented as pointers, so passing something by reference usually means really passing a pointer.
+
+If you have an object of a built-in type (e.g., an int), it's often more efficient to pass it by value than by
+reference.
+
+This same advice applies to iterators and function objects in the STL, because, by convention, they are designed to be passed by value.
+
+### It doesn't mean that all small types are good candidates for pass-by-value, even if they're user-defined.
+
+* Just because an object is small doesn't mean that calling its copy constructor is inexpensive. Many objects — most STL containers among them — contain little more than a pointer, but copying such objects entails copying everything they point to. That can be very expensive.
+* Some compilers treat built-in and user-defined types differently. They refuse to put objects consisting of only a double into a register, but compilers will certainly put pointers (the implementation of references) into registers.
+* Being user-defined, their size is subject to change. A type that's small now may be bigger in a future release, because its internal implementation may change.
+
+## Item 21: Don't try to return a reference when you must return an object
+A function can create a new object in only two ways: on the stack or on the heap.
+
+### Creation on the stack is accomplished by defining a local variable.
+
+```c++
+class Rational {
+public:
+	Rational(int numerator = 0, int denominator = 1);
+	...
+private:
+	int n, d; // numerator and denominator
+friend const Rational operator*(const Rational& lhs, const Rational& rhs);
+};
+
+const Rational& operator*(const Rational& lhs, const Rational& rhs) // warning! bad code!
+{
+	Rational result(lhs.n * rhs.n, lhs.d * rhs.d);
+	return result;
+}
+```
+
+This function returns a reference to result, but result is a local object, and local objects are destroyed when the function exits. As a result, it returns a reference to an ex-Rational; a former Rational; the empty, stinking, rotting carcass of what used to be a Rational but is no longer, because it has been destroyed.
+
+### Constructing an object on the heap and returning a reference to it
+```c++
+const Rational& operator*(const Rational& lhs, const Rational& rhs) // warning! more bad code!
+{
+	Rational *result = new Rational(lhs.n * rhs.n, lhs.d *rhs.d);
+	return *result;
+}
+```
+
+You will have a different problem: who will apply delete to the object conjured up by your use of new?
+
+### An implementation based on operator* returning a reference to a static Rational object, one defined inside the function
+
+```c++
+const Rational& operator*(const Rational& lhs, const Rational& rhs) // warning! yet more bad code!
+{
+	static Rational result; // static object to which a reference will be returned
+	result = ... ; // multiply lhs by rhs and put the product inside result
+	return result;
+}
+```
+
+Consider this perfectly reasonable client code
+
+```c++
+bool operator==(const Rational& lhs, const Rational& rhs);// an operator== for Rationals
+Rational a, b, c, d;
+...
+if ((a * b) == (c * d)){
+	// do whatever's appropriate when the products are equal;
+}
+else{
+	// do whatever's appropriate when they're not;
+}
+```
+
+The expression ((a*b) == (c*d)) will always evaluate to true, regardless of the values of a, b, c, and d!
+
+The equivalent functional form of `(a * b) == (c * d)` is `operator==( operator*(a, b) , operator*(c, d) )` 
+
+Notice that when operator== is called, there will already be two active calls to operator*, each of which will return a reference to the static Rational object
+inside operator\*. Thus, operator== will be asked to compare the value of the static Rational object inside operator\*
+
+### The right way to write a function that must return a new object is to have that function return a new object.
+```c++
+inline const Rational operator*(const Rational& lhs, const Rational& rhs)
+{
+	return Rational(lhs.n * rhs.n, lhs.d * rhs.d);
+}
+```
+
