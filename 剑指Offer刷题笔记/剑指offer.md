@@ -1191,3 +1191,49 @@ bool scanInteger(const char **str){
 }
 ```
 
+***
+
+## 面试题21：调整数组顺序使奇数位于偶数前面
+
+### 题目
+
+输入一个整数数组，实现一个函数来调整该数组中数字的顺序，使得所有奇数位于数组的前半部分，所有偶数位于数组的后半部分。
+
+### 解题思路
+
+可以参照快速排序中划分的思想，设置两个指针，初始化时第一个指针指向数组的第一个数字，它只向后移动；第二个指针指向数组的最后一个数字，它只向前移动。在两个指针相遇之前，如果第一个指针指向的数字是偶数，并且第二个指针指向的是奇数，**则交换这两个数字**。
+
+进一步思考，可以将判断数字是否是奇数/偶数当成一个**函数指针**传递给我们的函数，这样今后若有类似的处理，比如把数组中的数字分为两部分，能被3整除的放在不能被3整除的前面，或是所有负数在非负数前面，只需要在调用我们的函数时，修改函数指针的参数即可。
+
+### 代码实现
+
+```c++
+bool isEven(int);
+void Reorder(int *, unsigned int, bool(*)(int));
+
+void ReorderOddEven(int *pData, unsigned int length){
+    Reorder(pData, length, isEven);
+}
+
+void Reorder(int *pData, unsigned int length, bool(*func)(int)){
+    if(pData == nullptr || length == 0)
+        return;
+    int *low = pData;
+    int *high = pData + length - 1;
+    while(low < high){
+        while(low < high && !(func(*low))) low++;     // 注意此处要加low < high
+                                                        // 否则对于序列1、3、5、7、2、4、6会出问题
+        while(low < high && func(*high)) high--;
+        if(low < high){
+            int temp = *low;
+            *low = *high;
+            *high = temp;
+        }
+    }
+}
+
+bool isEven(int number){     // 判断一个数字是否是偶数
+    return !(number & 1);
+}
+```
+

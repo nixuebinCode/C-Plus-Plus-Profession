@@ -1407,3 +1407,127 @@ inline const Rational operator*(const Rational& lhs, const Rational& rhs)
 }
 ```
 
+***
+
+## Item 22: Declare data members `private`
+
+If data members aren't public, the only way for clients to access an object is via member functions. And if you use functions to get or set data members' value, you can implement no access, read-only access, and read-write access. Heck, you can even implement write-only access if you want to:
+
+```c++
+class AccessLevels {
+public:
+	...
+	int getReadOnly() const { return readOnly; }
+	void setReadWrite(int value) { readWrite = value; }
+	int getReadWrite() const { return readWrite; }
+	void setWriteOnly(int value) { writeOnly = value; }
+private:
+	int noAccess; // no access to this int
+	int readOnly; // read-only access to this int
+	int readWrite; // read-write access to this int
+	int writeOnly; // write-only access to this int
+};
+```
+
+### Encapsulation
+
+If you hide your data members from your clients (i.e., encapsulate them), you can ensure that class invariants are always maintained, because
+only member functions can affect them. Furthermore, you reserve the right to change your implementation decisions later.
+
+### `protected` data members
+
+Suppose we have a public data member, and we eliminate it. How much code might be broken? All the client code that uses it, which is generally *an*
+*unknowably large amount*.
+
+Suppose we have a protected data member, and we eliminate it. How much code might be broken now? All the derived classes that use it, which is, again, typically *an unknowably large amount* of code.
+
+**Protected data members are thus as unencapsulated as public ones**, because in both cases, if the data members are changed, an unknowably large amount of client code is broken.
+
+***
+
+## Item 23: Prefer non-member non-friend functions to member functions
+Imagine a class for representing web browsers with a set of member functions:
+
+```c++
+class WebBrowser {
+public:
+	...
+	void clearCache();
+	void clearHistory();
+	void removeCookies();
+	...
+};
+```
+
+Many users will want to perform all these actions together, so WebBrowser might also offer a function to do just that:
+
+```c++
+class WebBrowser {
+public:
+	...
+	void clearEverything(); // calls clearCache, clearHistory, and removeCookies
+	...
+};
+```
+
+Of course, this functionality could also be provided by a non-member function that calls the appropriate member functions：
+
+```c++
+void clearBrowser(WebBrowser& wb)
+{
+	wb.clearCache();
+	wb.clearHistory();
+	wb.removeCookies();
+}
+```
+
+### Encapsulation
+
+Consider the data associated with an object. We can count the number of functions that can access that data: **the more functions that can access it, the less encapsulated the data**.
+
+For data members that are private, the number of functions that can access them is the number of **member functions of the class** plus the number of **friend functions**, because only members and friends have access to private members.
+
+Given a choice between a member function and a non-member non-friend function providing the same functionality, the choice **yielding greater encapsulation** is the **non-member non-friend function**, because it doesn't increase the number of functions that can access the private parts of the class.
+
+### Make `clearBrowser` a nonmember function in the same namespace as WebBrowser
+
+```c++
+namespace WebBrowserStuff {
+	class WebBrowser { ... };
+	void clearBrowser(WebBrowser& wb);
+	...
+}
+```
+
+namespaces, unlike classes, can be spread across multiple source files.
+
+A class like `WebBrowser` might have a large number of convenience functions, some related to bookmarks, others related to printing, still others related to cookie management, etc.
+
+The straightforward way to separate them is to declare bookmark-related convenience functions in one header file, cookie-related convenience functions in a different header file, printing-related convenience functions in a third, etc.:
+
+```c++
+// header "webbrowser.h" — header for class WebBrowser itself
+// as well as "core" WebBrowser-related functionality
+namespace WebBrowserStuff {
+	class WebBrowser { ... };
+	... // "core" related functionality, e.g.
+		// non-member functions almost
+		// all clients need
+} 
+
+// header "webbrowserbookmarks.h"
+namespace WebBrowserStuff {
+	... // bookmark-related convenience functions
+}
+
+// header "webbrowsercookies.h"
+namespace WebBrowserStuff {
+	... // cookie-related convenience functions
+}
+...
+```
+
+Partitioning functionality in this way is not possible when it comes from a class's member functions, because a class must be defined in its entirety.
+
+**Putting all convenience functions in multiple header files — but one namespace** — also means that clients can easily extend the set of convenience
+functions. All they have to do is add more non-member non-friend functions to the namespace. This is another feature classes can't offer, because class definitions are closed to extension by clients.
