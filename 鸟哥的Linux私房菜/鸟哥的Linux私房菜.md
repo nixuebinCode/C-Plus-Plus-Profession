@@ -311,3 +311,223 @@ info与man的用途其实差不多，但是与man page一口气输出一堆信�
 再过三十分钟系统会重新开机，并显示后面的讯息给所有在线上的使用者
 `[root@study ~]# shutdown -k now 'This system will reboot'`
 仅发出警告信件的参数！系统并不会关机啦！吓唬人！
+
+### 重新启动，关机：reboot、halt、poweroff
+
+#### 重新启动
+
+`sync; sync; sync; reboot`
+
+### 实际使用管理工具systemctl关机
+
+上面谈到的halt、poweroff、reboot、shutdown等，其实都是调用systemctl这个命令。
+
+```
+[root@study ~]# systemctl [命令]
+命令项目包括如下：
+halt 进入系统停止的模式，屏幕可能会保留一些信息，这与你的电源管理模式有关
+poweroff 进入系统关机模式，直接关机
+reboot 直接重新启动
+suspend 进入休眠模式
+[root@study ~]# systemctl reboot # 系统重新启动
+[root@study ~]# systemctl poweroff # 系统关机
+```
+
+# 第五章 Linux的文件权限与目录配置
+
+## 5.1 用户与用户组
+
+用户组最有用的功能之一，就是当你在团队进行协同工作的时候。
+
+每个账号都可以有多个用户组的支持。
+
+### Linux用户身份与用户组记录文件
+
+在我们Linux系统当中，默认的情况下，所有的系统上的帐号与一般身份用户，还有那个root的相关信息， 都是记录在/etc/passwd这个文件内的。
+
+至于个人的密码则是记录在/etc/shadow这个文件内。
+
+ 此外，Linux所有的组名都纪录在/etc/group中。
+
+## 5.2 Linux文件权限概念
+
+### 5.2.1 Linux文件属性
+
+>使用【su -】切换身份成root
+>
+>离开su -则使用exit回到之前的身份
+
+【ls -al】命令
+
+选项【-al】: 列出所有的文件以及其详细的权限与属性（包含隐藏文件）
+
+```c++
+[dmtsai@study ~]$ su - # 先来切换一下身份看看
+Password:
+Last login: Tue Jun 2 19:32:31 CST 2015 on tty2
+[root@study ~]# ls -al
+total 48
+dr-xr-x---. 5 root root 4096 May 29 16:08 .
+dr-xr-xr-x. 17 root root 4096 May 4 17:56 ..
+-rw-------. 1 root root 1816 May 4 17:57 anaconda-ks.cfg
+```
+
+ ![](D:\study\C-Plus-Plus-Profession\鸟哥的Linux私房菜\images\20220320212750.png)
+
+**第一个字符代表文件的类型**
+
+* 当为[ d ]则是目录
+* 当为[ - ]则是文件
+* 若是[ l ]则表示为链接文件
+* 若是[ b ]则表示为设备文件里面的可供储存的周边设备
+* 若是[ c ]则表示为设备文件里面的串行端口设备，例如键盘、鼠标
+
+**接下来的字符中，以三个为一组，且均为【rwx】的三个参数的组合。其中，[ r ]代表可读（read）、[ w ]代表可写（write）、[ x ]代表可执行（execute）。这三个权限的位置不会改变，如果没有权限，就会用[ - ]当占位符。**
+
+* 第一组为文件拥有者可具备的权限
+* 第二组为加入此用户组的帐号的权限
+* 第三组为非本人且没有加入本用户组的其他帐号的权限
+
+**第二栏表示有多少文件名链接到此节点（inode）**
+
+**第三栏表示这个文件的拥有者账号**
+
+**第四栏表示这个文件的所属用户组**
+
+**第五栏为这个文件的容量大小，默认单位为Bytes**
+
+**第六栏为这个文件的创建日期或者是最近的修改日期**
+
+**第七栏为这个文件的文件名**
+
+### 5.2.2 如何修改文件属性与权限
+
+#### 修改所属用户组, chgrp
+
+```
+[root@study ~]# chgrp [-R] dirname/filename ...
+选项与参数：
+-R : 进行递归（recursive）修改，亦即连同子目录下的所有文件、目录都更新成为这个用户组之意。常常用在修改某一目录内所有的文件之情况。
+范例：
+[root@study ~]# chgrp users initial-setup-ks.cfg
+[root@study ~]# ls -l
+-rw-r--r--. 1 root users 1864 May 4 18:01 initial-setup-ks.cfg
+```
+
+#### 修改文件拥有者, chown
+
+chown还可以顺便直接修改用户组的名称。
+
+```
+[root@study ~]# chown [-R] 帐号名称 文件或目录
+[root@study ~]# chown [-R] 帐号名称:用户组名称 文件或目录
+选项与参数：
+-R : 进行递归（recursive）修改，亦即连同子目录下的所有文件都修改
+范例：将 initial-setup-ks.cfg 的拥有者改为bin这个帐号：
+[root@study ~]# chown bin initial-setup-ks.cfg
+[root@study ~]# ls -l
+-rw-r--r--. 1 bin users 1864 May 4 18:01 initial-setup-ks.cfg
+范例：将 initial-setup-ks.cfg 的拥有者与群组改回为root：
+[root@study ~]# chown root:root initial-setup-ks.cfg
+[root@study ~]# ls -l
+-rw-r--r--. 1 root root 1864 May 4 18:01 initial-setup-ks.cfg
+```
+
+#### 修改权限，chamod
+
+##### 数字类型修改文件权限
+
+Linux文件的基本权限有9个，分别是拥有者，用户组，其他人三种身份各自的read、write、execute。我们可以用数字来代表各个权限：
+
+```
+r:4
+w:2
+x:1
+```
+
+每种身份（owner、group、others）各自的三个权限（r、w、x）数字是需要累加的，例如当权限为： [-rwxrwx---] 数字则是：
+
+```
+owner = rwx = 4+2+1 = 7
+group = rwx = 4+2+1 = 7
+others= --- = 0+0+0 = 0
+```
+
+所以该文件的权限数字就是770
+
+```
+[root@study ~]# chmod [-R] xyz 文件或目录
+选项与参数：
+xyz : 就是刚刚提到的数字类型的权限属性，为 rwx 属性数值的相加。
+-R : 进行递归（recursive）修改，亦即连同次目录下的所有文件都会修改
+
+[root@study ~]# ls -al .bashrc
+-rw-r--r--. 1 root root 176 Dec 29 2013 .bashrc
+[root@study ~]# chmod 777 .bashrc
+[root@study ~]# ls -al .bashrc
+-rwxrwxrwx. 1 root root 176 Dec 29 2013 .bashrc
+```
+
+##### 符号类型修改文件权限
+
+借由u, g, o来代表三种身份(user、group、others)，a则代表all亦即全部的身份。
+
+* 设置一个文件的权限成为“-rwxr-xr-x”
+
+  ```
+  [root@study ~]# chmod u=rwx,go=rx .bashrc
+  # 注意！那个 u=rwx,go=rx 是连在一起的，中间并没有任何空格
+  [root@study ~]# ls -al .bashrc
+  -rwxr-xr-x. 1 root root 176 Dec 29 2013 .bashrc
+  ```
+
+* 如果我不知道原先的文件属性，而我只想要增加.bashrc这个文件的每个人均可写入的权限
+
+  ```
+  [root@study ~]# ls -al .bashrc
+  -rwxr-xr-x. 1 root root 176 Dec 29 2013 .bashrc
+  [root@study ~]# chmod a+w .bashrc
+  [root@study ~]# ls -al .bashrc
+  -rwxrwxrwx. 1 root root 176 Dec 29 2013 .bashrc
+  ```
+
+* 拿掉全部人的可执行权限
+
+  ```
+  [root@study ~]# chmod a-x .bashrc
+  [root@study ~]# ls -al .bashrc
+  -rw-rw-rw-. 1 root root 176 Dec 29 2013 .bashrc
+  ```
+
+### 5.2.3 目录与文件的权限意义
+
+#### 权限对文件的意义
+
+文件是实际含有数据的地方。
+
+* r：可读取此文件的实际内容，如读取文本文件的文字内容等
+
+* w：可以编辑、新增或者是修改该文件的内容（但不含删除该文件）
+
+* x：该文件具有可以被系统执行的权限
+
+  在Windows下面一个文件是否具有执行的能力是借由“ 扩展名 ”来判断的， 例如：.exe, .bat, .com 等等，但是在Linux下面，我们的文件是否能被执行，则是借由是否具有“x”这个权限来决定，跟文件名是没有绝对的关系的。
+
+对于文件的rwx来说，主要是针对文件的内容而言。
+
+#### 权限对目录的意义
+
+目录主要的内容在记录文件名列表
+
+* r：表示具有读取目录结构列表的权限，表示你可以查询该目录下的文件名数据，即可以利用【ls】这个命令将目录的内容列表显示出来。
+* w：表示具有改动该目录结构列表的权限
+  * 建立新的文件与目录
+  * 删除已存在的文件与目录
+  * 将已存在的文件或目录进行更名
+  * 移动该目录内的文件、目录位置
+* x：表示用户能否进入该目录称为工作目录，所谓的工作目录就是你目前所在的目录，即表示用户能否通过【cd】命令变换到该目录。
+
+### 5.2.4 Linux文件种类与扩展名
+
+
+
