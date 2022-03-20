@@ -1237,3 +1237,84 @@ bool isEven(int number){     // 判断一个数字是否是偶数
 }
 ```
 
+***
+
+## 面试题23：链表中环的入口节点
+
+### 题目
+
+如果一个链表中包含环，如何找出环的入口节点？例如，在如图所示的链表中，环的入口节点是节点3.
+
+ ![image-20220320130847830](\images\image-20220320130847830.png)
+
+### 解题思路
+
+* 确定一个链表中是否包含环
+
+  定义两个指针，同时从链表的头节点出发，一个指针一次走一步，另一个指针一次走两步。如果走得快的指针追上了走得慢的指针那么链表就包含环；如果走得快的指针走到了链表的末尾都没有追上走得慢的指针，那么链表就不包含环。
+
+* 找到环的入口
+
+  定义两个指针P1和P2指向链表的头节点。如果链表中的环有n个节点，则指针P1先在链表上向前移动n步，然后两个指针以相同的速度向前移动，直到它们相遇，相遇的节点正好是环的入口节点。
+
+   ![](D:\study\C-Plus-Plus-Profession\剑指Offer刷题笔记\images\微信截图_20220320132314.png)
+
+* 确定环中节点的数目
+
+  在我们确定链表中是否包含环的时候，两个指针相遇的节点一定在环中。可以从这个节点出发，一遍继续向前移动一遍计数，当再次回到这个节点时，就可以得到环中节点数了。
+
+### 代码实现
+
+```c++
+struct ListNode
+{
+	int m_nValue;
+	ListNode* m_pNext;
+};
+
+// 返回链表中环的节点的数目，若不存在环，则返回-1
+int numOfLoop(ListNode* pHead){
+    if(pHead == nullptr)
+        return -1;
+    ListNode* pSlow = pHead;
+    ListNode* pFast = pHead;
+    ListNode* pNodeOfLoop = nullptr;
+    int loopCount = 1;
+    while(pFast != nullptr && pFast->m_pNext != nullptr){
+        pSlow = pSlow->m_pNext;
+        pFast = pFast->m_pNext->m_pNext;
+        if(pSlow == pFast){
+            pNodeOfLoop = pSlow;
+            break;
+        }
+    }
+    if(pNodeOfLoop == nullptr){     // 链表中不存在环
+        return -1;
+    }
+    ListNode *counter = pNodeOfLoop->m_pNext;
+    while(counter != pNodeOfLoop){
+        loopCount++;
+        counter = counter->m_pNext;
+    }
+    return loopCount;
+}
+
+ListNode* entryOfLoop(ListNode* pHead){
+    if(pHead == nullptr)
+        return nullptr;
+    int nodeOfLoopCnt = numOfLoop(pHead);
+    if(nodeOfLoopCnt == -1)
+        return nullptr;
+    ListNode* P1 = pHead;
+    ListNode* P2 = pHead;
+    for(int i = 0; i < nodeOfLoopCnt; i++){
+        P1 = P1->m_pNext;
+    }
+    while(P1 != P2){
+        P1 = P1->m_pNext;
+        P2 = P2->m_pNext;
+    }
+    return P1;
+}
+```
+

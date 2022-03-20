@@ -1531,3 +1531,242 @@ Partitioning functionality in this way is not possible when it comes from a clas
 
 **Putting all convenience functions in multiple header files — but one namespace** — also means that clients can easily extend the set of convenience
 functions. All they have to do is add more non-member non-friend functions to the namespace. This is another feature classes can't offer, because class definitions are closed to extension by clients.
+
+## Item 26: Postpone variable definitions as long as possible
+Consider the following function, which returns an encrypted version of a password:
+
+```c++
+// this function defines the variable "encrypted" too soon
+std::string encryptPassword(const std::string& password)
+{
+	using namespace std;
+	string encrypted;
+	if (password.length() < MinimumPasswordLength) {
+		throw logic_error("Password is too short");
+	}
+	... // do whatever is necessary to place an
+		// encrypted version of password in encrypted
+	return encrypted;
+}
+```
+
+The object `encrypted` is unused if an exception is thrown. That is, you'll pay for the construction and destruction of encrypted even if encryptPassword throws an exception.
+
+```c++
+// this function postpones encrypted's definition until
+// it's necessary, but it's still needlessly inefficient
+std::string encryptPassword(const std::string& password)
+{
+	using namespace std;
+	if (password.length() < MinimumPasswordLength) {
+		throw logic_error("Password is too short");
+	}
+	string encrypted;	// default-construct encrypted
+    					// encrypted is defined without any initialization arguments. 
+						// That means its default constructor will be used.
+	encrypted = password; // assign to encrypted
+	encrypt(encrypted);
+	return encrypted;
+}
+```
+
+```c++
+// finally, the best way to define and initialize encrypted: 
+// skipping the pointless and potentially expensive default construction
+std::string encryptPassword(const std::string& password)
+{
+	... // import std and check length
+	string encrypted(password); // define and initialize via copy constructor
+	encrypt(encrypted);
+	return encrypted;
+}
+```
+
+Remember that default-constructing an object and then assigning to it is less efficient than initializing it with the value you really want it to have.
+
+**As a result, not only should you postpone a variable's definition until right before you have to use the variable, you should also try to postpone the definition until you have initialization arguments for it.**
+
+### variable used in a loop
+
+```c++
+// Approach A: define outside loop
+Widget w;
+for (int i = 0; i < n; ++i){ 
+	w = some value dependent on i; 
+	... 
+}
+// Approach B: define inside loop
+for (int i = 0; i < n; ++i){
+    Widget w(some value dependent on i);
+    ...;
+}
+```
+
+* Approach A: 1 constructor + 1 destructor + n assignments.
+* Approach B: n constructors + n destructors.
+
+For classes where an assignment costs less than a constructor-destructor pair, Approach A is generally more efficient.
+
+However, Approach A makes the name w visible in a larger scope, something that's contrary to program comprehensibility and maintainability.
+
+As a result, unless you know that (1) assignment is less expensive than a constructor-destructor pair and (2) you're dealing with a performance-sensitive part of your code, you should default to using Approach B.
+
+## Item 27: Minimize casting.
+
+### Casting syntax
+
+#### old-style casts 
+
+* **C-style casts:**
+
+  ```c++
+  (T) expression // cast expression to be of type T
+  ```
+
+* **Function-style casts**
+
+  ```c++
+  T(expression) // cast expression to be of type T
+  ```
+
+There is no difference in meaning between these forms
+
+#### new-style casts
+
+* **`const_cast<T>(expression)`**
+
+  `const_cast` is typically used to cast away the constness of objects. It is the only C++style cast that can do this.
+
+* **`dynamic_cast<T>(expression)`**
+
+  `dynamic_cast` is primarily used to perform “safe downcasting,” i.e., to determine whether an object is of a particular type in an inheritance
+  hierarchy. It is the only cast that cannot be performed using the old-style syntax.
+
+  <font color='red'>It is also the only cast that may have a significant runtime cost.</font>
+
+* **`reinterpret_cast<T>(expression)`**
+
+  `reinterpret_cast` is intended for low-level casts that yield implementation dependent (i.e., unportable) results, e.g., casting a pointer to an int.
+
+* **`static_cast<T>(expression)`**
+
+  `static_cast` can be used to force implicit conversions (e.g., non-const object to const object, int to double, etc.). 
+
+  It can also be used to perform the reverse of many such conversions (e.g., void* pointers to typed pointers, pointer-to-base to pointer-to-derived), though it cannot cast from const to non-const objects. (Only const_cast can do that.)
+
+**The old-style casts continue to be legal, but the new forms are preferable:**
+
+* They're much easier to identify in code, thus simplifying the process of finding places in the code where the type system is being subverted.
+* The more narrowly specified purpose of each cast makes it possible for compilers to diagnose usage errors. For example, if you try to cast away constness using a new-style cast other than const_cast, your code won't compile.
+
+About the only time I use an old-style cast is when I want to call an explicit constructor to pass an object to a function:
+
+```c++
+class Widget {
+public:
+	explicit Widget(int size);
+	...
+};
+void doSomeWork(const Widget& w);
+
+doSomeWork(Widget(15)); // create Widget from int with functionstyle cast
+doSomeWork(static_cast<Widget>(15)); // create Widget from int with C++style cast
+```
+
+They do exactly the same thing here: create a temporary Widget object to pass to doSomeWork.
+
+### Casting in an inheritance hierarchy
+```c++
+class Window { // base class
+public:
+	virtual void onResize() { ... } // base onResize impl
+	...
+};
+class SpecialWindow: public Window { // derived class
+public:
+	virtual void onResize() { 		// derived onResize impl;
+		static_cast<Window>(*this).onResize(); // cast *this to Window, then call its onResize;
+		// this doesn't work!
+		... // do SpecialWindow-specific stuff
+	} 
+	...
+};
+```
+
+The code casts *this to a Window. The resulting call to onResize therefore invokes Window::onResize.
+
+<font color='red'>However it does not invoke that function on the current object! Instead, the cast creates a new, temporary copy of the base class part of *this, then invokes onResize on the copy!</font> If Window::onResize modifies the current object, the current object won't be modified. Instead, a copy of that object will be modified.
+
+The solution is to eliminate the cast, replacing it with what you really want to say:
+
+```c++
+class SpecialWindow: public Window {
+public:
+	virtual void onResize() {
+		Window::onResize(); // call Window::onResize on *this
+        ...
+	}
+	...
+};
+```
+
+### Many implementations of dynamic_cast can be quite slow
+
+The need for dynamic_cast generally arises because you want to perform derived class operations on what you believe to be a derived class object, but
+you have only a pointer- or reference-to-base.
+
+For example, if, in our Window/SpecialWindow hierarchy, only SpecialWindows support blinking
+
+```c++
+class Window { ... };
+class SpecialWindow: public Window {
+public:
+	void blink();
+	...
+};
+typedef  std::vector<std::tr1::shared_ptr<Window> > VPW;
+VPW winPtrs;
+...
+for (VPW::iterator iter = winPtrs.begin(); iter != winPtrs.end(); ++iter) {
+	if (SpecialWindow *psw = dynamic_cast<SpecialWindow*>(iter->get()))
+		psw->blink();
+}
+```
+
+Avoid casts whenever practical, especially dynamic_casts in performance-sensitive code. If a design requires casting, try to develop a cast-free alternative.
+
+There are two general ways to avoid this problem:
+
+#### Use containers that store pointers (often smart pointers) to derived class objects directly
+```c++
+typedef std::vector<std::tr1::shared_ptr<SpecialWindow> > VPSW;
+VPSW winPtrs;
+...
+for (VPSW::iterator iter = winPtrs.begin(); iter != winPtrs.end(); ++iter)
+	(*iter)->blink();
+```
+
+Of course, this approach won't allow you to store pointers to all possible Window derivatives in the same container.
+
+#### Provide virtual functions in the base class
+
+Though only SpecialWindows can blink, maybe it makes sense to declare the function in the base class, offering a default implementation that does nothing:
+
+```c++
+class Window {
+public:
+	virtual void blink() {} // default impl is no-op;
+	...
+}; 
+class SpecialWindow: public Window {
+public:
+	virtual void blink() { ... }; // in this class, blink does something
+    ...
+};
+
+typedef std::vector<std::tr1::shared_ptr<Window> > VPW;
+VPW winPtrs; // container holds (ptrs to) all possible Window types
+for (VPW::iterator iter = winPtrs.begin(); iter != winPtrs.end(); ++iter)
+	(*iter)->blink();
+```
+
