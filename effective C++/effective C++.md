@@ -1,3 +1,136 @@
+
+
+# 1. Accustoming Yourself to C++
+
+## Item 1: View C++ as a federation of languages
+
+C++ is a multiparadigm programming language. To make sense of C++, you have to recognize its primary sublanguages:
+
+* **C**
+
+  Way down deep, C++ is still based on C. Blocks, statements, the preprocessor, built-in data types, arrays, pointers, etc., all come from C.
+
+* **Object-Oriented C++**
+
+  Classes (including constructors and destructors), encapsulation, inheritance, polymorphism, virtual functions (dynamic binding), etc.
+
+* **Template C++**
+
+  The generic programming part of C++
+
+* **The STL**
+
+  The STL is a template library with containers, iterators, algorithms, and function objects.
+
+C++, isn't a unified language with a single set of rules; it's a federation of four sublanguages, each with its own conventions.
+
+## Item 2: Prefer consts, enums, and inlines to #defines
+
+**Prefer the compiler to the preprocessor.**
+
+When you do something like this:
+
+```c++
+#define ASPECT_RATIO 1.653
+```
+
+The symbolic name ASPECT_RATIO may never be seen by compilers; it may be removed by the preprocessor before the source code ever gets to a compiler. As a result, This can be confusing if you get an error during compilation involving the use of the constant, because the error message may refer to 1.653, not ASPECT_RATIO.
+
+The solution is to replace the macro with a constant:
+
+```c++
+const double AspectRatio = 1.653;
+```
+
+In the case of a floating point constant (such as in this example), use of the constant may yield smaller code than using a #define:
+
+That's because the preprocessor's blind substitution of the macro name ASPECT_RATIO with 1.653 could result in multiple copies of 1.653 in your object code, while the use of the constant AspectRatio should never result in more than one copy.
+
+### class-specific constants
+
+To limit the scope of a constant to a class, you must make it a member, and to ensure there's at most one copy of the constant, you must make it a static member:
+
+```c++
+class GamePlayer {
+private:
+	static const int NumTurns = 5; // constant declaration
+	int scores[NumTurns]; // use of constant
+	...
+};
+```
+
+**What you see above is a declaration for NumTurns, not a definition.**
+
+Usually, C++ requires that you provide a definition for anything you use, but class-specific constants that are static and of integral type (e.g., integers, chars, bools) are an exception.
+
+As long as you don't take their address, you can declare them and use them without providing a definition.
+
+If you do take the address of a class constant, or if your compiler incorrectly insists on a definition even if you don't take the address, you provide a **separate definition** like this:
+
+```c++
+const int GamePlayer::NumTurns; // definition of NumTurns;
+```
+
+Because the initial value of class constants is provided where the constant is declared (e.g., NumTurns is initialized to 5 when it is declared), no initial value is permitted at the point of definition.
+
+Older compilers may not accept the syntax above, because it used to be illegal to provide an initial value for a static class member at its point of declaration. Instead, you can put the initial value at the point of definition:
+
+```c++
+class CostEstimate {
+private:
+	static const double FudgeFactor; 	// declaration of static class
+	... 									// constant; goes in header file
+};
+const double CostEstimate::FudgeFactor = 1.35; // definition of static class constant; goes in impl. file
+```
+
+This is all you need almost all the time. The only exception is when you need the value of a class constant during compilation of the class, such as in the
+declaration of the array GamePlayer::scores above. Then the accepted way to compensate for compilers that (incorrectly) forbid the in-class specification
+of initial values for static integral class constants is to use enum.
+
+```c++
+class GamePlayer {
+private:
+	enum { NumTurns = 5 }; // "the enum hack" — makes NumTurns a symbolic name for 5
+	int scores[NumTurns]; // fine
+	...
+};
+```
+
+This technique takes advantage of the fact that the values of an enumerated type can be used where ints are expected
+
+### function-like macros
+
+Using #define to implement macros that look like functions but that don't incur the overhead of a function call:
+
+```c++
+// call f with the maximum of a and b
+#define CALL_WITH_MAX(a, b) f((a) > (b) ? (a) : (b))
+```
+
+Macros like this have so many drawbacks:
+
+Whenever you write this kind of macro, you have to remember to parenthesize all the arguments in the macro body. Otherwise you can run into
+trouble when somebody **calls the macro with an expression**. But even if you get that right, look at the weird things that can happen:
+
+```c++
+int a = 5, b = 0;
+CALL_WITH_MAX(++a, b); // a is incremented twice
+CALL_WITH_MAX(++a, b+10); // a is incremented once
+```
+
+You can get all the efficiency of a macro plus all the predictable behavior and type safety of a regular function by using **a template for an inline function**:
+
+```c++
+template<typename T>
+inline void callWithMax(const T& a, const T& b)
+{ 
+	f(a > b ? a : b); 
+}
+```
+
+
+
 ## Item3: Use const whenever possible
 
 ### const for Pointers
@@ -276,6 +409,7 @@ Directory& tempDir() 					// this replaces the tempDir object; it
 
 ***
 
+# 2. Constructors, Destructors, and sAssignment Operators
 ## Item 5: Know what functions C++ silently writes and calls
 
 If you don't declare them yourself, compilers will declare their own versions of a copy constructor, a copy assignment operator, and a destructor.
@@ -889,6 +1023,8 @@ PriorityCustomer& PriorityCustomer::operator=(const PriorityCustomer& rhs)
 }
 ```
 
+# 3. Resource Management
+
 ## Item 13: Use objects to manage resources
 
 A resource is something that, once you're done using it, you need to return to the system. For example, dynamically allocated memory, file descriptors, mutex locks, fonts and brushes in graphical user interfaces (GUIs), database connections, and network sockets.
@@ -1106,6 +1242,8 @@ The way to avoid problems like this is simple: use a separate statement to creat
 std::tr1::shared_ptr<Widget> pw(new Widget); // store newed object in a smart pointer in a standalone statement
 processWidget(pw, priority()); // this call won't leak
 ```
+
+# 4. Designs and Declarations
 
 ## Item 18: Make interfaces easy to use correctly and hard to use incorrectly
 
@@ -1663,7 +1801,7 @@ namespace std {
 }
 ```
 
-In general, we're not permitted to alter the contents of the std namespace, but we are allowed to totally specialize standard templates (like swap) for types of our own creation (such as Widget).
+In general, we're not permitted to alter the contents of the std namespace, but we are allowed to **totally** specialize standard templates (like swap) for types of our own creation (such as Widget).
 
 **However this function won't compile.** That's because it's trying to access the pImpl pointers inside a and b, and they're private.
 
@@ -1690,7 +1828,101 @@ namespace std {
 }
 ```
 
-***
+Not only does this compile, it's also consistent with the STL containers. All of STL containers provide both public swap member functions and versions of std::swap that call these member functions.
+
+### What if the `WidgetImpl` and `Widget` class are template class
+
+```c++
+template<typename T>
+class WidgetImpl { ... };
+template<typename T>
+class Widget { ... };
+```
+
+Putting a swap member function in Widget (and, if we need to, in WidgetImpl) is as easy as before, but we run into trouble with the specialization for std::swap:
+
+```c++
+namespace std {
+	template<typename T>
+	void swap<Widget<T> >(Widget<T>& a, Widget<T>& b)// error! illegal code!
+	{
+        a.swap(b);
+    }
+}
+```
+
+We're trying to **partially** specialize a function template (std::swap), but C++ allows partial specialization of class templates, it doesn't allow it for function templates.
+
+#### When you want to “partially specialize” a function template, the usual approach is to **add an overload**：
+
+```c++
+namespace std {
+	template<typename T> // an overloading of std::swap
+	void swap(Widget<T>& a, Widget<T>& b)// (note the lack of "<...>" after "swap"), but see below for why this isn't valid code
+	{
+        a.swap(b);
+    }
+}
+```
+
+It's okay to totally specialize templates in std, but it's not okay to add new templates (or classes or functions or anything else) to std.
+
+What we should do is to declare a non-member swap that calls the member swap, we just don't declare the non-member to be a specialization or overloading of std::swap:
+
+```c++
+namespace WidgetStuff {
+	... // templatized WidgetImpl, etc.
+	template<typename T> 					// as before, including the swap
+	class Widget { ... }; 					// member function
+	...
+	template<typename T> 					// non-member swap function;
+	void swap(Widget<T>& a, Widget<T>& b) 	// not part of the std namespace
+	{
+		a.swap(b);
+	}
+}
+```
+
+#### From a client's point of view
+
+Suppose you're writing a function template where you need to swap the values of two objects, Which swap should this call? 
+
+* The general one in std, which you know exists;
+* A specialization of the general one in std, which may or may not exist;
+* A T-specific one, which may or may not exist and which may or may not be in a namespace (but should certainly not be in std)
+
+What you desire is to call a T-specific version if there is one, but to fall back on the general version in std if there's not:
+
+```c++
+template<typename T>
+void doSomething(T& obj1, T& obj2)
+{
+	using std::swap; // make std::swap available in this function
+	...
+	swap(obj1, obj2); // call the best swap for objects of type T
+	...
+}
+```
+
+C++'s name lookup rules ensure that this will find any T-specific swap at global scope or in the same namespace as the type T:
+
+* If T is Widget in the namespace WidgetStuff, compilers will use argument-dependent lookup to find swap in WidgetStuff.
+* If no T-specific swap exists, compilers will use swap in std, thanks to the using declaration that makes std::swap visible in this function.
+* Even then, compilers will prefer a T-specific specialization of std::swap over the general template, so if std::swap has been specialized for T, the specialized version will be used.
+
+### Summary
+
+If the default implementation of swap isn't efficient enough, do the following:
+
+* Offer a public swap member function that efficiently swaps the value of two objects of your type. For reasons I'll explain in a moment, this
+  function should never throw an exception.
+* Offer a non-member swap in the same namespace as your class or template. Have it call your swap member function.
+* If you're writing a class (not a class template), specialize std::swap for your class. Have it also call your swap member function.
+
+Finally, if you're calling swap, be sure to include a using declaration to make std::swap visible in your function, then call swap without any namespace
+qualification.
+
+# 5. Implementations
 
 ## Item 26: Postpone variable definitions as long as possible
 
