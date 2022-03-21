@@ -1532,7 +1532,168 @@ Partitioning functionality in this way is not possible when it comes from a clas
 **Putting all convenience functions in multiple header files — but one namespace** — also means that clients can easily extend the set of convenience
 functions. All they have to do is add more non-member non-friend functions to the namespace. This is another feature classes can't offer, because class definitions are closed to extension by clients.
 
+***
+
+## Item 24: Declare non-member functions when type conversions should apply to all parameters
+
+Having classes support implicit type conversions is generally a bad idea, Of course, there are exceptions to this rule, when creating **numerical types**
+
+```c++
+class Rational {
+public:
+	Rational(int numerator = 0, nt denominator = 1);  	// ctor is deliberately not explicit; 																		// allows implicit int-to-Rational conversions	
+	int numerator() const; 								// accessors for numerator and denominator
+	int denominator() const;
+private:
+	...
+};
+```
+
+### Making operator* a member function of Rational
+
+```c++
+class Rational {
+public:
+	...
+	const Rational operator*(const Rational& rhs) const;
+};
+
+Rational oneEighth(1, 8);
+Rational oneHalf(1, 2);
+Rational result = oneHalf * oneEighth; 	// fine
+result = result * oneEighth; 			// fine
+```
+
+**When you try to do mixed-mode arithmetic, however, you find that it works only half the time:**
+
+```c++
+result = oneHalf * 2; // fine
+result = 2 * oneHalf; // error!
+
+//The equivalent fuction form:
+result = oneHalf.operator*(2); // fine
+result = 2.operator*(oneHalf); // error!
+```
+
+In the form `oneHalf.operator*(2)`, Compilers know you're passing an int and that the function requires a Rational, but they also know they can conjure up a suitable Rational by calling the Rational constructor with the int you provided, so that's what they do. Of course, compilers do this only because a non-explicit constructor is involved.
+
+Parameters are eligible for implicit type conversion only if they are listed in the parameter list.
+
+### Making operator* a non-member function
+
+```c++
+class Rational {
+	... // contains no operator*
+};
+const Rational operator*(const Rational& lhs, const Rational& rhs)// now a non-member function
+{
+	return Rational(lhs.numerator() * rhs.numerator(), lhs.denominator() * rhs.denominator());
+}
+Rational oneFourth(1, 4);
+Rational result;
+result = oneFourth * 2; // fine
+result = 2 * oneFourth; // hooray, it works!
+```
+
+If you need type conversions on all parameters to a function (including the one that would otherwise be pointed to by the
+this pointer), the function must be a non-member.
+
+## Item 25: Consider support for a non-throwing `swap`
+
+By default, swapping is accomplished via the standard swap algorithm. Its typical implementation is exactly what you'd expect:
+
+```c++
+namespace std {
+	template<typename T> // typical implementation of std::swap;
+	void swap(T& a, T& b) // swaps a's and b's values
+	{
+		T temp(a);
+		a = b;
+		b = temp;
+	}
+}
+```
+
+As long as your types support copying (**via copy constructor and copy assignment operator**), the default `swap` implementation will let objects of your types be swapped.
+
+However, the default swap implementation involves copying three objects: a to temp, b to a, and temp to b. For some types, none of these copies are really necessary:
+
+```c++
+class WidgetImpl { 	// class for Widget data;
+public: 			// details are unimportant
+	...
+private:
+	int a, b, c; 	// possibly lots of data 
+	std::vector<double> v; // expensive to copy!
+	...
+};
+```
+
+```c++
+class Widget { 						// class using the pimpl idiom
+public:
+	Widget(const Widget& rhs);
+	Widget& operator=(const Widget& rhs) 	// to copy a Widget, copy its WidgetImpl object
+	{
+		... 
+		*pImpl = *(rhs.pImpl); 
+	}
+	...
+private:
+	WidgetImpl *pImpl; // ptr to object with this
+};
+```
+
+> **pimpl idiom**: pointer to implementation
+>
+> Make a class consist primarily of a pointer to another type that contains the real data
+
+To swap the value of two Widget objects, all we really need to do is swap their pImpl pointers, but the default swap algorithm would copy not only three Widgets, but also three WidgetImpl objects.
+
+### Specialize std::swap for Widget
+
+```c++
+namespace std {
+	template<> // this is a specialized version of std::swap when T is Widget
+	void swap<Widget>(Widget& a, Widget& b)
+	{
+		swap(a.pImpl, b.pImpl); // to swap Widgets, swap their pImpl pointers;
+	}
+	// this won't compile
+}
+```
+
+In general, we're not permitted to alter the contents of the std namespace, but we are allowed to totally specialize standard templates (like swap) for types of our own creation (such as Widget).
+
+**However this function won't compile.** That's because it's trying to access the pImpl pointers inside a and b, and they're private.
+
+### Have Widget declare a public member function called swap that does the actual swapping, then specialize std::swap to call the member function
+
+```c++
+class Widget { 	// same as above, except for the addition of the swap mem func
+public:
+	...
+	void swap(Widget& other)
+	{
+		using std::swap; // the need for this declaration is explained later in this Item
+		swap(pImpl, other.pImpl); // to swap Widgets, swap their pImpl pointers
+	} 
+	...
+};
+
+namespace std {
+	template<> // revised specialization of std::swap
+	void swap<Widget>(Widget& a, Widget& b)// 
+	{
+		a.swap(b); // to swap Widgets, call their swap member function
+	}
+}
+```
+
+***
+
 ## Item 26: Postpone variable definitions as long as possible
+
 Consider the following function, which returns an encrypted version of a password:
 
 ```c++

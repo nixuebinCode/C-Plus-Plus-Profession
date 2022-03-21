@@ -1239,13 +1239,56 @@ bool isEven(int number){     // 判断一个数字是否是偶数
 
 ***
 
+## 面试题22：链表中倒数第k个节点
+
+### 题目
+
+输入一个链表，输出该链表中倒数第k个节点。为了符合大多数人的习惯，本题从1开始计数，即链表的尾节点是倒数第1个节点。例如，一个链表有6个节点，从头节点开始，它们的值依次是1、2、3、4、5、6。这个链表的倒数第3个节点是值为4的节点。链表节点定义如下：
+
+```c++
+struct ListNode{
+    int m_nValue;
+    ListNode* m_pNext;
+};
+```
+
+### 解题思路
+
+设置两个快慢两个指针p，q；q指针始终指向p指针前k个节点，同时移动p指针和q指针，当q指针到达链尾的下一个节点，即nullptr时，此时p指针所指的即为倒数第k个节点。
+
+### 代码实现
+
+```c++
+ListNode* FindKthToTail(ListNode *pHead, int k){
+    if(pHead == nullptr || k <= 0)
+        return nullptr;
+    ListNode* pSlow = pHead;
+    ListNode* pFast = pSlow;
+    // 将pFast指向pSlow后k个位置，注意不能直接写pFast = pSlow + k，这不是数组！
+    for(int i = 0; i < k - 1; i++){
+        pFast = pFast->m_pNext;
+        if(pFast == nullptr)        // 需额外判断当链表长度为3时，要求返回倒数第4个节点的情况
+            return nullptr;
+    }
+    pFast = pFast->m_pNext;
+
+    while(pFast != nullptr){
+        pSlow = pSlow->m_pNext;
+        pFast = pFast->m_pNext;
+    }
+    return pSlow;
+}
+```
+
+***
+
 ## 面试题23：链表中环的入口节点
 
 ### 题目
 
 如果一个链表中包含环，如何找出环的入口节点？例如，在如图所示的链表中，环的入口节点是节点3.
 
- ![image-20220320130847830](\images\image-20220320130847830.png)
+ ![image-20220320130847830](images\image-20220320130847830.png)
 
 ### 解题思路
 
@@ -1257,7 +1300,7 @@ bool isEven(int number){     // 判断一个数字是否是偶数
 
   定义两个指针P1和P2指向链表的头节点。如果链表中的环有n个节点，则指针P1先在链表上向前移动n步，然后两个指针以相同的速度向前移动，直到它们相遇，相遇的节点正好是环的入口节点。
 
-   ![](D:\study\C-Plus-Plus-Profession\剑指Offer刷题笔记\images\微信截图_20220320132314.png)
+   ![](images\微信截图_20220320132314.png)
 
 * 确定环中节点的数目
 
@@ -1315,6 +1358,48 @@ ListNode* entryOfLoop(ListNode* pHead){
         P2 = P2->m_pNext;
     }
     return P1;
+}
+```
+
+***
+
+## 面试题24：反转链表
+
+### 题目
+
+定义一个函数，输入一个链表的头节点，反转该链表并输出反转后链表的头节点。链表节点定义如下：
+
+```c++
+struct ListNode{
+    int m_nKey;
+    ListNode* m_pNext;
+};
+```
+
+### 解题思路
+
+为了正确地反转一个链表，需要调整链表中指针的方向。需要注意的是，我们在调整当前节点的next指针时，需要把它指向它的前一个节点，同时需要保存它的下一个节点，否则我们在修改其next指针后，会发生断链。
+
+### 代码实现
+
+```c++
+ListNode* reverseLst(ListNode* pHead){
+    if(pHead == nullptr){
+        return nullptr;
+    }
+    ListNode* pPre = nullptr;
+    ListNode* pNode = pHead;
+    ListNode* pNext = pHead->m_pNext;
+    while(pNode != nullptr){
+        pNode->m_pNext = pPre;
+        pPre = pNode;
+        pNode = pNext;
+        if(pNode == nullptr){   // 当前节点为尾节点
+            return pPre;
+        }
+        pNext = pNode->m_pNext;
+    }
+    return nullptr;
 }
 ```
 
