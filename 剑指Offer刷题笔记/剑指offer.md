@@ -1403,3 +1403,91 @@ ListNode* reverseLst(ListNode* pHead){
 }
 ```
 
+***
+
+## 面试题25：合并两个排序的链表
+
+### 题目
+
+输入两个递增排序的链表，合并这两个链表并使新链表中的节点仍然是递增排序的。链表节点定义如下：
+
+```c++
+struct ListNode{
+    int m_nKey;
+    ListNode* m_pNext;
+};
+```
+
+ ![](D:\study\C-Plus-Plus-Profession\剑指Offer刷题笔记\images\微信截图_20220322111101.png)
+
+### 解题思路一
+
+使用两个指针分别指向两个链表的头节点，每次将值较小的节点加入最终合并的链表。需要注意两个事情：
+
+* 头节点的处理
+* 需要额外用一个指针记录合并链表的尾节点，用以每次加入新的节点
+
+### 代码实现
+
+```c++
+ListNode* mergeLst(ListNode* pHead1, ListNode* pHead2){
+    if(pHead1 == nullptr)
+        return pHead2;
+    if(pHead2 == nullptr)
+        return pHead1;
+    ListNode* ret = nullptr;
+    ListNode* tail = nullptr;       // 记录新链表的尾节点
+    ListNode* p1 = pHead1;
+    ListNode* p2 = pHead2;
+    while(p1 != nullptr && p2 != nullptr){
+        if(p1->m_nValue < p2->m_nValue){
+            if(ret == nullptr)
+                ret = p1;
+            else
+                tail->m_pNext = p1;
+            tail = p1;
+            p1 = p1->m_pNext;
+        }
+        else{
+            if(ret == nullptr)
+                ret = p2;
+            else
+                tail->m_pNext = p2;
+            tail = p2;
+            p2 = p2->m_pNext;
+        }
+    }
+    
+    if(p1 != nullptr)
+        tail->m_pNext = p1;
+    if(p2 != nullptr)
+        tail->m_pNext = p2;
+    return ret;
+}
+```
+
+### 解题思路二
+
+当我们得到两个链表中值较小的头节点并把它链接到已经合并的链表之后，两个链表剩余的节点依然是排序的，因此合并的步骤和之前的步骤是一样的。这就是典型的递归过程，我们可以定义递归函数完成这一合并过程。
+
+### 代码实现
+
+```c++
+ListNode* mergeRecursive(ListNode* pHead1, ListNode* pHead2){
+    if(pHead1 == nullptr)
+        return pHead2;
+    if(pHead2 == nullptr)
+        return pHead1;
+    ListNode* pMergeNode = nullptr;
+    if(pHead1->m_nValue < pHead2->m_nValue){
+        pMergeNode = pHead1;
+        pMergeNode->m_pNext = mergeRecursive(pHead1->m_pNext, pHead2);
+    }
+    else{
+        pMergeNode = pHead2;
+        pMergeNode->m_pNext = mergeRecursive(pHead1, pHead2->m_pNext);
+    }
+    return pMergeNode;
+}
+```
+
