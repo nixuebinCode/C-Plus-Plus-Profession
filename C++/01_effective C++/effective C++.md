@@ -1111,7 +1111,7 @@ The problem is that when a Lock object is copied, what should happen? Typically 
 
   Copying an RAII*(Resource Acquisition Is Initialization)* object should increment the count of the number of objects referring to the resource.
 
-  We can implement this behavior by containing a shared_ptr data member, and specify the deleter of shared_ptr
+  <font color='red'>We can implement this behavior by containing a shared_ptr data member, and specify the deleter of shared_ptr</font>
 
   ```c++
   class Lock {
@@ -2163,3 +2163,235 @@ for (VPW::iterator iter = winPtrs.begin(); iter != winPtrs.end(); ++iter)
 	(*iter)->blink();
 ```
 
+***
+
+## Item 28: Avoid returning “handles” to object internals.
+
+Suppose you're working on an application involving rectangles. To keep a Rectangle object small, you might decide that the points defining its extent shouldn't be stored in the Rectangle itself, but rather in an auxiliary struct that the Rectangle points to：
+
+```c++
+class Point { // class for representing points
+public:
+	Point(int x, int y);
+	...
+	void setX(int newVal);
+	void setY(int newVal);
+	...
+};
+struct RectData { 	// Point data for a Rectangle
+	Point ulhc; 	// ulhc = " upper lefthand corner"
+	Point lrhc; 	// lrhc = " lower righthand corner"
+};
+class Rectangle {
+public:
+    Point& upperLeft() const { return pData->ulhc; }
+	Point& lowerRight() const { return pData->lrhc; }
+private:
+	std::tr1::shared_ptr<RectData> pData;
+}; 
+```
+
+This design will compile, but it's wrong, it's self-contradictory. On the one hand, `upperLeft` and `lowerRight` are declared to be const member functions
+, On the other hand, both functions return references to private internal data--references that callers can use to modify that internal data:
+
+```c++
+Point coord1(0, 0);
+Point coord2(100, 100);
+const Rectangle rec(coord1, coord2); // rec is a const rectangle from (0, 0) to (100, 100)
+rec.upperLeft().setX(50); // now rec goes from (50, 0) to (100, 100)!
+```
+
+**References, pointers, and iterators are all handles** (ways to get at other objects), and returning a handle to an object's internals always runs the risk of compromising an object's encapsulation.
+
+object's “internals”:
+
+* Its data members
+
+* Its member functions not accessible to the general public (i.e., that are protected or private)
+
+  This means you should never have a member function return a pointer to a less accessible member function
+
+### Applying to their return types const
+```c++
+class Rectangle {
+public:
+	...
+	const Point& upperLeft() const { return pData->ulhc; }
+	const Point& lowerRight() const { return pData->lrhc; }
+	...
+};
+```
+
+Even so, `upperLeft` and `lowerRight` are still returning handles to an object's internals, and that can be problematic in other ways.
+
+In particular, it can lead to dangling handles: handles that refer to parts of objects that don't exist any longer. For example, consider a function that returns the bounding box for a GUI object in the form of a rectangle:
+
+```c++
+class GUIObject { ... };
+const Rectangle boundingBox(const GUIObject& obj); // returns a rectangle by value
+
+// Now consider how a client might use this function:
+GUIObject *pgo; // make pgo point to some GUIObject
+... 
+const Point *pUpperLeft = &(boundingBox(*pgo).upperLeft()); // get a ptr to the upper left point of its bounding box
+```
+
+Consider the last statement that create `pUpperLeft`:
+
+* The call to `boundingBox` will return a new, temporary Rectangle object，temp. 
+
+* `upperLeft` will then be called on temp, and that call will return a reference to one of the Points making it up
+
+* `pUpperLeft` will then point to that Point object
+
+* At the end of the statement, `boundingBox`'s return value — temp — will be destroyed, and that will indirectly lead to the destruction of temp's `Point`s, in turn, will leave `pUpperLeft` pointing to an object that no longer exists; `pUpperLeft` will dangle by the end of the statement that created it!
+
+### Summary
+
+Function that returns a handle to an internal part of the object is dangerous:
+
+* It doesn't matter whether the handle is a pointer, a reference, or an iterator.
+*  It doesn't matter whether it's qualified with const. 
+* It doesn't matter whether the member function returning the handle is itself const.
+
+But, there is always an exception: operator[] returns references to the data in the containers--— data that is destroyed when the containers themselves are.
+
+***
+
+## Item 29: Strive for exception-safe code.
+
+Suppose we have a class for representing GUI menus with background images. The class is designed to be used in a threaded environment, so it has a mutex for concurrency control:
+
+```c++
+class PrettyMenu {
+public:
+	...
+	void changeBackground(std::istream& imgSrc); // change background image
+private:
+	Mutex mutex; 		// mutex for this object
+	Image *bgImage; 	// current background image
+	int imageChanges; 	// # of times image has been changed
+};
+
+void PrettyMenu::changeBackground(std::istream& imgSrc)
+{
+	lock(&mutex); 					// acquire mutex
+	delete bgImage; 				// get rid of old background
+	++imageChanges; 				// update image change count
+	bgImage = new Image(imgSrc); 	// install new background
+	unlock(&mutex); 				// release mutex
+}
+```
+
+There are two requirements for exception safety, and the implemention above satisfies neither
+
+* **Leak no resources**
+
+  If the “`new Image(imgSrc)`” expression yields an exception, the call to `unlock` never gets executed, and the mutex is held forever.
+
+* **Don't allow data structures to become corrupted**
+
+  If “`new Image(imgSrc)`” throws, `bgImage` is left pointing to a deleted object. In addition, imageChanges has been incremented, even though it's not true that a new image has been installed.
+
+### Addressing the resource leak issue: use objects to manage resources
+
+```c++
+class Lock {
+public:
+	explicit Lock(Mutex *pm): mutexPtr(pm) { lock(mutexPtr); } // acquire resource
+	~Lock() { unlock(mutexPtr); } // release resource
+private:
+	Mutex *mutexPtr;
+};
+
+Mutex m; 			// define the mutex you need to use
+...
+{ 					// create block to define critical section
+	Lock ml(&m); 	// lock the mutex
+	... 			// perform critical section operations
+} 					// automatically unlock mutex at end of block
+
+void PrettyMenu::changeBackground(std::istream& imgSrc)
+{
+	Lock ml(&mutex);
+	delete bgImage;
+	++imageChanges;
+	bgImage = new Image(imgSrc);
+}
+```
+
+### Addressing the data structure corruption issue
+
+#### Three guarantees that exception-safe functions offer
+
+* **The basic guarantee**
+
+  if an exception is thrown, everything in the program remains in a valid state. However, the exact state of the program may not be predictable.
+
+* **The strong guarantee**
+
+  if an exception is thrown, the state of the program is unchanged. Calls to such functions are <font color='red'>atomic</font> in the sense that if they succeed, they succeed completely, and if they fail, the program state is as if they'd never been called.
+
+* **The nothrow guarantee**
+
+  Never to throw exceptions, because they always do what they promise to do. <font color='red'>All operations on built-in types are nothrow.</font>
+
+Exception-safe code must offer one of the three guarantees above. And offer the nothrow guarantee when you can, but for most functions, the choice is between the basic and strong guarantees.
+
+#### Offer the strong guarantee in `changeBackground`
+
+First, we change the type of `PrettyMenu`'s `bgImage` data member from a built-in `Image`* pointer to one of the smart resource-managing pointers.
+
+Second, we reorder the statements in `changeBackground` so that we don't increment `imageChanges` until the image has been changed.
+
+```c++
+class PrettyMenu {
+	...
+	std::tr1::shared_ptr<Image> bgImage;
+	...
+};
+void PrettyMenu::changeBackground(std::istream& imgSrc)
+{
+	Lock ml(&mutex);
+	bgImage.reset(new Image(imgSrc)); // replace bgImage's internal pointer with the result of the "new Image" expression
+	++imageChanges;
+}
+```
+
+Note that there's no longer a need to manually delete the old image, because that's handled internally by the smart pointer.
+
+Furthermore, the deletion takes place only if the new image is successfully created:
+The `shared_ptr::reset` function will be called only if its parameter (the result of “`new Image(imgSrc)`”) is successfully created. delete is used only inside the call to reset, so if the function is never entered, delete is never used.
+
+### copy and `swap`
+
+"copy and swap" is a general design strategy that typically leads to the strong guarantee:
+
+> Make a copy of the object you want to modify, then make all needed changes to the copy. If any of the modifying operations throws an exception, the original object remains unchanged. After all the changes have been successfully completed, swap the modified object with the original in a non-throwing operation.
+
+This is usually implemented by the “**pimpl idiom**”----把数据(`bgImage`)放在类PMimpl里，而本身的类只保存一个指向PMimpl的只智能指针
+
+```c++
+struct PMImpl {			// PMImpl = "PrettyMenu Impl."
+	std::tr1::shared_ptr<Image> bgImage;
+	int imageChanges;
+};
+class PrettyMenu {
+	...
+private:
+	Mutex mutex;
+	std::tr1::shared_ptr<PMImpl> pImpl;
+};
+
+void PrettyMenu::changeBackground(std::istream& imgSrc)
+{
+	using std::swap;
+	Lock ml(&mutex); // acquire the mutex
+	std::tr1::shared_ptr<PMImpl> pNew(new PMImpl(*pImpl)); // copy obj.data
+	pNew->bgImage.reset(new Image(imgSrc)); // modify the copy
+	++pNew->imageChanges;
+	swap(pImpl, pNew); // swap the new data into place
+} // release the mutex
+```
+
+The copy-and-`swap` strategy is an excellent way to make all-or-nothing changes to an object's state, but, in general, it doesn't guarantee that the overall function is strongly exception-safe. Furthermore, it requires making a copy of each object to be modified, which takes time and space you may be unable or unwilling to make available.
