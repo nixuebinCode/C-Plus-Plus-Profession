@@ -1491,3 +1491,87 @@ ListNode* mergeRecursive(ListNode* pHead1, ListNode* pHead2){
 }
 ```
 
+***
+
+## 面试题26：
+
+### 题目
+
+输入两棵二叉树A和B，判断B是不是A的子结构。二叉树节点的定义如下：
+
+```c++
+struct BinaryTreeNode
+{
+	double m_dbValue;
+	BinaryTreeNode* m_pLeft;
+	BinaryTreeNode* m_pRight;
+};
+```
+
+例如图中的两棵二叉树，由于A 中有一部分子树的结构和B 是一样的，因此B 是A 的子结构。
+
+ ![image-20220324094125264](images\image-20220324094125264.png)
+
+### 解题思路
+
+* 第一步，在树A中找到和树B的根节点的值一样的节点R
+
+  利用递归遍历树A，，若找到节点R，则调用第二步的方法
+
+* 第二步，判断树A中以R为根节点的子树是不是包含和树B一样的结构
+
+  利用递归的思想：递归地判断节点R和树B的左右子节点的值是否相同，递归的终止条件是我们达到了树A或树B的叶子节点。
+
+一个细节值得我们注意：题目中节点的值的类型为double。在判断两个节点的值是不是相等时，不能直接写`pRoot1->m_dbValue == pRoot2->m_dbValue`，这是因为在计算机内表示小数时都有误差。判断两个小数是否相等，只能判断它们之差的绝对值是不是在一个很小的范围内(通常0.0000001之内)
+
+### 代码实现
+
+```c++
+bool HasSubTree2(BinaryTreeNode* pRoot1, BinaryTreeNode* pRoot2);
+
+struct BinaryTreeNode
+{
+	double m_dbValue;
+	BinaryTreeNode* m_pLeft;
+	BinaryTreeNode* m_pRight;
+};
+
+bool equal(double d1, double d2){		// 判断两个double是否相等
+    if((d1 - d2) >= -0.0000001 && (d1 - d2) <= 0.0000001){
+        return true;
+    }
+    else{
+        return false;
+    }
+}
+
+bool HasSubTree(BinaryTreeNode* pRoot1, BinaryTreeNode* pRoot2){
+    if(pRoot1 == nullptr || pRoot2 == nullptr)
+        return false;
+    bool ret = false;
+    if(equal(pRoot1->m_dbValue, pRoot2->m_dbValue)){	// 如果在A中找到节点R，则进行第二步判断
+        ret = HasSubTree2(pRoot1, pRoot2);
+    }
+    if(!ret){   										// 如果没找到，则递归地查找子树
+        ret = HasSubTree(pRoot1->m_pLeft, pRoot2) ||
+                 HasSubTree(pRoot1->m_pRight, pRoot2);
+    }
+
+    return ret;
+}
+
+bool HasSubTree2(BinaryTreeNode* pRoot1, BinaryTreeNode* pRoot2){
+    if(pRoot2 == nullptr)
+        return true;
+    if(pRoot1 == nullptr)
+        return false;
+    if(equal(pRoot1->m_dbValue, pRoot2->m_dbValue)){
+        return HasSubTree2(pRoot1->m_pLeft, pRoot2->m_pLeft) &&
+                HasSubTree2(pRoot1->m_pRight, pRoot2->m_pRight);
+    }
+    else{
+        return false;
+    }
+}
+```
+
