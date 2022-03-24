@@ -2004,7 +2004,7 @@ However, Approach A makes the name w visible in a larger scope, something that's
 
 As a result, unless you know that (1) assignment is less expensive than a constructor-destructor pair and (2) you're dealing with a performance-sensitive part of your code, you should default to using Approach B.
 
-## Item 27: Minimize casting.
+## Item 27: Minimize casting
 
 ### Casting syntax
 
@@ -2395,3 +2395,51 @@ void PrettyMenu::changeBackground(std::istream& imgSrc)
 ```
 
 The copy-and-`swap` strategy is an excellent way to make all-or-nothing changes to an object's state, but, in general, it doesn't guarantee that the overall function is strongly exception-safe. Furthermore, it requires making a copy of each object to be modified, which takes time and space you may be unable or unwilling to make available.
+
+## Item 30: Understand the ins and outs of inlining
+
+Inline functions look like functions, act like functions, and you can call them without having to incur the overhead of a function call.
+
+The idea behind an inline function is to replace each call of that function with its code body, thus this is likely to increase the size of your object code. On the other hand, if an inline function body is very short, the code generated for the function body may be smaller than the code generated for a function call.
+
+Bear in mind that `inline` is a **request** to compilers, not a command.
+
+### Define an inline function
+
+* **The implicit way to define an inline function**: Define a function inside a class definition:
+
+  ```c++
+  class Person {
+  public:
+  	...
+  	int age() const { return theAge; } // an implicit inline request: age is defined in a class definition
+  	...
+  private:
+  	int theAge;
+  };
+  ```
+
+  Such functions are usually member functions, but friend functions can also be defined inside classes. When they are, they're also implicitly declared inline.
+
+* **The explicit way to define an inline function**: Precede its definition with the inline keyword
+
+  ```c++
+  template<typename T> 								// an explicit inline
+  inline const T& std::max(const T& a, const T& b) 	// request: std::max is preceded by "inline"
+  { return a < b ? b : a; }
+  ```
+
+### inline functions and templates
+
+Inline functions must typically be in header files, because most build environments **do inlining during compilation**. In order to replace a function
+call with the body of the called function, compilers must know what the function looks like.
+
+Templates are typically in header files, because compilers need to know what a template looks like in order to instantiate it when it's used.
+
+Template instantiation is independent of inlining
+
+### `inline` is a request that compilers may ignore
+
+* **All but the most trivial calls to virtual functions defy inlining**
+
+  `virtual` means “wait until runtime to figure out which function to call,” and `inline` means “before execution, replace the call site with the called function.” If compilers don't know which function will be called, you can hardly blame them for refusing to inline the function's body.
