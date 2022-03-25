@@ -1575,3 +1575,51 @@ bool HasSubTree2(BinaryTreeNode* pRoot1, BinaryTreeNode* pRoot2){
 }
 ```
 
+***
+
+## 面试题27：二叉树的镜像
+
+### 题目：
+
+请完成一个函数，输入一棵二叉树，该函数输出它的镜像。如图，两棵二叉树互为镜像。二叉树节点定义如下：
+
+```c++
+struct BinaryTreeNode
+{
+	int m_nValue;
+	BinaryTreeNode* m_pLeft;
+	BinaryTreeNode* m_pRight;
+};
+```
+
+ ![image-20220325124823049](images\image-20220325124823049.png)
+
+### 解题思路
+
+观察上图，可以发现根节点保持不变，但它的左右两个子节点发生了改变，我们不妨先交换其左右字节点，如图a所示。之后我们注意到节点值为10，6的子节点仍需要交换顺序，交换之后分别是图中第三棵和第四棵树，最后交换完所有非叶子节点的子节点之后，我们就得到了最终的镜像二叉树
+
+ ![image-20220325125301051](images\image-20220325125301051.png)
+
+因此获得一棵二叉树的镜像的过程为：前序遍历这棵树的每个节点，如果遍历到的节点非叶子节点，就交换它的两个子节点。
+
+### 代码实现
+
+```c++
+void MirrorRecursively(BinaryTreeNode* pNode){
+    if(pNode == nullptr)
+        return;
+    if(pNode->m_pLeft == nullptr && pNode->m_pRight == nullptr){
+        return;
+    }
+
+    BinaryTreeNode *temp = pNode->m_pLeft;
+    pNode->m_pLeft = pNode->m_pRight;
+    pNode->m_pRight = temp;
+
+    if( pNode->m_pLeft != nullptr)
+        MirrorRecursively(pNode->m_pLeft);
+    if( pNode->m_pRight != nullptr)
+        MirrorRecursively(pNode->m_pRight);
+}
+```
+
