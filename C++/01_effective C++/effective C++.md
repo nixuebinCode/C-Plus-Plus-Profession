@@ -1,5 +1,3 @@
-
-
 # 1. Accustoming Yourself to C++
 
 ## Item 1: View C++ as a federation of languages
@@ -2440,6 +2438,255 @@ Template instantiation is independent of inlining
 
 ### `inline` is a request that compilers may ignore
 
+* **Most compilers refuse to inline functions they deem too complicated (e.g., those that contain loops or are recursive)**
+
 * **All but the most trivial calls to virtual functions defy inlining**
 
   `virtual` means “wait until runtime to figure out which function to call,” and `inline` means “before execution, replace the call site with the called function.” If compilers don't know which function will be called, you can hardly blame them for refusing to inline the function's body.
+  
+* **Sometimes compilers generate a function body for an inline function even when they are perfectly willing to inline the function**
+
+  For example, if your program takes the address of an inline function, compilers must typically generate an outlined function body for it. How can they come up with a pointer to a function that doesn't exist?
+
+  ```c++
+  inline void f() {...} 		// assume compilers are willing to inline calls to f
+  void (*pf)() = f; 			// pf points to f
+  ...
+  f(); 						// this call will be inlined, because it's a "normal" call
+  pf(); 						// this call probably won't be, because it's through a function pointer
+  ```
+
+* Even if you never use function pointers, sometimes compilers generate out-of-line copies of constructors and destructors so that they can get pointers to those functions for use during construction and destruction of objects in arrays.
+
+### Drawbacks of inline function
+
+* If f is an inline function in a library, clients of the library compile the body of f into their applications. If a library implementer later decides to change f, all clients who've used f must **recompile**. This is often undesirable.
+
+  On the other hand, if f is a non-inline function, a modification to f requires only that clients **relink**. This is a substantially less onerous burden than recompiling and, if the library containing the function is dynamically linked, one that may be absorbed in a way that's completely transparent to clients.
+
+* Most debuggers have trouble with inline functions. How do you set a breakpoint in a function that isn't there?
+
+***
+
+## Item 31: Minimize compilation dependencies between files
+
+C++ doesn't do a very good job of separating interfaces from implementations. A class definition specifies not only a class interface but also a fair number of implementation details. For example:
+
+```c++
+class Person {
+public:
+	Person(const std::string& name, const Date& birthday, const Address& addr);
+	std::string name() const;
+	std::string birthDate() const;
+	std::string address() const;
+	...
+private:
+	std::string theName; // implementation detail
+	Date theBirthDate; // implementation detail
+	Address theAddress; // implementation detail
+};
+```
+
+Here, class `Person` can't be compiled without access to definitions for the classes the `Person` implementation uses, namely, `string`, `Date`, and `Address`. Such definitions are typically provided through `#include` directives, so in the file defining the `Person` class, you are likely to find something like this:
+
+```c++
+#include <string>
+#include "date.h"
+#include "address.h"
+```
+
+This sets up a **compilation dependency** between the file defining `Person` and these header files. If any of these header files is changed, or if any of the header files they depend on changes, the file containing the `Person` class must be recompiled, as must any files that use `Person`.
+
+### Forward Declaration
+```c++
+namespace std {
+	class string; // forward declaration (an incorrectone — see below)
+} 
+class Date; 	// forward declaration
+class Address; 	// forward declaration
+class Person {
+public:
+	Person(const std::string& name, const Date& birthday,const Address& addr);
+	std::string name() const;
+	std::string birthDate() const;
+	std::string address() const;
+	...
+};
+```
+
+If that were possible, clients of `Person` would have to recompile only if the interface to the class changed.
+
+There are two problems with this idea:
+
+* `string` is not a class, it's a typedef (for basic_string<char>). *And  you shouldn't try to manually declare parts of the standard library. Instead, simply use the proper `#includes` and be done with it.*
+
+* The need for compilers to know the size of objects during compilation:
+
+  ```c++
+  int main()
+  {
+      int x; // define an int
+  	Person p( params ); // define a Person
+  	...
+  }
+  ```
+
+  When compilers see the definition for `x`, they know they must allocate enough space (typically on the stack) to hold an int. No problem. Each compiler knows how big an int is.
+
+  When compilers see the definition for `p`, they know they have to allocate enough space for a `Person`, but how are they supposed to know how big a `Person` object is? The only way they can get that information is to consult the class definition, but if it were legal for a class definition to omit the implementation details, how would compilers know how much space to allocate? Instead, you can write code like this:
+
+  ```c++
+  int main()
+  {
+  	int x; 		// define an int
+  	Person *p; 	// define a pointer to a Person
+  	...
+  }
+  ```
+
+### Handle classes -- Hide the object implementation behind a pointer: pimpl idiom (“pointer to implementation”)
+
+Separate `Person` into two classes, one offering only an interface, the other implementing that interface:
+
+```c++
+#include <string> // standard library components shouldn't be forward-declared
+#include <memory> // for tr1::shared_ptr; see below
+class PersonImpl; // forward decl of Person impl. class
+class Date; 	  // forward decls of classes used in
+class Address; 	  // Person interface
+
+class Person {
+public:
+	Person(const std::string& name, const Date& birthday, const Address& addr);
+	std::string name() const;
+	std::string birthDate() const;
+	std::string address() const;
+	...
+private: // ptr to implementation;
+	std::tr1::shared_ptr<PersonImpl> pImpl;
+};
+```
+
+```c++
+#include "Person.h" 	// we're implementing the Person class, so we must #include its class definition
+#include "PersonImpl.h" // we must also #include PersonImpl's class definition, otherwise we couldn't call
+						// its member functions; note that PersonImpl has exactly the same public
+						// member functions as Person — their interfaces are identical
+Person::Person(const std::string& name, const Date& birthday, const Address& addr)
+	: pImpl(new PersonImpl(name, birthday, addr))
+{}
+std::string Person::name() const
+{
+	return pImpl->name();
+}
+```
+
+The main class (`Person`) contains as a data member nothing but a pointer o its implementation class (`PersonImpl`). Classes like Person that employ the pimpl idiom are often called **Handle classes**.
+
+With this design, clients of `Person` are divorced from the details of `dates` and `addresses`. The implementations of those classes can be modified at will, but `Person` clients need not recompile.
+
+In addition, because clients are unable to see the details of Person's implementation, clients are unlikely to write code that somehow depends on those details. This is a true separation of interface and implementation.
+
+The key to this separation is **replacement of dependencies on definitions with dependencies on declarations**: make your header files self-sufficient whenever it's practical, and when it's not, depend on declarations in other files, not definitions.
+
+* **Avoid using objects when object references and pointers will do**
+
+  You may define references and pointers to a type with only a declaration for the type. Defining objects of a type necessitates the presence of the type's definition.
+
+* **Depend on class declarations instead of class definitions whenever you can**
+
+  Note that *you never need a class definition to declare a function using that class, not even if the function passes or returns the class type* *by value*:
+
+  ```c++
+  class Date; 					// class declaration
+  Date today(); 					// fine — no definition
+  void clearAppointments(Date d); // of Date is needed
+  ```
+
+* **Provide separate header files for declarations and definitions**
+
+  Header files need to come in pairs: one for declarations, the other for definitions. As a result, library clients should always `#include` a declaration file instead of forward-declaring something themselves, and library authors should provide both header files:
+
+  ```c++
+  #include "datefwd.h" // header file declaring (but not defining) class Date as before
+  Date today();
+  void clearAppointments(Date d);
+  ```
+
+### Interface classes
+
+An alternative to the `Person` class approach is to make `Person` a special kind of abstract base class called an **Interface class**. The purpose of such a class is to specify an interface for derived classes. As a result, it typically has no data members, no constructors, a virtual destructor, and a set of pure virtual functions that specify the interface.
+
+```c++
+class Person {
+public:
+	virtual ~Person();
+	virtual std::string name() const = 0;
+	virtual std::string birthDate() const = 0;
+	virtual std::string address() const = 0;
+	...
+};
+```
+
+Clients of this class must program in terms of `Person` pointers and references, because it's not possible to instantiate classes containing pure virtual
+functions.
+
+Clients of an Interface class must have a way to create new objects. They typically do it by calling a function that plays the role of the constructor for the derived classes that are actually instantiated. Such functions are typically called **factory functions** or **virtual constructors**. They return pointers (preferably smart pointers) to dynamically allocated objects. **Such functions are often declared static inside the Interface class**:
+
+```c++
+class Person {
+public:
+	...
+    // return a tr1::shared_ptr to a new Person initialized with the given params
+	static std::tr1::shared_ptr<Person> create(const std::string& name, const Date& birthday, const Address& addr); 
+    ...
+};
+```
+
+Clients use them like this:
+
+```c++
+std::string name;
+Date dateOfBirth;
+Address address;
+...
+// create an object supporting the Person interface
+std::tr1::shared_ptr<Person> pp(Person::create(name, dateOfBirth, address));
+...
+std::cout << pp->name() // use the object via the
+<< " was born on " 		// Person interface
+<< pp->birthDate()
+<< " and now lives at "
+<< pp->address();
+... 					// the object is automatically deleted when pp goes out of scope
+```
+
+Concrete derived class `RealPerson` that provides implementations for the virtual functions it inherits:
+
+```c++
+class RealPerson: public Person {
+public:
+	RealPerson(const std::string& name, const Date& birthday, const Address& addr)
+		: theName(name), theBirthDate(birthday), theAddress(addr)
+	{}
+	virtual ~RealPerson() {}
+	std::string name() const; 		// implementations of these
+	std::string birthDate() const; 	// functions are not shown, but
+	std::string address() const; 	// they are easy to imagine
+private:
+	std::string theName;
+	Date theBirthDate;
+	Address theAddress;
+};
+```
+
+Given RealPerson, it is truly trivial to write `Person::create`:
+
+```c++
+std::tr1::shared_ptr<Person> Person::create(const std::string& name, const Date& birthday, const Address& addr)
+{
+	return std::tr1::shared_ptr<Person>(new RealPerson(name, birthday, addr));
+}
+```
+
+A more realistic implementation of `Person::create` would create different types of derived class objects, depending on e.g., the values of additional function parameters, data read from a file or database, environment variables, etc.
