@@ -2690,3 +2690,162 @@ std::tr1::shared_ptr<Person> Person::create(const std::string& name, const Date&
 ```
 
 A more realistic implementation of `Person::create` would create different types of derived class objects, depending on e.g., the values of additional function parameters, data read from a file or database, environment variables, etc.
+
+# 6. Inheritance and Object-Oriented Design
+
+## Item 32: Make sure public inheritance models “is-a.”
+
+If you write that class D (“Derived”) publicly inherits from class B (“Base”), you are telling C++ compilers (as well as human readers of your code) that every object of type D is also an object of type B, but not vice versa. You are saying that B represents a more general concept than D, that D represents a more specialized concept than B.
+
+```c++
+class Person {...};
+class Student: public Person {...};
+```
+
+Any function that expects an argument of type Person (or pointer-to-Person or reference-to-Person) will also take a Student object (or pointer-to-Student or reference-to-Student):
+
+```c++
+void eat(const Person& p); 		// anyone can eat
+void study(const Student& s); 	// only students study
+Person p; 	// p is a Person
+Student s; 	// s is a Student
+eat(p); 	// fine, p is a Person
+eat(s); 	// fine, s is a Student,
+			// and a Student is-a Person
+study(s); 	// fine
+study(p); 	// error! p isn't a Student
+```
+
+The equivalence of public inheritance and is-a sounds simple, but sometimes your intuition can mislead you:
+
+```C++
+class Bird {
+public:
+	virtual void fly(); // birds can fly
+	...
+};
+class Penguin: public Bird { // penguins are birds
+	...
+};
+```
+
+Suddenly we are in trouble, because this hierarchy says that penguins can fly, which we know is not true. **Public inheritance asserts that everything that applies to base class objects — everything! — also applies to derived class objects**. In the case of birds and penguins that assertion fails to hold, so using public inheritance to model their relationship is simply incorrect.
+
+Instead, we would come up with the following hierarchy, which models reality much better:
+
+```c++
+class Bird {
+	... // no fly function is declared
+};
+class FlyingBird: public Bird {
+public:
+	virtual void fly();
+	...
+};
+class Penguin: public Bird {
+	... // no fly function is declared
+};
+```
+
+## Item 33: Avoid hiding inherited names（避免遮掩继承而来的名称）
+
+When we're inside a derived class member function and we refer to something in a base class (e.g., a member function, a typedef, or a data member), compilers can find what we're referring to because derived classes inherit the things declared in base classes. The way that actually works is that **the scope of a derived class is nested inside its base class's scope.**
+
+```c++
+class Base {
+private:
+	int x;
+public:
+	virtual void mf1() = 0;
+	virtual void mf1(int);
+	virtual void mf2();
+	void mf3();
+	void mf3(double);
+	...
+};
+class Derived: public Base {
+public:
+	virtual void mf1();
+	void mf3();
+	void mf4();
+	...
+};
+```
+
+All functions named `mf1` and `mf3` in the base class are hidden by the functions named `mf1` and `mf3` in the derived class. <font color='red'>From the perspective of name lookup, Base::mf1 and Base::mf3 are no longer inherited by Derived!</font>
+
+```c++
+Derived d;
+int x;
+...
+d.mf1(); // fine, calls Derived::mf1
+d.mf1(x); // error! Derived::mf1 hides Base::mf1
+d.mf2(); // fine, calls Base::mf2
+d.mf3(); // fine, calls Derived::mf3
+d.mf3(x); // error! Derived::mf3 hides Base::mf3
+```
+
+As you can see, this applies even though the functions in the base and derived classes take different parameter types, and it also applies regardless of whether the functions are virtual or non-virtual. The function `mf3` in `Derived` hides a `Base` function named `mf3` that has a different type.
+
+### Inherit the overloads with `using` declarations
+
+```c++
+class Base {
+private:
+	int x;
+public:
+	virtual void mf1() = 0;
+	virtual void mf1(int);
+	virtual void mf2();
+	void mf3();
+	void mf3(double);
+	...
+};
+class Derived: public Base {
+public:
+	using Base::mf1; // make all things in Base named mf1 
+	using Base::mf3; // and mf3 visible (and public) in Derived's scope
+	virtual void mf1();
+	void mf3();
+	void mf4();
+	...
+};
+
+Derived d;
+int x;
+...
+d.mf1(); // still fine, still calls erived::mf1
+d.mf1(x); // now okay, calls Base::mf1
+d.mf2(); // still fine, still calls Base::mf2
+d.mf3(); // fine, calls Derived::mf3
+d.mf3(x); // now okay, calls Base::mf3
+```
+
+This means that if you **inherit** from a base class with **overloaded functions** and you want to redefine or **override** only **some of them**, you need to **include a `using` declaration** for each name you'd otherwise be hiding. If you don't, some of the names you'd like to inherit will be hidden.
+
+### Forwarding Function
+
+It's conceivable that you sometimes won't want to inherit all the functions from your base classes. Under public inheritance, this should never be the case, because it violates public inheritance's is-a relationship between base and derived classes. Under private inheritance, however, it can make sense.
+
+Suppose `Derived` privately inherits from Base, and the only version of mf1 that Derived wants to inherit is the one taking no parameters. A using declaration won't do the trick here, because a using declaration makes all inherited functions with a given name visible in the derived class. In this case, you can use a technique named **forwarding function**（转交函数）.
+
+```c++
+class Base {
+public:
+	virtual void mf1() = 0;
+	virtual void mf1(int);
+	... // as before
+};
+class Derived: private Base {
+public:
+	virtual void mf1() // forwarding function; implicitly inline
+		{ Base::mf1(); } 
+    ...
+};
+...
+Derived d;
+int x;
+d.mf1(); // fine, calls Derived::mf1
+d.mf1(x); // error! Base::mf1() is hidden
+```
+
