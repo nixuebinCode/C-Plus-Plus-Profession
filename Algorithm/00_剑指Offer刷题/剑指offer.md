@@ -1623,3 +1623,50 @@ void MirrorRecursively(BinaryTreeNode* pNode){
 }
 ```
 
+***
+
+## 面试题28：对称的二叉树
+
+### 题目
+
+请实现一个函数，用来判断一棵二叉树是不是对称的。如果一棵二叉树和它的镜像一样，那么它是对称的。例如图中所示的3棵二叉树中，第一棵二叉树是对称的，而另外两棵不是。
+
+ ![image-20220327093747080](images\image-20220327093747080.png)
+
+### 解题思路
+
+对于树的题目，多从**遍历**入手，常见的三种遍历算法中都是先遍历左节点，再遍历右节点。我们是否可以定义一种遍历算法，先遍历右节点，再遍历左节点？观察图中对称的二叉树，如第一课其先序遍历序列为{8,6,5,7,6,7,5}，若定义一种遍历顺序为根右左，则其序列为{8,6,5,7,6,7,5}。可以发现两者序列一致。因此我们只要设置两个指针同时从根出发，一个按照根左右的顺序遍历，一个按照根右左的顺序遍历，依次比较两个指针所指向的节点的值是否相等即可，注意在获取两者指针指向的节点的值之前，要确保二者都不为空指针。
+
+### 代码实现
+
+```c++
+struct BinaryTreeNode
+{
+	int m_nValue;
+	BinaryTreeNode* m_pLeft;
+	BinaryTreeNode* m_pRight;
+};
+
+bool isSymmetric(BinaryTreeNode*, BinaryTreeNode*);
+
+bool isSymmetric(BinaryTreeNode* pNode){
+    return isSymmetric(pNode, pNode);
+}
+
+// 对pNode1进行根左右遍历，pNode2进行根右左遍历
+bool isSymmetric(BinaryTreeNode* pNode1, BinaryTreeNode* pNode2){
+    // 对根进行判断
+    if(pNode1 == nullptr && pNode2 == nullptr)  // 二者均为空
+        return true;
+    if(pNode1 ==nullptr || pNode2 == nullptr)   // 二者有一个为空
+        return false;
+    if(pNode1->m_nValue == pNode2->m_nValue){   // 二者均不为空且相等时，比较子节点
+        return isSymmetric(pNode1->m_pLeft, pNode2->m_pRight) &&    
+                isSymmetric(pNode1->m_pRight, pNode2->m_pLeft);
+    }                                           // 二者均不为空且不相等
+    else{                                       
+        return false;
+    }
+}
+```
+
