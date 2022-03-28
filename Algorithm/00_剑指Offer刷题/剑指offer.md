@@ -1670,3 +1670,103 @@ bool isSymmetric(BinaryTreeNode* pNode1, BinaryTreeNode* pNode2){
 }
 ```
 
+## 面试题29：顺时针打印矩阵
+
+### 题目
+
+输入一个矩阵，按照从外向里以顺时针的顺序依次打印出每一个数字。例如，如果输入如下矩阵：
+
+```c++
+1  2  3  4
+5  6  7  8
+9  10 11 12
+13 14 15 16
+```
+
+则依次打印出数字1，2，3，4，8，12，16，15，14，13，9，5，16，7，1
+
+### 解题思路
+
+我们可以把矩阵看成一圈圈的，根据题意可知道是由外圈到内圈顺序依次打印，我们可以用一个循环来打印矩阵，每次打印矩阵中的一个圈：
+
+假设矩阵为1×1的，打印第一圈的左上角坐标为（0，0）
+假设矩阵为2×2的，打印第一圈的左上角坐标为（0，0）
+假设矩阵为3×3的，打印第一圈的左上角坐标为（0，0），第二圈的左上角坐标为（1，1）
+假设矩阵为4×4的，打印第一圈的左上角坐标为（0，0），第二圈的左上角坐标为（1，1）
+假设矩阵为5×5的，打印第一圈的左上角坐标为（0，0），第二圈的左上角坐标为（1，1），第三圈的左上角坐标为（2，2）
+...
+可以看出，每一圈的起始坐标横坐标与纵坐标相等，假设矩阵为rows×columns，每一圈的起始坐标（start，start），均满足start \* 2 < rows, start * 2 < columns
+
+```c++
+void PrintMatrixClockwise(int **numbers, int rows, int columns){
+    if(numbers == nullptr || rows <= 0 || columns <=0)
+        return;
+    for(int start = 0; start * 2 < rows && start * 2 < columns; start++){
+        PrintMatrixCircle(start);
+    }
+}
+```
+
+接着考虑如何实现打印一圈的功能，我们可以把打印一圈分为四步：从左到右打印一行；从上到下打印一列；从右到左打印一行；从下到上打印一列。规定好每一步的起始行号，列号，终止行号，列号，即可完成四步的打印。
+
+需要注意的是最后一圈有可能只有一列，一行，或者单独一个元素。如图所示
+
+ ![image-20220328205229608](images\image-20220328205229608.png)
+
+第一步总是需要的。
+
+如果只有一行，那就不用第二步了，也就是需要第二步的前提是终止行号大于起始行号。
+
+在第二步的基础上，需要第三步的前提条件是至少有两列，即终止列号大于起始列号。
+
+在第三步的基础上，需要第四步的前提条件是至少有三行，即终止行号要比起始行号大2.
+
+### 代码实现
+
+```c++
+void PrintMatrixCircle(int start, int rows, int columns, int **numbers);
+
+void PrintMatrixClockwise(int **numbers, int rows, int columns){
+    if(numbers == nullptr || rows <= 0 || columns <=0)
+        return;
+    for(int start = 0; start * 2 < rows && start * 2 < columns; start++){
+        PrintMatrixCircle(start, rows, columns, numbers);
+    }
+}
+
+void PrintMatrixCircle(int start, int rows, int columns, int **numbers){
+    int rowStr = start;
+    int rowEnd = rows - 1 - start;
+    int colStr = start;
+    int colEnd = columns - 1 - start;
+    // 从左到右打印一行
+    for(int i = colStr; i <= colEnd; i++){
+        cout << numbers[rowStr][i] << " ";
+    }
+
+    // 从上到下打印一列
+    if(rowEnd == rowStr){   // 只有一行
+        return;
+    }
+    for(int i = rowStr + 1; i <= rowEnd; i++){
+        cout << numbers[i][colEnd] << " ";
+    }
+
+    // 从右到左打印一行
+    if(colStr == colEnd){   // 只有一列
+        return;
+    }
+    for(int i = colEnd - 1; i >= colStr; i--){
+        cout << numbers[rowEnd][i] << " ";
+    }
+
+    // 从下到上打印一列
+    if(rowEnd <= rowStr + 1){   // 小于两行
+        return;
+    }
+    for(int i = rowEnd - 1; i >= rowStr + 1; i--){
+        cout << numbers[i][colStr] << " ";
+    }
+}
+```
+
