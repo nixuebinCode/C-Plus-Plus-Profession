@@ -333,7 +333,7 @@ suspend 进入休眠模式
 [root@study ~]# systemctl poweroff # 系统关机
 ```
 
-# 第五章 Linux的文件权限与目录配置
+# 第5章 Linux的文件权限与目录配置
 
 ## 5.1 用户与用户组
 
@@ -642,7 +642,7 @@ MySQL数据库的文件等。
   * **.**    代表当前的目录，也可以使用 ./ 来表示
   * **..**   代表上一层目录，也可以使用 ../ 来表示
 
-# 第六章 Linux文件与目录管理
+# 第6章 Linux文件与目录管理
 
 ## 6.1 目录与路径
 
@@ -1728,3 +1728,582 @@ drwxrwxr-x. 2 root root 6 6月 16 01:12 test4
 
 * 目录所需权限：用户对这个目录至少需要具有 x 的权限
 * 文件所需权限：用户对这个文件至少需要具有 x 的权限
+
+# 第7章 Linux磁盘与文件系统管理
+
+## 7.1 认识Linux文件系统
+
+### 7.1.1 磁盘组成与分区的复习
+
+#### 磁盘的物理组成
+
+* 圆形的碟片（主要记录数据的部分）
+* 机械手臂，与在机械手臂上的磁头（可读写盘碟片上的数据）
+* 主轴马达，可以转动碟片，让机械手臂的磁头在碟片上读写数据
+
+#### 碟片的物理组成
+
+* 扇区（Sector）为最小的物理存储单位，且依据磁盘设计的不同，目前主要有 512Bytes与 4KB 两种格式
+* 将扇区组成一个圆，那就是柱面（Cylinder）
+* 早期的分区主要以柱面为最小分区单位，现在的分区通常使用扇区为最小分区单位（每个扇区都有其号码，就好像座位一样）
+* 磁盘分区表主要有两种格式，一种是限制较多的 MBR 分区表，一种是较新且限制较少的GPT 分区表
+* MBR 分区表中，第一个扇区最重要，里面有：主引导记录（Master boot record, MBR）及分区表（partition table）， 其中 MBR 占有 446 Bytes，而 partition table 则占有 64 Bytes
+* GPT 分区表除了分区数量扩充较多之外，支持的磁盘容量也可以超过 2TB
+
+#### 磁盘的文件名
+
+* /dev/sd\[a-p][1-128]：为物理磁盘的文件名
+* /dev/vd\[a-d][1-128]：为虚拟磁盘的文件名
+
+### 7.1.2 文件系统特性
+
+传统的磁盘与文件系统应用中，一个分区就只能够被格式化成为一个文件系统，所以我们可以说一个文件分区。但是LVM与软件磁盘阵列等新技术可以将一个分区格式化为多个文件系统，因此我们可以称呼**一个可被挂载的数据为一个文件系统**。
+
+Linux操作系统的文件内容和文件权限(rwx)，文件属性（拥有者，用户组，时间参数等）会被分别存放在不同的区块，**权限与属性放到inode中，实际数据则放置到数据区块中**。另外还有一个超级区块(superblock)会记录整个文件系统的整体信息，包括inode与数据区块的总量、使用量、剩余量等。
+
+* 超级区块
+
+  记录此文件系统的整体信息，包括inode与数据区块的总量、使用量、剩余量，以及文件系统的格式与相关信息等
+
+* inode
+
+  记录文件的属性，一个文件占用一个inode，同时记录此文件的数据所在的区块号码
+
+* 数据区块
+
+  实际记录文件的内容，若文件太大时，会占用多个区块
+
+这种利用inode记录实际数据存放的区块的方式，称为**索引式文件系统**。
+
+### 7.1.3 Linux的ext2文件系统（inode）
+
+ext2 文件系统在格式化的时候基本上是区分为多个区块群组 （block group） ，每个区块群组都有独立的 inode、数据区块、超级区块系统。
+
+ ![image-20220327210222826](images\image-20220327210222826.png)
+
+文件系统最前面有一个启动扇区（boot sector），可以安装启动引导程序。
+
+每一个区块群组有以下六个主要内容：
+
+* **数据区块（data block）**
+
+  数据区块是用来放置文件数据的地方，在 ext2 文件系统中所支持的区块大小有 1K, 2K及 4K 三种。在格式化时区块的大小就固定了，且每个区块都有编号，以方便 inode的记录。ext2文件系统的区块还有以下基本限制：
+
+  * 原则上，区块的大小与数量在格式化完就不能够再修改（除非重新格式化）
+  * 每个区块内最多只能够放置一个文件的数据
+  * 承上，如果文件大于区块的大小，则一个文件会占用多个区块数量
+  * 承上，若文件小于区块，则该区块的剩余容量就不能够再被使用了（磁盘空间会浪费）
+
+* **inode table（inode表）**
+
+  inode记录的数据至少有：
+
+  * 该文件的读写属性（read/write/excute）
+  * 该文件的拥有者与用户组（owner/group）
+  * 该文件的大小
+  * 该文件建立或状态改变的时间（ctime）
+  * 最近一次的读取时间（atime）
+  * 最近修改的时间（mtime）
+  * 定义文件特性的标识（flag），如 SetUID
+  * 该文件真正内容的指向 （pointer）
+
+  inode的数量与大小也是在格式化时就已经固定了，除此之外，还有以下特色：
+
+  * 每个 inode 大小均固定为 128 B （新的 ext4 与 xfs 可设置到 256 B）
+  * 每个文件都仅会占用一个 inode 而已
+  * 承上，因此文件系统能够建立的文件数量与 inode 的数量有关
+  * 系统读取文件时需要先找到 inode，并分析 inode 所记录的权限与用户是否符合，若符合才能够读取区块的内容
+
+  文件系统将inode记录区块号码的区域定义为12个直接、一个间接、一个双间接与一个三间接记录区：
+
+   ![image-20220327211933490](images\image-20220327211933490.png)
+
+* **Superblock （超级区块）**
+
+  记录的主要信息有：
+
+  * 数据区块与inode 的总量
+  * 未使用与已使用的 inode 与数据区块的数量
+  * 数据区块与 inode 的大小 （block 为 1, 2, 4K，inode 为 128Bytes 或 256Bytes）
+  * 文件系统的挂载时间、最近一次写入数据的时间、最近一次检验磁盘 （fsck） 的时间等文件系统的相关信息
+  * 一个有效位数值，若此文件系统已被挂载，则有效位为 0 ，若未被挂载，则有效位为 1
+
+* **Filesystem Description （文件系统描述说明）**
+
+  这个区段可以描述每个区块群组的开始与结束的区块号码，以及说明每个区段（超级区块, 对照表, inode对照表, 数据区块） 分别介于哪一个区块号码之间
+
+* **block bitmap （区块对照表）**
+
+  新增文件时，从区块对照表当中可以知道哪些区块是空的，因此我们的系统就能够很快速的找到可使用的空间来处理文件。
+
+  删除某些文件时，那么那些文件原本占用的区块号码就得要释放出来， 此时在区块对照表当中相对应到该区块号码的标志就要修改成“未使用中”
+
+* **inode bitmap （inode 对照表）**
+
+  与区块对照表类似，记录使用与未使用的inode号码
+
+#### dumpe2fs： 查询超级块信息的命令
+
+```shell
+[root@study ~]# dumpe2fs [-bh] 设备文件名
+选项与参数：
+-b ：列出保留为坏道的部分（一般用不到）
+-h ：仅列出 superblock 的数据，不会列出其他的区段内容
+范例：一块 1GB ext4 文件系统内容
+[root@study ~]# blkid <==这个指令可以显示目前系统被格式化的设备
+/dev/vda1: LABEL="myboot" UUID="ce4dbf1b-2b3d-4973-8234-73768e8fd659" TYPE="xfs"
+/dev/vda2: LABEL="myroot" UUID="21ad8b9a-aaad-443c-b732-4e2522e95e23" TYPE="xfs"
+/dev/vda3: UUID="12y99K-bv2A-y7RY-jhEW-rIWf-PcH5-SaiApN" TYPE="LVM2_member"
+/dev/vda5: UUID="e20d65d9-20d4-472f-9f91-cdcfb30219d6" TYPE="ext4" <==看到 ext4 了！
+[root@study ~]# dumpe2fs /dev/vda5
+dumpe2fs 1.42.9 （28-Dec-2013）
+Filesystem volume name: <none> # 文件系统的名称（不一定会有）
+Last mounted on: <not available> # 上一次挂载的目录位置
+Filesystem UUID: e20d65d9-20d4-472f-9f91-cdcfb30219d6
+Filesystem magic number: 0xEF53 # 上方的 UUID 为 Linux 对设备的定义码
+Filesystem revision #: 1 （dynamic） # 下方的 features 为文件系统的特征数据
+Filesystem features: has_journal ext_attr resize_inode dir_index filetype extent 64bit
+flex_bg sparse_super large_file huge_file uninit_bg dir_nlink extra_isize
+Filesystem flags: signed_directory_hash
+Default mount options: user_xattr acl # 默认在挂载时会主动加上的挂载参数
+Filesystem state: clean # 这块文件系统的状态是什么，clean 是没问题
+Errors behavior: Continue
+Filesystem OS type: Linux
+Inode count: 65536 # inode 的总数
+Block count: 262144 # block 的总数
+Reserved block count: 13107 # 保留的 block 总数
+Free blocks: 249189 # 还有多少的 block 可用数量
+Free inodes: 65525 # 还有多少的 inode 可用数量
+First block: 0
+Block size: 4096 # 单个 block 的大小
+Fragment size: 4096
+Group descriptor size: 64
+....（中间省略）....
+Inode size: 256 # inode 的容量大小，已经是 256 了
+....（中间省略）....
+Journal inode: 8
+Default directory hash: half_md4
+Directory Hash Seed: 3c2568b4-1a7e-44cf-95a2-c8867fb19fbc
+Journal backup: inode blocks
+Journal features: （none）
+Journal size: 32M # Journal 日志的可供存储大小
+Journal length: 8192
+Journal sequence: 0x00000001
+Journal start: 0
+Group 0: （Blocks 0-32767） # 第一块 block group 位置
+Checksum 0x13be, unused inodes 8181
+Primary superblock at 0, Group descriptors at 1-1 # 主要 superblock 的所在
+Reserved GDT blocks at 2-128
+Block bitmap at 129 （+129）, Inode bitmap at 145 （+145）
+Inode table at 161-672 （+161） # inode table 的所在
+28521 free blocks, 8181 free inodes, 2 directories, 8181 unused inodes
+Free blocks: 142-144, 153-160, 4258-32767 # 下面两行说明剩余的容量有多少
+Free inodes: 12-8192
+Group 1: （Blocks 32768-65535） [INODE_UNINIT] # 后续为更多其他的 block group
+....（下面省略）....
+# 上半部分显示超级区块的内容，下半部分则是每个区块群组的信息
+```
+
+### 7.1.4 文件系统与实际的目录树的关系
+
+目录与文件在文件系统中是如何记录数据的
+
+* **目录**
+
+  当我们在Linux下的文件系统建立一个目录时，文件系统会分配一个inode与至少一块区块给该目录。其中，inode记录该目录的相关权限与属性，并可记录分配到的那块区块号码。区块则是记录在这个目录下的**文件名**与**该文件名占用的inode号码**数据。
+
+  如果想要实际观察文件所占用的inode号码数据，可以使用ls -i这个选项来处理：
+
+  ```shell
+  [root@study ~]# ls -li
+  total 8
+  53735697 -rw-------. 1 root root 1816 May 4 17:57 anaconda-ks.cfg
+  53745858 -rw-r--r--. 1 root root 1864 May 4 18:01 initial-setup-ks.cfg
+  ```
+
+* **文件**
+
+  当我们在 Linux 下的 ext2 创建一个一般文件时， ext2 会分配一个 inode 与相对于该文件大小的区块数量给该文件
+
+* **目录树读取**
+
+  inode本身并不记录文件名，文件名的记录是在目录的区块中。因此新增、删除、修改文件名与目录的w权限有关。
+
+  由于目录树是由根目录开始读起，因此系统通过挂载的信息可以找到**挂载点**的 inode 号码，此时就能够得到根目录的 inode 内容，并依据该 inode 读取根目录的区块内的文件名数据，再一层一层的往下读到正确的文件名。
+
+### 7.1.5  ext2/ext3/ext4 文件的存取与日志式文件系统的功能
+
+当我们新增一个文件时，此时文件系统的操作是：
+
+* 先确定用户对于欲新增文件的目录是否具有 w 与 x 的权限，若有的话才能新增
+* 根据 inode 对照表找到没有使用的 inode 号码，并将新文件的权限/属性写入
+* 根据区块对照表找到没有使用中的区块号码，并将实际的数据写入区块中，且更新 inode 的区块指向数据
+* 将刚刚写入的 inode 与区块数据同步更新 inode 对照表与区块对照表，并更新超级区块的内容
+
+一般来说，我们将 inode表与数据区块称为**数据存放区域**，至于其他例如超级区块、区块对照表与inode对照表等区段就被称为**元数据**（ metadata ），因为它们的数据是经常变动的，每次新增、移除、编辑时都可能会影响到这三个部分的数据，因此才被称为元数据。
+
+#### 数据的不一致状态
+
+如果在写入文件系统时，因为某些原因导致系统中断，写入的数据仅有inode表和数据区块，最后一个同步更新元数据的步骤并没有完成，此时就会发生元数据的内容与实际数据存放区产生不一致的情况。
+
+#### 日志式文件系统
+
+在我们的文件系统当中规划出一个区块，该区块专门记录写入或修改文件时的步骤：
+
+* 预备：当系统要写入一个文件时，会先在日志记录区块中记录某个文件准备要写入的信息
+* 实际写入：开始写入文件的权限与数据；开始更新 metadata 的数据
+* 结束：完成数据与 metadata 的更新后，在日志记录区块当中完成该文件的记录
+
+这样，万一数据的记录过程当中发生了问题，那么系统只要去检查日志记录区块，就可以直到哪个文件发生了问题，而不必针对整个文件系统进行检查。
+
+### 7.1.6 Linux文件系统的运行
+
+Linux的异步处理方式：当系统加载一个文件到内存后，如果该文件没有被修改过，则在内存区段的文件数据会被设置为**干净（clean）**的。 但如果内存中的文件数据被更改过了（例如你用 nano 去编辑过这个文件），此时该内存中的数据会被设置为**脏的 （Dirty）**。此时所有的动作都还在内存中执行，并没有写入到磁盘中！ 系统会不定时的将内存中设置为“Dirty”的数据写回磁盘，以保持磁盘与内存数据的一致性。 你也可以利用sync命令来手动强制写入磁盘。
+
+### 7.1.7 挂载点（mount point）的意义
+
+将文件系统与目录树结合的操作我们称为**挂载**。挂载点一定是目录，该目录为进入该文件系统的入口。因此任何文件系统必须要挂载到目录树的某个目录后，才能够使用。
+
+### 7.1.8 其他Linux支持的文件系统与VFS
+
+常见的文件系统：ext2 / minix / FAT （用 vfat 模块） / iso9660 （光盘）等
+
+日志式文件系统： ext3 /ext4 / ReiserFS / Windows' NTFS / IBM's JFS / SGI's XFS / ZFS
+
+网络文件系统： NFS / SMBFS
+
+想要知道你的Linux支持的文件系统有哪些，可以查看下面这个目录：
+
+```shell
+[root@study ~]# ls -l /lib/modules/$（uname -r）/kernel/fs
+```
+
+#### Linux VFS(Virtual File System)
+
+所有的Linux系统都是通过一个名为Virtual Filesystem Switch的内核功能去读取文件系统。用户并不需要知道哪个硬盘分区上面的文件系统是什么，VFS会主动帮我们做好读取的操作。
+
+举例来说假设你的 / 使用的是 /dev/hda1 ，用 ext3 ，而 /home 使用 /dev/hda2 ，用 reiserfs ， 那么你取用 /home/dmtsai/.bashrc 时，有特别指定要用的什么文件系统的模块来读取吗？ 应该是没有吧！这个就是 VFS 的功能：
+
+ ![image-20220328112204260](images\image-20220328112204260.png)
+
+### 7.1.9 XFS文件系统简介
+
+#### ext文件系统存在的问题：支持度最广，但格式化超慢
+
+ext文件系统对于文件格式化的处理方面，采用的是预先规划出所有的inode，区块，元数据，未来系统可以直接使用，不需要再进行动态配置的做法。当TB以上等级的传统ext系列文件系统在格式化的时候，光是预先分配inode与区块就要消耗好多时间。
+
+#### XFS 文件系统的配置
+
+基本数xfs就是一个日志式文件系统。
+
+xfs文件系统在数据分布上，主要规划为三个部分：
+
+* 数据区（data section）
+
+  包括inode、数据区块、超级区块等数据。与ext系列的区块群组类似，也是分为多个存储区群组，每个存储区群组都包含了：
+
+  * 整个文件系统的超级区块
+  * 剩余空间的管理机制
+  * inode的分配与追踪
+
+  另外与ext系列不同的是,inode与区块都是系统需要用到时才动态配置产生，且区块与inode有多种不同的容量可供设置。
+
+* 文件系统活动登录区（log section）
+
+  记录文件系统的变化，有点像日志区。文件的变化会在这里记录下来，直到该变化完整地写入到数据区后，该条记录才会被结束。
+
+* 实时运行区（realtime section）
+
+  当有文件要被建立时，xfs会在这个区段里面找一个到数个地extent区块，将文件放置在这个区块内，等到分配完毕后，再写入到数据区的inode与区块中。
+
+#### XFS文件系统的描述数据观察
+
+可以用xfs_info观察超级区块内容
+
+```shell
+[root@study ~]# xfs_info 挂载点 | 设备文件名
+范例一：找出系统 /boot 这个挂载点下面的文件系统的超级区块纪录
+[root@study ~]# df -T /boot
+Filesystem Type 1K-blocks Used Available Use% Mounted on
+/dev/vda2 xfs 1038336 133704 904632 13% /boot
+# 没错！可以看得出来是 xfs 文件系统的，来观察一下内容吧
+[root@study ~]# xfs_info /dev/vda2
+1 meta-data=/dev/vda2 isize=256 agcount=4, agsize=65536 blks 
+# isize指的是inode的容量，agcount指的是存储区群组的个数，agsize指的是每个存储区群组具有多少个区块
+2 = sectsz=512 attr=2, projid32bit=1
+# sectsz指的是逻辑扇区的容量
+3 = crc=0 finobt=0
+4 data = bsize=4096 blocks=262144, imaxpct=25
+# bsize指的是区块的容量，blocks指的是共有多少个区块
+5 = sunit=0 swidth=0 blks
+6 naming =version 2 bsize=4096 ascii-ci=0 ftype=0
+7 log =internal bsize=4096 blocks=2560, version=2
+# internal 指的是这个登录区的位置在文件系统内，而不是外部设备的意思
+8 = sectsz=512 sunit=0 blks, lazy-count=1
+9 realtime =none extsz=4096 blocks=0, rtextents=0
+# realtime section里面的extent容量为4K
+```
+
+## 7.2 文件系统的简单操作
+
+### 7.2.1 磁盘与目录的容量
+
+#### df：列出文件系统的整体磁盘使用量
+
+由于df主要读取的数据几乎都是针对一整个文件系统，因此读取的范围主要是在超级区块内的信息，所以这个命令显示结果的速度非常快。
+
+```shell
+[root@study ~]# df [-ahikHTm] [目录或文件名]
+选项与参数：
+-a ：列出所有的文件系统，包括系统特有的 /proc 等文件系统；
+-k ：以 KBytes 的容量显示各文件系统；
+-m ：以 MBytes 的容量显示各文件系统；
+'-h ：以人们较易阅读的 GBytes, MBytes, KBytes 等格式自行显示；
+-H ：以 M=1000K 取代 M=1024K 的进位方式；
+-T ：连同该硬盘分区的文件系统名称 （例如 xfs） 也列出；
+'-i ：不用磁盘容量，而以 inode 的数量来显示
+
+范例一：将系统内所有文件系统全列出来
+[root@study ~]# df
+Filesystem 1K-blocks Used Available Use% Mounted on
+/dev/mapper/centos-root 10475520 3409408 7066112 33% /
+devtmpfs 627700 0 627700 0% /dev
+tmpfs 637568 80 637488 1% /dev/shm
+tmpfs 637568 24684 612884 4% /run
+tmpfs 637568 0 637568 0% /sys/fs/cgroup
+/dev/mapper/centos-home 5232640 67720 5164920 2% /home
+/dev/vda2 1038336 133704 904632 13% /boot
+# 在 Linux 下面如果 df 没有加任何选项，那么默认会将系统内所有的
+# （不含特殊的内存内的文件系统与 swap） 都以 1 KBytes 的容量来列出来！
+# 至于那个 /dev/shm 是与内存有关的挂载，先不要理他！
+```
+
+Filesystem：代表该文件系统是哪个硬盘分区，所以列出设备名称
+1k-blocks：说明下面的数字单位是1KB
+Mounted on：磁盘的挂载目录（挂载点）
+
+```shell
+范例二：将容量结果以易读的容量格式显示出来
+[root@study ~]# df -h
+Filesystem Size Used Avail Use% Mounted on
+/dev/mapper/centos-root 10G 3.3G 6.8G 33% /
+devtmpfs 613M 0 613M 0% /dev
+tmpfs 623M 80K 623M 1% /dev/shm
+tmpfs 623M 25M 599M 4% /run
+tmpfs 623M 0 623M 0% /sys/fs/cgroup
+/dev/mapper/centos-home 5.0G 67M 5.0G 2% /home
+/dev/vda2 1014M 131M 884M 13% /boot
+# 不同于范例一，这里会以 G/M 等容量格式显示出来，比较容易看
+
+范例三：将系统内的所有特殊文件格式及名称都列出来
+[root@study ~]# df -aT
+Filesystem Type 1K-blocks Used Available Use% Mounted on
+rootfs rootfs 10475520 3409368 7066152 33% /
+proc proc 0 0 0 - /proc
+sysfs sysfs 0 0 0 - /sys
+devtmpfs devtmpfs 627700 0 627700 0% /dev
+securityfs securityfs 0 0 0 - /sys/kernel/security
+tmpfs tmpfs 637568 80 637488 1% /dev/shm
+devpts devpts 0 0 0 - /dev/pts
+tmpfs tmpfs 637568 24684 612884 4% /run
+tmpfs tmpfs 637568 0 637568 0% /sys/fs/cgroup
+.....（中间省略）.....
+/dev/mapper/centos-root xfs 10475520 3409368 7066152 33% /
+selinuxfs selinuxfs 0 0 0 - /sys/fs/selinux
+.....（中间省略）.....
+/dev/mapper/centos-home xfs 5232640 67720 5164920 2% /home
+/dev/vda2 xfs 1038336 133704 904632 13% /boot
+binfmt_misc binfmt_misc 0 0 0 - /proc/sys/fs/binfmt_misc
+# 系统里面其实还有很多特殊的文件系统存在的。那些比较特殊的文件系统几乎
+# 都是在内存当中，例如 /proc 这个挂载点。因此，这些特殊的文件系统
+# 都不会占据磁盘空间
+
+范例四：将 /etc 下面的可用的磁盘容量以易读的容量格式显示
+[root@study ~]# df -h /etc
+Filesystem Size Used Avail Use% Mounted on
+/dev/mapper/centos-root 10G 3.3G 6.8G 33% /
+# 这个范例比较有趣一点，在 df 后面加上目录或者是文件时， df
+# 会自动的分析该目录或文件所在的硬盘分区 ，并将该硬盘分区的容量显示出来，
+# 所以，您就可以知道某个目录下面还有多少容量可以使用了
+
+范例五：将目前各个硬盘分区可用的 inode 数量列出
+[root@study ~]# df -ih
+Filesystem Inodes IUsed IFree IUse% Mounted on
+/dev/mapper/centos-root 10M 108K 9.9M 2% /
+devtmpfs 154K 397 153K 1% /dev
+tmpfs 156K 5 156K 1% /dev/shm
+tmpfs 156K 497 156K 1% /run
+tmpfs 156K 13 156K 1% /sys/fs/cgroup
+# 这个范例则主要列出可用的 inode 剩余量与总容量。分析一下与范例一的关系，
+# 你可以清楚的发现到，通常 inode 的数量剩余都比区块还要多
+```
+
+#### du：查看目录所占磁盘空间
+
+```shell
+[root@study ~]# du [-ahskm] 文件或目录名称
+选项与参数：
+-a ：列出所有的文件与目录容量，因为默认仅统计目录下面的文件量
+-h ：以人们较易读的容量格式 （G/M） 显示；
+'-s ：仅列出总量，而不列出每个各别的目录占用容量；
+-S ：不包括子目录下的总计，与 -s 有点差别。
+-k ：以 KBytes 列出容量显示；
+-m ：以 MBytes 列出容量显示；
+
+范例一：列出目前目录下的所有文件容量
+[root@study ~]# du
+4 ./.cache/dconf <==每个目录都会列出来
+4 ./.cache/abrt
+8 ./.cache
+....（中间省略）....
+0 ./test4
+4 ./.ssh <==包括隐藏文件的目录
+76 . <==这个目录（.）所占用的总量
+# 直接输入 du 没有加任何选项时，则 du 会分析“目前所在目录”的文件与目录所占用的磁盘空间。
+# 但是，实际显示时，仅会显示目录容量（不含文件），因此 . 目录有很多文件没有被列出来,
+# 所以全部的目录相加不会等于 . 的容量,此外，输出的数值数据为 1K 大小的容量单位。
+
+范例二：同范例一，但是将文件的容量也列出来
+[root@study ~]# du -a
+4 ./.bash_logout <==有文件的列表了
+4 ./.bash_profile
+4 ./.bashrc
+....（中间省略）....
+4 ./.ssh/known_hosts
+4 ./.ssh
+76 .
+
+范例三：检查根目录下面每个目录所占用的容量
+[root@study ~]# du -sm /*
+0 /bin
+99 /boot
+....（中间省略）....
+du: cannot access ‘/proc/17772/task/17772/fd/4’: No such file or directory
+du: cannot access ‘/proc/17772/fdinfo/4’: No such file or directory
+0 /proc <==不会占用硬盘空间
+1 /root
+25 /run
+....（中间省略）....
+3126 /usr <==系统初期最大就是他了啦！
+117 /var
+# 这是个很常被使用的功能，利用通配符 * 来代表每个目录，如果想要检查某个目录下，
+# 哪个子目录占用最大的容量，可以用这个方法找出来。值得注意的是，如果刚刚安装好 Linux 时，
+# 那么整个系统容量最大的应该是 /usr 。而 /proc 虽然有列出容量，但是那个容量是在内存中，
+# 不占磁盘空间。至于 /proc 里头会列出一堆“No such file or directory” 的错误，
+# 别担心！因为是内存内的程序，程序执行结束就会消失，因此会有些目录找不到，是正确的！
+```
+
+与 df 不一样的是，du 这个命令其实会直接到文件系统内去查找所有的文件数据。另外dh后面接目录，查看的是该目录所在硬盘分区的容量，不是该目录的容量！
+
+### 7.2.2 硬链接与符号链接
+
+#### 硬链接（Hard Link）
+
+文件名只与目录有关，文件内容则与inode有关。硬链接只是在某个目录下新增一条文件名链接到某inode号码的关联记录。
+
+```shell
+[root@study ~]# ll -i /etc/crontab
+34474855 -rw-r--r--. 1 root root 451 Jun 10 2014 /etc/crontab
+[root@study ~]# ln /etc/crontab . <==创建硬链接的指令
+[root@study ~]# ll -i /etc/crontab crontab
+34474855 -rw-r--r--. 2 root root 451 Jun 10 2014 crontab
+34474855 -rw-r--r--. 2 root root 451 Jun 10 2014 /etc/crontab
+# 注意，第三个字段由1变成了2，表示有多少个文件名链接到这个inode号码
+```
+
+如果你将任何一个“文件名”删除，其实 inode 与区块都还是存在的。
+
+此外，不论你使用哪个“文件名”来编辑， 最终的结果都会写入到相同的 inode 与区块中，因此均能进行数据的修改。
+
+一般来说，使用硬链接设置链接文件时，磁盘的空间与 inode 的数目都不会改变。
+
+硬链接具有以下限制：
+
+* 不能跨文件系统
+
+* 不能链接目录
+
+  如果使用硬链接链接到目录时， 链接的数据需要连同被链接目录下面的所有数据都建立链接，会造成相当大的环境复杂度。
+
+#### 符号链接（Symbolic Link，亦即快捷方式）
+
+符号链接就是建立一个独立的文件，而这个文件会让数据的读取指向它链接的那个文件的文件名。
+
+```shell
+[root@study ~]# ln -s /etc/crontab crontab2
+[root@study ~]# ll -i /etc/crontab /root/crontab2
+34474855 -rw-r--r--. 2 root root 451 Jun 10 2014 /etc/crontab
+53745909 lrwxrwxrwx. 1 root root 12 Jun 23 22:31 /root/crontab2 -> /etc/crontab
+```
+
+可以看到两个文件指向不同的inode号码，是两个独立的文件存在。你可以发现上表中链接文件的大小为 12 B。因为箭头（-->）右边的文件名“/etc/crontab”总共有 12 个字母，每个zimu占用 1 个 Bytes ，所以文件大小就是 12Bytes了。
+
+符号链接由链接文件读取到文件名，根据文件名链接到正确的目录去取得目标文件的inode，最终就能够读取到正确的数据了。
+
+#### ln：制作链接文件的命令
+
+```shell
+[root@study ~]# ln [-sf] 来源文件 目标文件
+选项与参数：
+-s ：如果不加任何参数就进行链接，那就是hard link，至于 -s 就是symbolic link
+-f ：如果目标文件存在时，就主动的将目标文件直接删除后再建立
+
+范例一：将 /etc/passwd 复制到 /tmp 下面，并且观察 inode 与 block
+[root@study ~]# cd /tmp
+[root@study tmp]# cp -a /etc/passwd .
+[root@study tmp]# du -sb ; df -i .
+6602 . <==先注意一下这里的容量是多少！
+Filesystem Inodes IUsed IFree IUse% Mounted on
+/dev/mapper/centos-root 10485760 109748 10376012 2% /
+# 利用 du 与 df 来检查一下目前的参数,那个 du -sb 是计算整个 /tmp 下面有多少 Bytes 容量的命令
+
+范例二：将 /tmp/passwd 制作 hard link 成为 passwd-hd 文件，并观察文件与容量
+[root@study tmp]# ln passwd passwd-hd
+[root@study tmp]# du -sb ; df -i .
+6602 .
+Filesystem Inodes IUsed IFree IUse% Mounted on
+/dev/mapper/centos-root 10485760 109748 10376012 2% /
+# 仔细看，即使多了一个文件在 /tmp 下面，整个 inode 与 block 的容量并没有改变
+[root@study tmp]# ls -il passwd*
+2668897 -rw-r--r--. 2 root root 2092 Jun 17 00:20 passwd
+2668897 -rw-r--r--. 2 root root 2092 Jun 17 00:20 passwd-hd
+# 原来是指向同一个 inode ，另外，那个第二栏的链接数也会增加
+
+范例三：将 /tmp/passwd 创建一个符号链接
+[root@study tmp]# ln -s passwd passwd-so
+[root@study tmp]# ls -li passwd*
+2668897 -rw-r--r--. 2 root root 2092 Jun 17 00:20 passwd
+2668897 -rw-r--r--. 2 root root 2092 Jun 17 00:20 passwd-hd
+2668898 lrwxrwxrwx. 1 root root 6 Jun 23 22:40 passwd-so --> passwd
+# passwd-so 指向的 inode number 不同了，这是一个新的文件，这个文件的内容是指向
+# passwd 的。passwd-so 的大小是 6Bytes ，因为 “passwd” 这个单字共有六个字符之故
+[root@study tmp]# du -sb ; df -i .
+6608 .
+Filesystem Inodes IUsed IFree IUse% Mounted on
+/dev/mapper/centos-root 10485760 109749 10376011 2% /
+# 整个容量与 inode 使用数都改变了
+
+范例四：删除原始文件 passwd ，其他两个文件是否能够打开？
+[root@study tmp]# rm passwd
+[root@study tmp]# cat passwd-hd
+.....（正常显示完毕！）
+[root@study tmp]# cat passwd-so
+cat: passwd-so: No such file or directory
+[root@study tmp]# ll passwd*
+-rw-r--r--. 1 root root 2092 Jun 17 00:20 passwd-hd
+lrwxrwxrwx. 1 root root 6 Jun 23 22:40 passwd-so --> passwd
+# 符号链接果然无法打开！另外，如果符号链接的目标文件不存在，
+# 其实文件名的部分就会有特殊的颜色显示
+```
+
+#### 目录的链接数量
+
+当我们建立一个新的空的目录后，它里面存在.与..这两个目录，例如我们建立一个新目录名称为 /tmp/testing，将包含以下三个：
+
+* /tmp/testing
+* /tmp/testing/.
+* /tmp/testing/..
+
+其中前两个都代表该目录，第三个代表上层目录，即/tmp。
+
+所以，当我们建立一个新的目录时，新的目录链接数为2，而上层目录的链接数则会增加1。
