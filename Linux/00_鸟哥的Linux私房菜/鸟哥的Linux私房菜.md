@@ -1,3 +1,5 @@
+
+
 # 第2章 主机规划与磁盘分区
 
 ## 2.1 各硬件设备在Linux中的文件名
@@ -2307,3 +2309,653 @@ lrwxrwxrwx. 1 root root 6 Jun 23 22:40 passwd-so --> passwd
 其中前两个都代表该目录，第三个代表上层目录，即/tmp。
 
 所以，当我们建立一个新的目录时，新的目录链接数为2，而上层目录的链接数则会增加1。
+
+## 7.3 磁盘的分区、格式化、检验与挂载
+
+### 7.3.1 观察磁盘分区状态
+
+* **lsblk：列出系统上的所有磁盘列表**
+
+  ```shell
+  [root@study ~]# lsblk [-dfimpt] [device]
+  选项与参数：
+  -d ：仅列出磁盘本身，并不会列出该磁盘的分区数据
+  -f ：同时列出该磁盘内的文件系统名称
+  -i ：使用 ASCII 的字符输出，不要使用复杂的编码 （在某些环境下很有用）
+  -m ：同时输出该设备在 /dev 下面的权限信息 （rwx 的数据）
+  -p ：列出该设备的完整文件名，而不是仅列出最后的名字而已。
+  -t ：列出该磁盘设备的详细数据，包括磁盘阵列机制、预读写的数据量大小等
+  范例一：列出本系统下的所有磁盘与磁盘内的分区信息
+  [root@study ~]# lsblk
+  NAME 	MAJ:MIN 	RM 	SIZE 	RO 	TYPE 	MOUNTPOINT
+  sr0 	11:0 		1 	1024M 	0 	rom
+  vda 	252:0 		0 	40G 	0 	disk 				# 一整颗磁盘
+  |-vda1 	252:1 		0 	2M 		0 	part
+  |-vda2 	252:2 		0 	1G 		0 	part 	/boot
+  `-vda3 	252:3 		0 	30G 	0 	part
+   |-centos-root 253:0 0 	10G 	0 	lvm 	/ 			# 在 vda3 内的其他文件系统
+   |-centos-swap 253:1 0 	1G 		0 	lvm 	[SWAP]
+   `-centos-home 253:2 0 	5G 		0 	lvm 	/home
+  ```
+
+  可以看到目前的系统主要有sr0和vda设备，vda的设备下面又有三个分区，输出的默认信息有：
+
+  NAME：就是设备的文件名
+
+  MAJ:MIN：其实内核识别的设备都是通过这两个代码来实现的，分别是主要与次要设备代码
+
+  RM：是否为可卸载设备 （removable device），如光盘、USB 磁盘等等
+
+  SIZE：当然就是容量
+
+  RO：是否为只读设备的意思
+
+  TYPE：是磁盘 （disk）、分区 （partition） 还是只读存储器 （rom） 
+
+  MOUTPOINT：挂载点
+
+* **blkid：列出设备的 UUID 等参数**
+
+  UUID 是全局唯一标识符（universally unique identifier），Linux 会将系统内所有的设备都给予一个独一无二的标识符， 这个标识符就可以拿来作为挂载或者是使用这个设备或文件系统
+
+  ```shell
+  [root@study ~]# blkid
+  /dev/vda2: UUID="94ac5f77-cb8a-495e-a65b-2ef7442b837c" TYPE="xfs"
+  /dev/vda3: UUID="WStYq1-P93d-oShM-JNe3-KeDl-bBf6-RSmfae" TYPE="LVM2_member"
+  /dev/sda1: UUID="35BC-6D6B" TYPE="vfat"
+  /dev/mapper/centos-root: UUID="299bdc5b-de6d-486a-a0d2-375402aaab27" TYPE="xfs"
+  /dev/mapper/centos-swap: UUID="905dc471-6c10-4108-b376-a802edbd862d" TYPE="swap"
+  /dev/mapper/centos-home: UUID="29979bf1-4a28-48e0-be4a-66329bf727d9" TYPE="xfs"
+  ```
+
+  如上所示，每一行代表一个文件系统
+
+* **parted：列出磁盘的分区表类型与分区信息**
+
+  ```shell
+  [root@study ~]# parted device_name print
+  范例一：列出 /dev/vda 磁盘的相关数据
+  [root@study ~]# parted /dev/vda print
+  Model: Virtio Block Device （virtblk） # 磁盘的模块名称（厂商）
+  Disk /dev/vda: 42.9GB # 磁盘的总容量
+  Sector size （logical/physical）: 512B/512B # 磁盘的每个逻辑/物理扇区容量
+  Partition Table: gpt # 分区表的格式 （MBR/GPT）
+  Disk Flags: pmbr_boot
+  Number Start End Size File system Name Flags # 下面才是分区数据
+  1 1049kB 3146kB 2097kB bios_grub
+  2 3146kB 1077MB 1074MB xfs
+  3 1077MB 33.3GB 32.2GB lvm
+  ```
+
+### 7.3.2 磁盘分区： gdisk/fdisk
+
+MBR分区表使用fdisk分区，GPT分区表使用gdisk分区。
+
+#### **gdisk**
+
+```shell
+[root@study ~]# gdisk 设备名称
+范例：由前一小节的 lsblk 输出，我们知道系统有个 /dev/vda，请观察该磁盘的分区与相关数据
+[root@study ~]# gdisk /dev/vda <==仔细看，不要加上数字
+GPT fdisk （gdisk） version 0.8.6
+Partition table scan:
+MBR: protective
+BSD: not present
+APM: not present
+GPT: present
+Found valid GPT with protective MBR; using GPT. <==找到了 GPT 的分区表
+Command （? for help）: <==这里可以让你输入指令动作，可以按问号 （?） 来查看可用命令
+Command （? for help）: ?
+b 	back up GPT data to a file
+c 	change a partition's name
+'d 	delete a partition # 删除一个分区
+i show detailed information on a partition
+l list known partition types
+'n add a new partition # 增加一个分区
+o create a new empty GUID partition table （GPT）
+'p print the partition table # 打印出分区表 （常用）
+'q quit without saving changes # 不保存分区就直接离开 gdisk
+r recovery and transformation options （experts only）
+s sort partitions
+t change a partition's type code
+v verify disk
+'w write table to disk and exit # 保存分区操作后离开 gdisk
+x extra functionality （experts only）
+? print this menu
+Command （? for help）:
+```
+
+* **用gdisk查看分区表信息**
+
+  ```shell
+  Command （? for help）: p <== 这里可以输出目前磁盘的状态
+  Disk /dev/vda: 83886080 sectors, 40.0 GiB # 磁盘文件名/扇区数与总容量
+  Logical sector size: 512 Bytes # 单一扇区大小为 512 Bytes
+  Disk identifier （GUID）: A4C3C813-62AF-4BFE-BAC9-112EBD87A483 # 磁盘的 GPT 标识码
+  Partition table holds up to 128 entries
+  First usable sector is 34, last usable sector is 83886046
+  Partitions will be aligned on 2048-sector boundaries
+  Total free space is 18862013 sectors （9.0 GiB）
+  Number Start （sector） End （sector） Size Code Name # 下面为完整的分区信息了！
+  1 		2048			 6143 		2.0 MiB EF02 	# 第一个分区数据
+  2 		6144 			2103295 	1024.0 MiB 0700
+  3 		2103296 		65026047 	30.0 GiB 8E00
+  # 分区编号 开始扇区号码 结束扇区号码 容量大小
+  Command （? for help）: q
+  # 想要不储存离开吗？按下 q 就对了,不要随便按 w 
+  ```
+
+  分区的设计中，新分区通常选用上一个分区的结束扇区号码数加1作为起始扇区号码。
+
+  请注意，使用的设备文件名请不要加上数字，因为磁盘分区针对整个磁盘设备而不是某个分区。
+
+* **用gdisk新增分区**
+
+  假设我们现在要新增以下分区：
+
+  1GB 的 xfs 文件系统 （Linux）
+
+  1GB 的 vfat 文件系统 （Windows）
+
+  0.5GB 的 swap （Linux swap）
+
+  ```shell
+  [root@study ~]# gdisk /dev/vda
+  Command （? for help）: p
+  Number Start （sector） End （sector） Size Code Name
+  1 2048 6143 2.0 MiB EF02
+  2 6144 2103295 1024.0 MiB 0700
+  3 2103296 65026047 30.0 GiB 8E00
+  # 找出最后一个 sector 的号码是很重要的
+  Command （? for help）: n # 开始新增的操作
+  Partition number （4-128, default 4）: 4 # 默认就是 4 号，所以也能 enter 即可
+  First sector （34-83886046, default = 65026048） or {+-}size{KMGTP}: 65026048 # 也能 enter
+  Last sector （65026048-83886046, default = 83886046） or {+-}size{KMGTP}: +1G # 决不要 enter
+  # 这个地方可有趣了，我们不需要自己去计算扇区号码，通过 +容量 的这个方式，
+  # 就可以让 gdisk 主动去帮你算出最接近你需要的容量的扇区号码
+  Current type is 'Linux filesystem'
+  Hex code or GUID （L to show codes, Enter = 8300）: # 使用默认值即可，直接 enter 下去
+  # 这里在让你选择未来这个分区预计使用的文件系统，默认都是 Linux 文件系统的 8300 
+  Command （? for help）: p
+  Number Start （sector） End （sector） Size Code Name
+  1 2048 6143 2.0 MiB EF02
+  2 6144 2103295 1024.0 MiB 0700
+  3 2103296 65026047 30.0 GiB 8E00
+  4 65026048 67123199 1024.0 MiB 8300 Linux filesystem
+  ```
+
+  重点在【last sector】那一行，绝对不要使用默认值，因为默认值会将所有的容量用光，会选择最大的扇区号码。
+
+  另外在设置文件系统处，若忘了文件系统的ID，可以在gdisk中按下【L】来显示。
+
+  继续新增剩余的两个分区，最后直接写入磁盘分区表：
+
+  ```shell
+  Command （? for help）: w
+  Final checks complete. About to write GPT data. THIS WILL OVERWRITE EXISTING
+  PARTITIONS!!
+  Do you want to proceed? （Y/N）: y
+  OK; writing new GUID partition table （GPT） to /dev/vda.
+  Warning: The kernel is still using the old partition table.
+  The new table will be used at the next reboot.
+  The operation has completed successfully.
+  # gdisk 会先警告你可能的问题，我们确定分区是对的，这时才按下 y ,不过怎么还有警告？
+  # 这是因为这颗磁盘目前正在使用当中，因此系统无法立即载入新的分区表
+  [root@study ~]# cat /proc/partitions
+  major minor #blocks name
+  252 0 41943040 vda
+  252 1 2048 vda1
+  252 2 1048576 vda2
+  252 3 31461376 vda3
+  253 0 10485760 dm-0
+  253 1 1048576 dm-1
+  253 2 5242880 dm-2
+  # 你可以发现，并没有 vda4, vda5, vda6 ，因为内核还没有更新。可以重新启动或者执行partprobe这个命令
+  ```
+
+* partprobe 更新 Linux 内核的分区表信息
+
+  ```shell
+  [root@study ~]# partprobe [-s] # 你可以不要加 -s 那么屏幕不会出现信息。
+  [root@study ~]# partprobe -s # 不过还是建议加上 -s 比较清晰。
+  /dev/vda: gpt partitions 1 2 3 4 5 6
+  [root@study ~]# cat /proc/partitions # 内核的分区纪录
+  major minor #blocks name
+  252 0 41943040 vda
+  252 1 2048 vda1
+  252 2 1048576 vda2
+  252 3 31461376 vda3
+  252 4 1048576 vda4
+  252 5 1048576 vda5
+  252 6 512000 vda6
+  # 现在核心也正确的抓到了分区参数了！
+  ```
+
+* 用 gdisk 删除一个分区
+
+  ```shell
+  [root@study ~]# gdisk /dev/vda
+  Command （? for help）: p
+  Number Start （sector） End （sector） Size Code Name
+  1 2048 6143 2.0 MiB EF02
+  2 6144 2103295 1024.0 MiB 0700
+  3 2103296 65026047 30.0 GiB 8E00
+  4 65026048 67123199 1024.0 MiB 8300 Linux filesystem
+  5 67123200 69220351 1024.0 MiB 0700 Microsoft basic data
+  6 69220352 70244351 500.0 MiB 8200 Linux swap
+  Command （? for help）: d
+  Partition number （1-6）: 6
+  Command （? for help）: p
+  # 你会发现 /dev/vda6 不见了,非常棒,没问题就写入吧！
+  Command （? for help）: w
+  # 同样会有一堆讯息, 自己选择 y 来处理吧！
+  [root@study ~]# lsblk
+  # 你会发现,怪了,怎么还是有 /dev/vda6 呢？没办法,还没有更新核心的分区表,所以当然有错。
+  [root@study ~]# partprobe -s
+  [root@study ~]# lsblk
+  # 这个时候，那个 /dev/vda6 才真的消失不见了
+  ```
+
+#### fdisk
+
+fdisk用来处理MBR分区表，fdisk有时会用柱面作为分区的最小单位，与gdisk默认使用扇区不太一样，此外用法与gdisk几乎一样。
+
+### 7.3.3 磁盘格式化（创建文件系统）
+
+#### XFS 文件系统 mkfs.xfs
+
+```shell
+[root@study ~]# mkfs.xfs [-b bsize] [-d parms] [-i parms] [-l parms] [-L label] [-f] [-r parms] 设备名称
+选项与参数：
+关于单位：下面只要谈到“数值”时，没有加单位则为 Bytes 值，可以用 k,m,g,t,p （小写）等来解释
+比较特殊的是 s 这个单位，它指的是 sector 的“个数”
+-b ：后面接的是 block 容量，可由 512 到 64k，不过最大容量限制为 Linux 的 4k
+-d ：后面接的是重要的 data section 的相关参数值，主要的值有：
+	agcount=数值 ：设置需要几个储存群组的意思（AG），通常与 CPU 有关
+	agsize=数值 ：每个 AG 设置为多少容量的意思，通常 agcount/agsize 只选一个设置即可
+	file ：指的是“格式化的设备是个文件而不是个设备”的意思！（例如虚拟磁盘）
+	size=数值 ：data section 的容量，亦即你可以不将全部的设备容量用完的意思
+	su=数值 ：当有 RAID 时，那个 stripe 数值的意思，与下面的 sw 搭配使用
+	sw=数值 ：当有 RAID 时，用于保存数据的磁盘数量（须扣除备份盘与备用盘）
+	sunit=数值 ：与 su 相当，不过单位使用的是“几个 sector（512Bytes大小）”的意思
+	swidth=数值 ：就是 su*sw 的数值，但是以“几个 sector（512Bytes大小）”来设置
+-f ：如果设备内已经有文件系统，则需要使用这个 -f 来强制格式化才行
+-i ：与 inode 有较相关的设置，主要的设置值有：
+	size=数值 ：最小是 256Bytes 最大是 2k，一般保留 256 就足够使用了
+	internal=[0|1]：log 设备是否为内置？默认为 1 内置，如果要用外部设备，使用下面设置
+	logdev=device ：log 设备为后面接的那个设备的意思，需设置 internal=0 才可
+	size=数值 ：指定这块登录区的容量，通常最小得要有 512 个 block，大约 2M 以上才行
+-L ：后面接这个文件系统的标头名称 Label name 的意思
+-r ：指定 realtime section 的相关设置值，常见的有：
+	extsize=数值 ：就是那个重要的 extent 数值，一般不须设置，但有 RAID 时，
+				最好设置与 swidth 的数值相同较佳，最小为 4K 最大为 1G 。
+				
+范例：将前一小节分区出来的 /dev/vda4 格式化为 xfs 文件系统
+[root@study ~]# mkfs.xfs /dev/vda4
+meta-data=/dev/vda4 isize=256 agcount=4, agsize=65536 blks
+= sectsz=512 attr=2, projid32bit=1
+= crc=0 finobt=0
+data = bsize=4096 blocks=262144, imaxpct=25
+= sunit=0 swidth=0 blks
+naming =version 2 bsize=4096 ascii-ci=0 ftype=0
+log =internal log bsize=4096 blocks=2560, version=2
+= sectsz=512 sunit=0 blks, lazy-count=1
+realtime =none extsz=4096 blocks=0, rtextents=0
+# 很快格是化完毕，都用默认值，较重要的是 inode 与 block 的数值
+[root@study ~]# blkid /dev/vda4
+/dev/vda4: UUID="39293f4f-627b-4dfd-a015-08340537709c" TYPE="xfs"
+# 确定创建好 xfs 文件系统了。
+```
+
+因为xfs可以使用多个数据流来读写系统，以增加速度，因此agcount可以跟CPU的内核数来搭配，比如你的系统有8个CPU，agcount就可以设置为8.
+
+```shell
+范例：找出你系统的 CPU 数，并据以设置你的 agcount 数值
+[root@study ~]# grep 'processor' /proc/cpuinfo
+processor : 0
+processor : 1
+# 所以就是有两块 CPU 的意思，那就来设置设置我们的 xfs 文件系统格式化参数
+[root@study ~]# mkfs.xfs -f -d agcount=2 /dev/vda4
+meta-data=/dev/vda4 isize=256 agcount=2, agsize=131072 blks
+= sectsz=512 attr=2, projid32bit=1
+= crc=0 finobt=0
+.....（下面省略）.....
+# 可以跟前一个范例对照看看，可以发现 agcount 变成 2 
+# 此外，因为已经格式化过一次，因此 mkfs.xfs 可能会出现不给你格式化的警告，因此需要使用 -f
+```
+
+#### ext4 文件系统 mkfs.ext4
+
+```shell
+[root@study ~]# mkfs.ext4 [-b size] [-L label] 设备名称
+选项与参数：
+-b ：设置 block 的大小，有 1K, 2K, 4K 的容量，
+-L ：后面接这个设备的标头名称。
+
+范例：将 /dev/vda5 格式化为 ext4 文件系统
+[root@study ~]# mkfs.ext4 /dev/vda5
+mke2fs 1.42.9 （28-Dec-2013）
+Filesystem label= # 显示 Label name
+OS type: Linux
+Block size=4096 （log=2） # 每一个 block 的大小
+Fragment size=4096 （log=2）
+Stride=0 blocks, Stripe width=0 blocks # 跟 RAID 相关性较高
+65536 inodes, 262144 blocks # 总计 inode/block 的数量
+13107 blocks （5.00%） reserved for the super user
+First data block=0
+Maximum filesystem blocks=268435456
+8 block groups # 共有 8 个 block groups
+32768 blocks per group, 32768 fragments per group
+8192 inodes per group
+Superblock backups stored on blocks:
+32768, 98304, 163840, 229376
+Allocating group tables: done
+Writing inode tables: done
+Creating journal （8192 blocks）: done
+Writing superblocks and filesystem accounting information: done
+[root@study ~]# dumpe2fs -h /dev/vda5
+dumpe2fs 1.42.9 （28-Dec-2013）
+Filesystem volume name: <none>;
+Last mounted on: <not available>;
+Filesystem UUID: 3fd5cc6f-a47d-46c0-98c0-d43b072e0e12
+....（中间省略）....
+Inode count: 65536
+Block count: 262144
+Block size: 4096
+Blocks per group: 32768
+Inode size: 256
+Journal size: 32M
+```
+
+### 7.3.4 文件系统校验
+
+文件系统运行时会有磁盘与内存数据异步的状况发生，因此莫名其妙的宕机可能导致文件系统的错乱。使用以下命令可以检验文件系统
+
+#### xfs_repair 处理 XFS 文件系统
+
+```shell
+[root@study ~]# xfs_repair [-fnd] 设备名称
+选项与参数：
+-f ：后面的设备其实是个文件而不是实体设备
+-n ：单纯检查并不修改文件系统的任何数据 （检查而已）
+-d ：通常用在单人维护模式下面，针对根目录 （/） 进行检查与修复的动作,很危险,不要随便使用
+范例：检查一下刚刚创建的 /dev/vda4 文件系统
+[root@study ~]# xfs_repair /dev/vda4
+Phase 1 - find and verify superblock...
+Phase 2 - using internal log
+Phase 3 - for each AG...
+Phase 4 - check for duplicate blocks...
+Phase 5 - rebuild AG headers and trees...
+Phase 6 - check inode connectivity...
+Phase 7 - verify and correct link counts...
+done
+# 共有 7 个重要的检查流程,详细的流程介绍可以 man xfs_repair 即可。
+范例：检查一下系统原本就有的 /dev/centos/home 文件系统
+[root@study ~]# xfs_repair /dev/centos/home
+xfs_repair: /dev/centos/home contains a mounted filesystem
+xfs_repair: /dev/centos/home contains a mounted and writable filesystem
+fatal error -- couldn't initialize XFS library
+```
+
+xfs_repair修复时该文件系统不能被挂载。所有修复/dev/centos/home这个已挂载的文件系统时，就会出现上述问题，可以先卸载再处理即可。
+
+Linux有个设备无法被卸载，那就是根目录，如果根目录有问题，就要进入单人维护或恢复模式，然后通过-d这个选项来处理。
+
+#### fsck.ext4 处理 ext4 文件系统
+
+```shell
+[root@study ~]# fsck.ext4 [-pf] [-b superblock] 设备名称
+选项与参数：
+-p ：当文件系统在修复时，若有需要回复 y 的操作时，自动回复 y 来继续进行修复操作。
+-f ：强制检查！一般来说，如果 fsck 没有发现任何 unclean 的标识，不会主动进入
+	详细检查的，如果您想要强制 fsck 进入详细检查，就得加上 -f 标识
+-D ：针对文件系统下的目录进行最优化配置。
+-b ：后面接 superblock 的位置，一般来说这个选项用不到。但是如果你的 superblock 因故损毁时，
+	通过这个参数即可利用文件系统内备份的 superblock 来尝试恢复。一般来说，superblock 备份在：
+	1K block 放在 8193, 2K block 放在 16384, 4K block 放在 32768
+	
+范例：找出刚刚创建的 /dev/vda5 的另一块 superblock，并据以检测系统
+[root@study ~]# dumpe2fs -h /dev/vda5 | grep 'Blocks per group'
+Blocks per group: 32768
+# 看起来每个 区块群组会有 32768 个 block，因此第二个 superblock 应该就在 32768 上。
+# 因为 block 号码为 0 号开始编的。
+[root@study ~]# fsck.ext4 -b 32768 /dev/vda5
+e2fsck 1.42.9 （28-Dec-2013）
+/dev/vda5 was not cleanly unmounted, check forced.
+Pass 1: Checking inodes, blocks, and sizes
+Deleted inode 1577 has zero dtime. Fix<y>? yes
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+/dev/vda5: ***** FILE SYSTEM WAS MODIFIED ***** # 文件系统被改过，所以这里会有警告！
+/dev/vda5: 11/65536 files （0.0% non-contiguous）, 12955/262144 blocks
+# 好巧，使用这个方式来检验系统，恰好遇到文件系统出问题，于是可以有比较多的解释方向。
+# 当文件系统出问题，它就会要你选择是否修复，如果修复如上所示，按下 y 即可！
+# 最终系统会告诉你，文件系统已经被更改过，要注意该项目的意思
+
+范例：以默认设置强制检查一次 /dev/vda5
+[root@study ~]# fsck.ext4 /dev/vda5
+e2fsck 1.42.9 （28-Dec-2013）
+/dev/vda5: clean, 11/65536 files, 12955/262144 blocks
+# 文件系统状态正常，它并不会进入强制检查！会告诉你文件系统没问题 （clean）
+[root@study ~]# fsck.ext4 -f /dev/vda5
+e2fsck 1.42.9 （28-Dec-2013）
+Pass 1: Checking inodes, blocks, and sizes
+....（下面省略）....
+```
+
+### 7.3.5 文件系统挂载与卸载
+
+挂载点是目录，而这个目录是进入磁盘分区（其实是文件系统）的入口。在进行挂载之前，先确定几件事：
+
+* 单一文件系统不应该被重复挂载在不同的挂载点（目录）中
+* 单一目录不应该重复挂载多个文件系统
+* 要作为挂载点的目录，理论上应该都是空目录才行
+
+使用mount将文件系统挂载到Linux系统上
+
+```shell
+[root@study ~]# mount -a
+[root@study ~]# mount [-l]
+[root@study ~]# mount [-t 文件系统] LABEL='' 挂载点
+[root@study ~]# mount [-t 文件系统] UUID='' 挂载点 # 鸟哥近期建议用这种方式。
+[root@study ~]# mount [-t 文件系统] 设备文件名 挂载点
+选项与参数：
+-a ：依照配置文件 [/etc/fstab]的数据将所有未挂载的磁盘都挂载上来
+-l ：单纯的输入 mount 会显示目前挂载的信息。加上 -l 可增列 Label 名称
+-t ：可以加上文件系统种类来指定欲挂载的类型。常见的 Linux 支持类型有：xfs, ext3, ext4,
+	reiserfs, vfat, iso9660（光盘格式）, nfs, cifs, smbfs （后三种为网络文件系统类型）
+-n ：在默认的情况下，系统会将实际挂载的情况实时写入 /etc/mtab 中，以利其他程序的运行。
+	但在某些情况下（例如单人维护模式）为了避免问题会刻意不写入。此时就得要使用 -n 选项。
+-o ：后面可以接一些挂载时额外加上的参数，比方说帐号、密码、读写权限等：
+	async, sync: 此文件系统是否使用同步写入 （sync） 或非同步 （async） 的内存机制，默认为 async。
+	atime,noatime: 是否修订文件的读取时间（atime）。为了性能，某些时刻可使用 noatime
+	ro, rw: 挂载文件系统成为只读（ro） 或可读写（rw）
+	auto, noauto: 允许此 filesystem 被以 mount -a 自动挂载（auto）
+	dev, nodev: 是否允许此 filesystem 上，可创建设备文件？ dev 为可允许
+	suid, nosuid: 是否允许此 filesystem 含有 suid/sgid 的文件格式？
+	exec, noexec: 是否允许此 filesystem 上拥有可执行 binary 文件？
+	user, nouser: 是否允许此 filesystem 让任何使用者执行 mount ？一般来说，mount 仅有 root 可以进行，但下达 user 参数，则可让一般 user 也能够对此 				partition 进行 mount 。
+	defaults: 默认值为：rw, suid, dev, exec, auto, nouser, and async
+	remount: 重新挂载，这在系统出错，或重新更新参数时，很有用。
+```
+
+基本上，你不需要加上 -t 这个选项，系统会自动分析最恰当的文件系统来尝试挂载你需要的设备。
+
+#### 挂载 xfs/ext4/vfat 等文件系统
+
+```shell
+范例：找出 /dev/vda4 的 UUID 后，用该 UUID 来挂载文件系统到 /data/xfs 内
+[root@study ~]# blkid /dev/vda4
+/dev/vda4: UUID="e0a6af55-26e7-4cb7-a515-826a8bd29e90" TYPE="xfs"
+[root@study ~]# mount UUID="e0a6af55-26e7-4cb7-a515-826a8bd29e90" /data/xfs
+mount: mount point /data/xfs does not exist # 非正规目录！所以手动建立它！
+[root@study ~]# mkdir -p /data/xfs
+[root@study ~]# mount UUID="e0a6af55-26e7-4cb7-a515-826a8bd29e90" /data/xfs
+[root@study ~]# df /data/xfs
+Filesystem 1K-blocks Used Available Use% Mounted on
+/dev/vda4 1038336 32864 1005472 4% /data/xfs
+# 顺利挂载，且容量约为 1G 左右没问题
+
+范例：使用相同的方式，将 /dev/vda5 挂载于 /data/ext4
+[root@study ~]# blkid /dev/vda5
+/dev/vda5: UUID="899b755b-1da4-4d1d-9b1c-f762adb798e1" TYPE="ext4"
+[root@study ~]# mkdir /data/ext4
+[root@study ~]# mount UUID="899b755b-1da4-4d1d-9b1c-f762adb798e1" /data/ext4
+[root@study ~]# df /data/ext4
+Filesystem 1K-blocks Used Available Use% Mounted on
+/dev/vda5 999320 2564 927944 1% /data/ext4
+```
+
+#### 挂载 CD 或 DVD 光盘
+
+```shell
+范例：将你用来安装 Linux 的 CentOS 原版光盘拿出来挂载到 /data/cdrom
+[root@study ~]# blkid
+.....（前面省略）.....
+/dev/sr0: UUID="2015-04-01-00-21-36-00" LABEL="CentOS 7 x86_64" TYPE="iso9660" PTTYPE="dos"
+[root@study ~]# mkdir /data/cdrom
+[root@study ~]# mount /dev/sr0 /data/cdrom
+mount: /dev/sr0 is write-protected, mounting read-only
+[root@study ~]# df /data/cdrom
+Filesystem 1K-blocks Used Available Use% Mounted on
+/dev/sr0 7413478 7413478 0 100% /data/cdrom
+# 怎么会使用掉 100% 呢？是啊！因为是 DVD 啊！所以无法再写入了。
+```
+
+光驱一挂载之后就无法退出光盘了，除非你将它卸载才能够退出。
+
+#### 重新挂载根目录与挂载不特定目录
+
+```shell
+范例：将 / 重新挂载，并加入参数为 rw 与 auto
+[root@study ~]# mount -o remount,rw,auto /
+```
+
+另外，我们也可以利用 mount --bind 来将某个目录挂载到另外一个目录。这并不是挂载文件系统，而是额外挂载某个目录的方法。（也可以使用符号链接来做链接）
+
+```shell
+范例：将 /var 这个目录暂时挂载到 /data/var 下面：
+[root@study ~]# mkdir /data/var
+[root@study ~]# mount --bind /var /data/var
+[root@study ~]# ls -lid /var /data/var
+16777346 drwxr-xr-x. 22 root root 4096 Jun 15 23:43 /data/var
+16777346 drwxr-xr-x. 22 root root 4096 Jun 15 23:43 /var
+# 内容完全一模一样,因为挂载目录的缘故
+[root@study ~]# mount | grep var
+/dev/mapper/centos-root on /data/var type xfs （rw,relatime,seclabel,attr2,inode64,noquota）
+```
+
+#### umount （将设备文件卸载）
+
+```shell
+[root@study ~]# umount [-fn] 设备文件名或挂载点
+选项与参数：
+-f ：强制卸载！可用在类似网络文件系统 （NFS） 无法读取到的情况下；
+-l ：立刻卸载文件系统，比 -f 还强
+-n ：不更新 /etc/mtab 情况下卸载。
+```
+
+```shell
+范例：将本章之前自行挂载的文件系统全部卸载：
+[root@study ~]# mount
+.....（前面省略）.....
+/dev/vda4 on /data/xfs type xfs （rw,relatime,seclabel,attr2,inode64,logbsize=256k,sunit=512,..）
+/dev/vda5 on /data/ext4 type ext4 （rw,relatime,seclabel,data=ordered）
+/dev/sr0 on /data/cdrom type iso9660 （ro,relatime）
+/dev/sda1 on /data/usb type vfat （rw,relatime,fmask=0022,dmask=0022,codepage=950,iocharset=...）
+/dev/mapper/centos-root on /data/var type xfs （rw,relatime,seclabel,attr2,inode64,noquota）
+# 先找一下已经挂载的文件系统，如上所示，特殊字体即为刚刚挂载的设备啰！
+# 基本上，卸载后面接设备或挂载点都可以,不过最后一个 centos-root 由于有其他挂载，
+# 因此，该项目一定要使用挂载点来卸载才行
+[root@study ~]# umount /dev/vda4 <==用设备文件名来卸载
+[root@study ~]# umount /data/ext4 <==用挂载点来卸载
+[root@study ~]# umount /data/cdrom <==因为挂载点比较好记忆
+[root@study ~]# umount /data/usb
+[root@study ~]# umount /data/var <==一定要用挂载点！因为设备有被其他方式挂载
+```
+
+### 7.3.6 磁盘/文件系统参数自定义
+
+#### mknod
+
+Linux下面的所有设备都以文件来表示，通过文件的major与minor数值来替代设备。常见的磁盘文件名 /dev/sda 等的设备代码如下所示：
+
+| 磁盘文件名 | Major | Minor |
+| ---------- | ----- | ----- |
+| /dev/sda   | 8     | 0-15  |
+| /dev/sdb   | 8     | 16-31 |
+| /dev/loop0 | 7     | 0     |
+| /dev/loop1 | 7     | 1     |
+
+基本上，硬件文件名已经都可以被系统自动实时产生了，我们根本不需要手动建立设备文件。
+
+```shell
+[root@study ~]# mknod 设备文件名 [bcp] [Major] [Minor]
+选项与参数：
+设备种类：
+b ：设置设备名称成为一个周边储存设备文件，例如磁盘等；
+c ：设置设备名称成为一个周边输入设备文件，例如鼠标/键盘等；
+p ：设置设备名称成为一个 FIFO 文件；
+Major ：主要设备代码；
+Minor ：次要设备代码；
+范例：由上述的介绍我们知道 /dev/vda10 设备代码 252, 10，请创建并查阅此设备
+[root@study ~]# mknod /dev/vda10 b 252 10
+[root@study ~]# ll /dev/vda10
+brw-r--r--. 1 root root 252, 10 Jun 24 23:40 /dev/vda10
+# 上面那个 252 与 10 是有意义的，不要随意设置啊！
+```
+
+#### xfs_admin 修改 XFS 文件系统的 UUID 与 Label name
+
+如果你当初格式化的时候忘记加上标头名称，后来想要再次加入时，不需要重复格式化。直接使用这个 xfs_admin 即可
+
+```shell
+[root@study ~]# xfs_admin [-lu] [-L label] [-U uuid] 设备文件名
+选项与参数：
+-l ：列出这个设备的 label name
+-u ：列出这个设备的 UUID
+-L ：设置这个设备的 Label name
+-U ：设置这个设备的 UUID
+
+范例：设置 /dev/vda4 的 label name 为 vbird_xfs，并测试挂载
+[root@study ~]# xfs_admin -L vbird_xfs /dev/vda4
+writing all SBs
+new label = "vbird_xfs" # 产生新的 LABEL 名称
+[root@study ~]# xfs_admin -l /dev/vda4
+label = "vbird_xfs"
+[root@study ~]# mount LABEL=vbird_xfs /data/xfs/
+
+范例：利用 uuidgen 产生新 UUID 来设置 /dev/vda4，并测试挂载
+[root@study ~]# umount /dev/vda4 # 使用前，请先卸载
+[root@study ~]# uuidgen
+e0fa7252-b374-4a06-987a-3cb14f415488 # 很有趣的指令！可以产生新的 UUID 
+[root@study ~]# xfs_admin -u /dev/vda4
+UUID = e0a6af55-26e7-4cb7-a515-826a8bd29e90
+[root@study ~]# xfs_admin -U e0fa7252-b374-4a06-987a-3cb14f415488 /dev/vda4
+Clearing log and setting UUID
+writing all SBs
+new UUID = e0fa7252-b374-4a06-987a-3cb14f415488
+[root@study ~]# mount UUID=e0fa7252-b374-4a06-987a-3cb14f415488 /data/xfs
+```
+
+#### tune2fs 修改 ext4 的 label name 与 UUID
+
+```shell
+[root@study ~]# tune2fs [-l] [-L Label] [-U uuid] 设备文件名
+选项与参数：
+-l ：类似 dumpe2fs -h 的功能,将 superblock 内的数据读出来
+-L ：修改 LABEL name
+-U ：修改 UUID
+
+范例：列出 /dev/vda5 的 label name 之后，将它改成 vbird_ext4
+[root@study ~]# dumpe2fs -h /dev/vda5 | grep name
+dumpe2fs 1.42.9 （28-Dec-2013）
+Filesystem volume name: <none> # 果然是没有设置
+[root@study ~]# tune2fs -L vbird_ext4 /dev/vda5
+[root@study ~]# dumpe2fs -h /dev/vda5 | grep name
+Filesystem volume name: vbird_ext4
+[root@study ~]# mount LABEL=vbird_ext4 /data/ext4
+```
+
