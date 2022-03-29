@@ -1770,3 +1770,72 @@ void PrintMatrixCircle(int start, int rows, int columns, int **numbers){
 }
 ```
 
+## 面试题30：包含min函数的栈
+
+### 题目
+
+定义栈的数据结构，请在该类型中实现一个能够得到栈的最小元素的min函数。在该栈中，调用min、push及pop的时间复杂度都是O(1)。
+
+### 解题思路
+
+要返回栈中最小的元素，我们可以在栈中添加一个成员变量记录栈中的最小值，每次有新元素进栈的时候，如果该元素比当前最小元素小，则更新最小元素。
+
+但是如果栈中当前的最小元素被弹出了，我们必须找到栈中的次小元素来更新这个最小值，同理，次小元素被弹出了，我们必须找到次次小元素。因此我们必须记录每次加入新元素后的最小值，并在每次有元素弹出后，取得上一次最小值，因此可以用一个栈来记录每次的最小值。
+
+例如我们往栈里压入3、4、2、1：
+
+| 步骤 | 操作  | 数据栈     | 最小值栈   | 最小值 |
+| ---- | ----- | ---------- | ---------- | ------ |
+| 1    | 压入3 | 3          | 3          | 3      |
+| 2    | 压入4 | 3、4       | 3、3       | 3      |
+| 3    | 压入2 | 3、4、2    | 3、3、2    | 2      |
+| 4    | 压入1 | 3、4、2、1 | 3、3、2、1 | 1      |
+| 5    | 弹出  | 3、4、2    | 3、3、2    | 2      |
+| 6    | 弹出  | 3、4       | 3、3       | 3      |
+| 7    | 弹出  | 3          | 3          | 3      |
+
+### 代码实现
+
+```c++
+#include <stack>
+#include <cassert>
+#include <iostream>
+
+using namespace std;
+
+template<typename T>
+class StackWithMin{
+public:
+    void push(const T& value);
+    void pop();
+    const T& min() const;
+private:
+    stack<T> m_data;
+    stack<T> m_min;
+};
+
+template<typename T>
+void StackWithMin<T>::push(const T& value){
+    m_data.push(value);
+    if(m_min.empty() || value < min()){
+        m_min.push(value);
+    }
+    else{
+        m_min.push(min());
+    }
+}
+
+template<typename T>
+void StackWithMin<T>::pop(){
+    assert(m_data.size() > 0 && m_min.size() > 0);
+    m_data.pop();
+    m_min.pop();
+}
+
+template<typename T>
+const T& StackWithMin<T>::min() const{
+    assert(m_data.size() > 0 && m_min.size() > 0);
+    return m_min.top();
+} 
+```
+
