@@ -3215,3 +3215,220 @@ The alternatives to virtual functions:
 * **Replace virtual functions in one hierarchy with virtual functions in another hierarchy**
 
   This is the conventional implementation of the *Strategy design pattern*
+
+## Item 36: Never redefine an inherited non-virtual function
+Suppose we have the following class hierarchy:
+
+```c++
+class B {
+public:
+	void mf();
+	...
+};
+class D: public B {
+public:
+	void mf(); // hides B::mf; see Item 33
+	...
+};
+
+D x; 			// x is an object of type D
+B *pB = &x; 	// get pointer to x
+pB->mf(); 		// calls B::mf
+
+D *pD = &x; 	// get pointer to x
+pD->mf(); 		// calls D::mf
+```
+
+The reason for this two-faced behavior is that non-virtual functions like `B::mf` and `D::mf` are **statically bound**. That means that because `pB` is declared to be of type pointer-to-`B`, non-virtual functions invoked through `pB` will always be those defined for class `B`, even if `pB` points to an object of a class derived from `B`.
+
+Virtual functions, on the other hand, are **dynamically bound**.
+
+If you are writing class `D` and you redefine a non-virtual function `mf` that you inherit from class `B`, `D` objects will likely exhibit inconsistent behavior. In
+particular, any given `D` object may act like either a `B` or a `D` when `mf` is called, and the determining factor will have nothing to do with the object itself, but with the declared type of the pointer or reference that points to it.
+
+## Item 37: Never redefine a function's inherited default parameter value
+
+As discussed in item 36, you should not redefine a non-virtual function, so we can safely limit our discussion here to the situation in which you *inherit a virtual function with a default parameter value.*
+
+Remember that virtual functions are dynamically bound, but default parameter values are statically bound.
+
+#### virtual functions are dynamically bound
+
+An object's **static type** is the type you declare it to have in the program text.
+
+An object's **dynamic type** is determined by the type of the object to which it currently refers.
+
+```c++
+// a class for geometric shapes
+class Shape {
+public:
+	enum ShapeColor { Red, Green, Blue };
+	// all shapes must offer a function to draw themselves
+	virtual void draw(ShapeColor color = Red) const = 0;
+	...
+};
+class Rectangle: public Shape {
+public:
+// notice the different default parameter value — bad!
+virtual void draw(ShapeColor color = Green) const;
+...
+};
+class Circle: public Shape {
+public:
+	virtual void draw(ShapeColor color) const;
+	...
+};
+
+Shape *ps; 					// static type = Shape*		doesn't really have a dynamic type 
+Shape *pc = new Circle; 	// static type = Shape*		dynamic type = Circle*
+Shape *pr = new Rectangle; 	// static type = Shape*		dynamic type = Rectangle*
+```
+
+Virtual functions are dynamically bound, meaning that the particular function called is determined by the dynamic type of the object through which it's
+invoked:
+
+```c++
+pc->draw(Shape::Red); // calls Circle::draw(Shape::Red)
+pr->draw(Shape::Red); // calls Rectangle::draw(Shape::Red)
+```
+
+### default parameter values are statically bound
+
+That means you may end up invoking a virtual function defined in a derived class but using a default parameter value from a base class:
+
+```c++
+pr->draw(); // calls Rectangle::draw(Shape::Red)!
+```
+
+In this case, pr's dynamic type is `Rectangle*`, so the `Rectangle` virtual function is called, just as you would expect. In `Rectangle::draw`, the default parameter value is `Green`. Because `pr`'s static type is `Shape*`, however, the default parameter value for this function call is taken from the `Shape` class, not the `Rectangle` class!
+
+### Use alternative designs to virtual function
+
+What happens if you try to offer default parameter values to users of both base and derived classes：
+
+```c++
+class Shape {
+public:
+	enum ShapeColor { Red, Green, Blue };
+	virtual void draw(ShapeColor color = Red) const = 0;
+	...
+};
+class Rectangle: public Shape {
+public:
+	virtual void draw(ShapeColor color = Red) const;
+	...
+};
+```
+
+Code duplication with dependencies: if the default parameter value is changed in `Shape`, all derived classes that repeat it must also be changed.
+
+Instead, use the *non-virtual interface idiom* (NVI idiom):
+
+```c++
+class Shape {
+public:
+	enum ShapeColor { Red, Green, Blue };
+	void draw(ShapeColor color = Red) const // now non-virtual
+	{
+		doDraw(color); // calls a virtual
+	}
+	...
+private:
+	virtual void doDraw(ShapeColor color) const = 0; // the actual work is done in this func
+};
+
+class Rectangle: public Shape {
+public:
+	...
+private:
+	virtual void doDraw(ShapeColor color) const; // note lack of a default param val.
+	... 
+};
+```
+
+Because non-virtual functions should never be overridden by derived classes (see Item 36), this design makes clear that the default value for `draw`'s color parameter should always be `Red`.
+
+## Item 38: Model “has-a” or “is-implemented-in-terms of” through composition
+Composition is that objects of one type contain objects of another type.
+
+Composition means either “has a” or “is-implemented-in-terms-of” :
+
+* Some objects in your programs correspond to things in the world you are modeling, e.g., people, vehicles, video frames, etc. Such objects are part of the **application domain**. When composition occurs between objects in the application domain, it expresses a has-a relationship.
+
+* Other objects are purely implementation artifacts, e.g., buffers, mutexes, search trees, etc. These kinds of objects correspond to your software's
+  **implementation domain**. When it occurs in the implementation domain, it expresses an is-implemented-in-terms-of relationship.
+
+### has-a relationship
+
+```c++
+class Address { ... }; // where someone lives
+class PhoneNumber { ... };
+class Person {
+public:
+	...
+private:
+	std::string name; 			// composed object
+	Address address; 			// ditto
+	PhoneNumber voiceNumber; 	// ditto
+	PhoneNumber faxNumber; 		// ditto
+};
+```
+
+In this example, `Person` objects are composed of `string`, `Address`, and `PhoneNumber` objects. 
+
+The Person class above demonstrates the has-a relationship. A Person object has a name, an address, and voice and fax telephone numbers.
+
+### is-implemented-in-terms-of relationship
+
+Suppose you need a template for classes representing fairly small sets of objects, i.e., collections without duplicates. Your first instinct is to employ the standard library's `set` template, but it typically incurs an overhead of three pointers per element. 
+
+Firstly, you decide to have your nascent `Set` template inherit from `list`:
+
+```c++
+template<typename T> // the wrong way to use list for Set
+class Set: public std::list<T> { ... };
+```
+
+Public inheritance means is-a. However, a `list` object may contain duplicates. In contrast, a `Set` may not contain duplicates. It is thus untrue that a `Set` is-a `list`, because some of the things that are true for `list` objects are not true for `Set` objects.
+
+The right way is to realize that a `Set` object can be implemented in terms of a `list` object:
+
+```c++
+template<class T> // the right way to use list for Set
+class Set {
+public:
+	bool member(const T& item) const;
+	void insert(const T& item);
+	void remove(const T& item);
+	std::size_t size() const;
+private:
+	std::list<T> rep; // representation for Set data
+};
+```
+
+`Set`'s member functions can lean heavily on functionality already offered by `list` and other parts of the standard library：
+
+```c++
+template<typename T>
+bool Set<T>::member(const T& item) const
+{
+	return std::find(rep.begin(), rep.end(), item) != rep.end();
+} 
+template<typename T>
+void Set<T>::insert(const T& item)
+{
+	if (!member(item)) rep.push_back(item);
+} 
+template<typename T>
+void Set<T>::remove(const T& item)
+{
+	typename std::list<T>::iterator it =  std::find(rep.begin(), rep.end(), item);
+	if (it != rep.end()) rep.erase(it);
+}
+template<typename T>
+std::size_t Set<T>::size() const
+{
+	return rep.size();
+}
+```
+
