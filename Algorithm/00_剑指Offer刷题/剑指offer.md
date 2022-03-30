@@ -1839,3 +1839,40 @@ const T& StackWithMin<T>::min() const{
 } 
 ```
 
+## 面试题31：栈的压入、弹出序列
+
+### 题目
+
+输入两个整数序列，第一个序列表示栈的压入顺序，请判断第二个序列是否为该栈的弹出顺序。假设压入栈的所有数字均不相等。例如，序列{1，2，3，4，5}是某栈的压栈顺序，序列{4，5，3，2，1}是该压栈序列对应的一个弹出序列，但{4，3，5，1，2}就不可能是该压栈序列的弹出序列。
+
+### 解题思路
+
+首先我们需要一个辅助栈，按照第一个序列的顺序将数字入栈，遍历第二个序列，即弹出序列，如果下一个要弹出的元素位于栈顶，则直接弹出；若不在栈顶，则按照入栈顺序将还没有入栈的数字压入栈中，直到下一个要弹出的数字被压入栈顶为止；如果所有数字全都压入栈中仍然没有找到下一个要弹出的数字，则该序列就不可能是一个弹出序列。	
+
+### 代码实现按
+
+```c++
+bool isPopOrder(const int* pPush, const int* pPop, int nLength){
+    if(pPush == nullptr || pPop == nullptr || nLength <= 0)
+        return false;
+    stack<int> stk;
+    int pushIndex = 0;
+    for(int i = 0; i < nLength; i++){               // 遍历弹出序列
+        if(!stk.empty() && stk.top() == pPop[i]){   // 如果下一个要弹出的元素刚好是栈顶元素，则直接弹出
+            stk.pop();
+            continue;
+        }
+        if(stk.empty() || stk.top() != pPop[i]){    // 如果栈为空或者下一个要弹出的元素不是栈顶元素
+            while(pushIndex != nLength && pPush[pushIndex] != pPop[i]){     // 按照入栈顺序将元素依次压入，直到遇到下一个要弹出的元素
+                stk.push(pPush[pushIndex++]);
+            }
+            if(pushIndex == nLength){               // 如果所有元素都入栈完还没有找到下一个要弹出的元素，则返回false
+                return false;
+            }
+            pushIndex++;                            // 跳过下一个要弹出的元素，继续遍历pPop
+        }
+    }
+    return true;
+}
+```
+
