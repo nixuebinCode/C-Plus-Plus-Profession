@@ -71,7 +71,7 @@ BIOS是一个写入到主板上的一个固件（固件就是写入到硬件上�
 
 其中boot loader的主要任务有：
 
-1. 提供菜选项：用户可以选择不同的启动选项，这也是多重引导的重要功能；
+1. 提供菜单选项：用户可以选择不同的启动选项，这也是多重引导的重要功能；
 2. 加载内核文件：直接指向可使用的程序区段来启动操作系统；
 3. 转交其他loader：将启动管理功能转交给其他loader负责。
 
@@ -135,7 +135,14 @@ Linux默认的情况下会提供六个终端来让用户登陆，切换的方式
 
 在终端正确输入账号名和密码之后，能够看到：
 
- ![image-20220313211512698](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20220313211512698.png)
+```shell
+CentOS Linux 7 （Core）
+Kernel 3.10.0-229.el7.x86_64 on an x86_64
+study login: dmtsai
+Password: <==这里输入你的密码
+Last login: Fri May 29 11:55:05 on tty1 <==上次登陆的情况
+[dmtsai@study ~]$ _ <==光标闪烁，等待你的指令输入
+```
 
 [dmtsai@study ~]$ _
 
@@ -1405,7 +1412,7 @@ drwxrwxr-x. 2 root root 6 6月 16 01:12 test4
 
 ### 6.4.3 文件特殊权限： SUID, SGID, SBIT
 
-* Set UID
+* **Set UID**
 
   当 s 这个标志出现在文件拥有者的 x 权限上时，例如 /usr/bin/passwd 这个文件的权限状态：“-rwsr-xr-x”，此时就被称为 Set UID，简称为 SUID 的特殊权限。
 
@@ -1427,7 +1434,7 @@ drwxrwxr-x. 2 root root 6 6月 16 01:12 test4
 
   另外，SUID对于目录也是无效的。
 
-* Set GID
+* **Set GID**
 
   当 s 标志在用户组的 x 时则称为 Set GID, 简称为SGID 。
 
@@ -1442,7 +1449,7 @@ drwxrwxr-x. 2 root root 6 6月 16 01:12 test4
     * 用户在此目录下的有效用户组（effective group）将会变成该目录的用户组
     * 用途：若用户在此目录下具有 w 的权限（可以新建文件），则使用者所创建的新文件，该新文件的用户组与此目录的用户组相同。
 
-* Sticky Bit
+* **Sticky Bit**
 
   Sticky Bit, SBIT 目前只针对目录有效，对于文件已经没有效果了。SBIT 对于目录的作用是：
 
@@ -1451,7 +1458,7 @@ drwxrwxr-x. 2 root root 6 6月 16 01:12 test4
 
   举例来说，我们的 /tmp 本身的权限是“drwxrwxrwt”， 在这样的权限内容下，任何人都可以在/tmp 内新增、修改文件，但仅有该文件/目录的创建者与 root 能够删除自己的目录或文件。
 
-* SUID/SGID/SBIT 权限设置
+* **SUID/SGID/SBIT 权限设置**
 
   在用数字形式更改权限的方式中再加一个数字，最前面的数字就代表这几个权限了
 
@@ -1494,7 +1501,7 @@ drwxrwxr-x. 2 root root 6 6月 16 01:12 test4
 
 ### 6.4.4 观察文件类型：file
 
-  通过这个命令，我们可以简单地先判断这个文件地格式是什么。
+  通过这个命令，我们可以简单地先判断这个文件的格式是什么。
 
   ```shell
   [root@study ~]# file ~/.bashrc
@@ -2050,7 +2057,7 @@ Filesystem Type 1K-blocks Used Available Use% Mounted on
 
 ### 7.2.1 磁盘与目录的容量
 
-#### df：列出文件系统的整体磁盘使用量
+#### df：列出文件系统的整体磁盘使用量以及挂载点
 
 由于df主要读取的数据几乎都是针对一整个文件系统，因此读取的范围主要是在超级区块内的信息，所以这个命令显示结果的速度非常快。
 
@@ -2513,7 +2520,7 @@ Command （? for help）:
   # 你可以发现，并没有 vda4, vda5, vda6 ，因为内核还没有更新。可以重新启动或者执行partprobe这个命令
   ```
 
-* partprobe 更新 Linux 内核的分区表信息
+* **partprobe 更新 Linux 内核的分区表信息**
 
   ```shell
   [root@study ~]# partprobe [-s] # 你可以不要加 -s 那么屏幕不会出现信息。
@@ -2531,7 +2538,7 @@ Command （? for help）:
   # 现在核心也正确的抓到了分区参数了！
   ```
 
-* 用 gdisk 删除一个分区
+* **用 gdisk 删除一个分区**
 
   ```shell
   [root@study ~]# gdisk /dev/vda
@@ -2753,7 +2760,7 @@ Pass 1: Checking inodes, blocks, and sizes
 * 单一目录不应该重复挂载多个文件系统
 * 要作为挂载点的目录，理论上应该都是空目录才行
 
-使用mount将文件系统挂载到Linux系统上
+#### 使用mount将文件系统挂载到Linux系统上
 
 ```shell
 [root@study ~]# mount -a
@@ -2957,5 +2964,301 @@ Filesystem volume name: <none> # 果然是没有设置
 [root@study ~]# dumpe2fs -h /dev/vda5 | grep name
 Filesystem volume name: vbird_ext4
 [root@study ~]# mount LABEL=vbird_ext4 /data/ext4
+```
+
+## 7.4 设置启动挂载
+
+### 7.4.1 启动挂载 /etc/fstab 及 /etc/mtab
+
+可不可以在启动的时候就将我要的文件系统都挂载好呢？这样我就不需要每次进入 Linux 系统都还要再挂载一次，直接到 /etc/fstab 里面去修改就行。
+
+/etc/fstab这个文件的内容：
+
+```shell
+[root@study ~]# cat /etc/fstab
+# Device 					Mount point filesystem parameters dump fsck
+/dev/mapper/centos-root 	/ xfs defaults 0 0
+UUID=94ac5f77-cb8a-495e-a65b-2ef7442b837c /boot xfs defaults 0 0
+/dev/mapper/centos-home /home xfs defaults 0 0
+/dev/mapper/centos-swap swap swap defaults 0 0
+```
+
+其实这个文件就是在我们利用mount命令进行挂载时，将所有的选项与参数写入的文件。一共有6个字段：
+
+[设备/UUID等] [挂载点] [文件系统] [文件系统参数] [dump] [fsck]
+
+* 第一栏：磁盘设备文件名/UUID/LABEL name
+
+* 第二栏：挂载点 （mount point）
+
+* 第三栏：磁盘分区的文件系统
+
+* 第四栏：文件系统参数
+
+  即我们在mount命令中提到的很多特殊的文件系统参数。具体如下：
+
+| 参数                                 | 内容                                                         |
+| ------------------------------------ | ------------------------------------------------------------ |
+| async/sync<br />异步/同步            | 设置磁盘是否以异步方式运行，默认为 async（性能较佳）         |
+| auto/noauto<br/>自动/非自动          | 当执行 mount -a 时，此文件系统是否会被主动测试挂载，默认为 auto |
+| rw/ro 可读<br/>可擦写/只读           | 让该分区以可读写或只读的状态挂载上来，如果你想要分享的数据是不给使用者随意变更的， 这里也能够设置为只读。则不论在此文件系统的文件是否设置 w 权限，都无法写入 |
+| exec/noexec<br/>可执行/不可执行      | 限制在此文件系统内是否可以进行“执行”的工作？如果是纯粹用来储存数据的目录， 那么可以设置为 noexec 会比较安全。不过，这个参数也不能随便使用，因为你不知道该目录下是否默认会有可执行文件。 因此，建议这个 noexec 最多仅设置于你自定义或分享的一般数据目录。 |
+| user/nouser<br/>允许/不允许用户挂载  | 是否允许用户使用 mount 命令来挂载呢？一般而言，我们当然不希望一般身份的 user 能使用 mount 啰，因为太不安全了，因此这里应该要设置为 nouser |
+| suid/nosuid<br/>具有/不具有suid 权限 | 该文件系统是否允许 SUID 的存在？如果不是可执行文件放置目录，也可以设置为 nosuid 来取消这个功能 |
+| defaults                             | 同时具有 rw, suid, dev, exec, auto, nouser, async 等参数。 基本上，默认情况使用 defaults 设置即可 |
+
+* 第五栏：能否被 dump 备份命令作用
+
+  dump 是一个用来做为备份的命令，不过现在有太多的备份方案了，所以这个项目可以不要理会，直接输入 0 就好了。
+
+* 第六栏：是否以 fsck 检验扇区
+
+  早期启动的流程中，会有一段时间去检验本机的文件系统，看看文件系统是否完整（clean）。 不过这个方式使用的主要是通过 fsck 去做的，我们现在用的 xfs 文件系统就没有办法适用，因为 xfs 会自己进行检验，不需要额外进行这个动作，所以直接填 0 就好了。
+
+### 7.4.2 特殊设备 loop 挂载 （镜像文件不刻录就挂载使用）
+
+####  挂载 CD/DVD 镜像文件
+
+```shell
+[root@study ~]# ll -h /tmp/CentOS-7.0-1406-x86_64-DVD.iso
+-rw-r--r--. 1 root root 3.9G Jul 7 2014 /tmp/CentOS-7.0-1406-x86_64-DVD.iso
+# 看到上面的结果吧！这个文件就是镜像文件，文件非常的大吧！
+[root@study ~]# mkdir /data/centos_dvd
+[root@study ~]# mount -o loop /tmp/CentOS-7.0-1406-x86_64-DVD.iso /data/centos_dvd
+[root@study ~]# df /data/centos_dvd
+Filesystem 1K-blocks Used Available Use% Mounted on
+/dev/loop0 4050860 4050860 0 100% /data/centos_dvd
+# 就是这个项目！ .iso 镜像文件内的所有数据可以在 /data/centos_dvd 看到.
+[root@study ~]# ll /data/centos_dvd
+total 60
+-rw-r--r--. 1 500 502 14 Jul 5 2014 CentOS_BuildTag <==看，这就是 DVD 的内容
+drwxr-xr-x. 3 500 502 2048 Jul 4 2014 EFI
+-rw-r--r--. 1 500 502 611 Jul 5 2014 EULA
+-rw-r--r--. 1 500 502 18009 Jul 5 2014 GPL
+drwxr-xr-x. 3 500 502 2048 Jul 4 2014 images
+.....（下面省略）.....
+[root@study ~]# umount /data/centos_dvd/
+# 测试完成，记得将数据给他卸载
+```
+
+如此一来，我们不需要将这个文件刻录成为光盘或是DVD就能够读取内部的数据了。
+
+#### 建立大文件以制作 loop 设备文件
+
+制作一个大文件，然后将这个文件格式化后挂载。可以帮助我们解决很多系统的分区不合理的情况。举例来说，如果当初在分区时， 你只有划分出一个根目录，假设你已经没有多余的容量可以进行额外的分区，偏偏根目录的容量还很大，此时你就能够制作出一个大文件，然后将这个文件挂载，如此一来感觉上你就多了一个分区。
+
+* **使用 dd 命令建立大型文件**
+
+  ```shell
+  [root@study ~]# dd if=/dev/zero of=/srv/loopdev bs=1M count=512
+  512+0 records in <==读入 512 条数据
+  512+0 records out <==输出 512 条数据
+  536870912 Bytes （537 MB） copied, 12.3484 seconds, 43.5 MB/s
+  # 这个指令的简单意义如下：
+  # if 是 input file ，输入文件。那个 /dev/zero 是会一直输出 0 的设备。
+  # of 是 output file ，将一堆零写入到后面接的文件中。
+  # bs 是每个 block 大小，就像文件系统那样的 block 意义；
+  # count 则是总共几个 bs 的意思。所以 bs*count 就是这个文件的容量了
+  [root@study ~]# ll -h /srv/loopdev
+  -rw-r--r--. 1 root root 512M Jun 25 19:46 /srv/loopdev
+  ```
+
+* **大型文件的格式化**
+
+  默认 xfs 不能够格式化文件的，所以要格式化文件得要加入特别的参数才行
+
+  ```shell
+  [root@study ~]# mkfs.xfs -f /srv/loopdev
+  [root@study ~]# blkid /srv/loopdev
+  /srv/loopdev: UUID="7dd97bd2-4446-48fd-9d23-a8b03ffdd5ee" TYPE="xfs"
+  ```
+
+* **挂载**
+
+  利用mount的特殊参数，-0 loop来处理
+
+  ```shell
+  [root@study ~]# mount -o loop UUID="7dd97bd2-4446-48fd-9d23-a8b03ffdd5ee" /mnt
+  [root@study ~]# df /mnt
+  Filesystem 1K-blocks Used Available Use% Mounted on
+  /dev/loop0 520876 26372 494504 6% /mnt
+  ```
+
+通过这种方法，感觉上你就可以在不修改原有环境的情况下，在原分区中制作出你想要的分区。
+
+最后将这个文件系统自动地挂载起来。
+
+```shell
+[root@study ~]# nano /etc/fstab
+/srv/loopdev /data/file xfs defaults**,loop** 0 0
+# 毕竟系统大多仅查询 block device 去找出 UUID 而已，因此使用文件创建的 filesystem，
+# 最好还是使用原本的文件名来处理，应该比较不容易出现错误信息。
+[root@study ~]# umount /mnt
+[root@study ~]# mkdir /data/file
+[root@study ~]# mount -a
+[root@study ~]# df /data/file
+Filesystem 1K-blocks Used Available Use% Mounted on
+/dev/loop0 520876 26372 494504 6% /data/file
+```
+
+## 7.5 内存交换分区（swap）之创建
+
+内存交换分区是用磁盘来暂时放置内存中的信息。
+
+### 7.5.1 使用物理分区创建内存交换分区
+
+#### 1. 在磁盘中划分一个分区给系统作为内存交换分区
+
+```shell
+[root@study ~]# gdisk /dev/vda
+Command （? for help）: n
+Partition number （6-128, default 6）:
+First sector （34-83886046, default = 69220352） or {+-}size{KMGTP}:
+Last sector （69220352-83886046, default = 83886046） or {+-}size{KMGTP}: +512M
+Current type is 'Linux filesystem'
+Hex code or GUID （L to show codes, Enter = 8300）: 8200
+Changed type of partition to 'Linux swap'
+Command （? for help）: p
+Number Start （sector） End （sector） Size Code Name
+6 69220352 70268927 512.0 MiB 8200 Linux swap # 重点就是产生这东西
+Command （? for help）: w
+Do you want to proceed? （Y/N）: y
+[root@study ~]# partprobe
+[root@study ~]# lsblk
+NAME MAJ:MIN RM SIZE RO TYPE MOUNTPOINT
+vda 252:0 0 40G 0 disk
+.....（中间省略）.....
+`-vda6 252:6 0 512M 0 part # 确定这里是存在的才行
+```
+
+#### 2. 格式化：利用【mkswap】命令就能够格式化该分区成为内存交换分区格式
+
+```shell
+[root@study ~]# mkswap /dev/vda6
+Setting up swapspace version 1, size = 524284 KiB
+no label, UUID=6b17e4ab-9bf9-43d6-88a0-73ab47855f9d
+[root@study ~]# blkid /dev/vda6
+/dev/vda6: UUID="6b17e4ab-9bf9-43d6-88a0-73ab47855f9d" TYPE="swap"
+# 确定格式化成功,且使用 blkid 确实可以识别这个设备
+```
+
+#### 3. 开始观察与加载
+
+```shell
+[root@study ~]# free
+total used free shared buff/cache available
+Mem: 1275140 227244 330124 7804 717772 875536 # 物理内存
+Swap: 1048572 101340 947232 # swap 相关
+# 我有 1275140K 的实体内存，使用 227244K 剩余 330124K ，使用掉的内存有
+# 717772K 用在缓冲/高速缓存的用途中。至于 swap 已经有 1048572K 了
+[root@study ~]# swapon /dev/vda6	<== 将该设备启动
+[root@study ~]# free
+total used free shared buff/cache available
+Mem: 1275140 227940 329256 7804 717944 874752
+Swap: 1572856 101260 1471596 <==有看到增加了没？
+[root@study ~]# swapon -s
+Filename Type Size Used Priority
+/dev/dm-1 partition 1048572 101260 -1
+/dev/vda6 partition 524284 0 -2
+# 上面列出目前使用的 swap 设备有哪些的意思
+[root@study ~]# nano /etc/fstab
+UUID="6b17e4ab-9bf9-43d6-88a0-73ab47855f9d" swap swap defaults 0 0
+# 当然要写入配置文件，只不过不是文件系统，所以没有挂载点,第二个字段写入 swap 即可。
+```
+
+### 7.5.2 使用文件创建内存交换文件
+
+#### 1. 使用 dd 这个命令来新增一个 128MB 的文件在 /tmp 下面
+
+```shell
+[root@study ~]# dd if=/dev/zero of=/tmp/swap bs=1M count=128
+128+0 records in
+128+0 records out
+134217728 Bytes （134 MB） copied, 1.7066 seconds, 78.6 MB/s
+[root@study ~]# ll -h /tmp/swap
+-rw-r--r--. 1 root root 128M Jun 26 17:47 /tmp/swap
+```
+
+#### 2. 使用 mkswap 将 /tmp/swap 这个文件格式化为 swap 的文件格式
+
+```shell
+[root@study ~]# mkswap /tmp/swap
+Setting up swapspace version 1, size = 131068 KiB
+no label, UUID=4746c8ce-3f73-4f83-b883-33b12fa7337c
+# 这个命令下达时请“特别小心”，因为下错字符，将可能使您的文件系统挂掉
+```
+
+#### 3. 使用 swapon 来将 /tmp/swap 启动
+
+```shell
+[root@study ~]# swapon /tmp/swap
+[root@study ~]# swapon -s
+Filename Type Size Used Priority
+/dev/dm-1 partition 1048572 100380 -1
+/dev/vda6 partition 524284 0 -2
+/tmp/swap file 131068 0 -3
+```
+
+#### 4. 使用 swapoff 关掉 swap file，并设置自动启用
+
+```shell
+[root@study ~]# nano /etc/fstab
+/tmp/swap swap swap defaults 0 0
+# 为何这里不要使用 UUID 呢，这是因为系统仅会查询区块设备 （block device） 不会查询文件
+# 所以，这里千万不要使用 UUID，不然系统会查不到
+[root@study ~]# swapoff /tmp/swap /dev/vda6
+[root@study ~]# swapon -s
+Filename Type Size Used Priority
+/dev/dm-1 partition 1048572 100380 -1
+# 确定已经回复到原本的状态了！然后准备来测试！！
+[root@study ~]# swapon -a
+[root@study ~]# swapon -s
+# 最终你又会看正确的三个 swap 出现，这也才确定你的 /etc/fstab 设置无误
+```
+
+# 第8章 文件与文件系统的压缩
+
+### 8.2 Linux 系统常见的压缩命令
+
+Linux里常见的压缩文件扩展名：
+
+```shell
+*.Z 		compress 程序压缩的文件；
+*.zip 		zip 程序压缩的文件；
+*.gz 		gzip 程序压缩的文件；
+*.bz2 		bzip2 程序压缩的文件；
+*.xz 		xz 程序压缩的文件；
+*.tar 		tar 程序打包的数据，并没有压缩过；
+*.tar.gz 	tar 程序打包的文件，其中并且经过 gzip 的压缩
+*.tar.bz2 	tar 程序打包的文件，其中并且经过 bzip2 的压缩
+*.tar.xz 	tar 程序打包的文件，其中并且经过 xz 的压缩
+```
+
+### 8.2.1 gzip，zca/zmore/zless/zgrep
+
+gzip 可以说是应用最广的压缩命令了！目前 gzip 可以解开 compress, zip 与 gzip 等软件所压缩的文件。 至于 gzip 所创建的压缩文件为 *.gz 
+
+```shell
+[dmtsai@study ~]$ gzip [-cdtv#] 文件名
+[dmtsai@study ~]$ zcat 文件名.gz
+选项与参数：
+-c ：将压缩的数据输出到屏幕上，可通过数据流重导向来处理；
+-d ：解压缩的参数；
+-t ：可以用来检验一个压缩文件的一致性～看看文件有无错误；
+-v ：可以显示出原文件/压缩文件的压缩比等信息；
+-# ：# 为数字的意思，代表压缩等级，-1 最快，但是压缩比最差、-9 最慢，但是压缩比最好！默认是 -6
+范例一：找出 /etc 下面 （不含子目录） 容量最大的文件，并将它复制到 /tmp ，然后以 gzip 压缩
+[dmtsai@study ~]$ ls -ldSr /etc/* # 忘记选项意义？请自行 man 啰！
+.....（前面省略）.....
+-rw-r--r--. 1 root root 25213 Jun 10 2014 /etc/dnsmasq.conf
+-rw-r--r--. 1 root root 69768 May 4 17:55 /etc/ld.so.cache
+-rw-r--r--. 1 root root 670293 Jun 7 2013 /etc/services
+[dmtsai@study ~]$ cd /tmp
+[dmtsai@study tmp]$ cp /etc/services .
+[dmtsai@study tmp]$ gzip -v services
+services: 79.7% -- replaced with services.gz
+[dmtsai@study tmp]$ ll /etc/services /tmp/services*
+-rw-r--r--. 1 root root 670293 Jun 7 2013 /etc/services
+-rw-r--r--. 1 dmtsai dmtsai 136088 Jun 30 18:40 /tmp/services.gz
 ```
 
