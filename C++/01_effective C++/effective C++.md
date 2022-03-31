@@ -3432,3 +3432,113 @@ std::size_t Set<T>::size() const
 }
 ```
 
+## Item 39: Use private inheritance judiciously
+
+### private inheritance
+```c++
+class Person { ... };
+class Student: private Person { ... }; // inheritance is now private
+void eat(const Person& p); // anyone can eat
+void study(const Student& s); // only students study
+Person p; 		// p is a Person
+Student s; 		// s is a Student
+eat(p); 		// fine, p is a Person
+eat(s); 		// error! a Student isn't a Person
+```
+
+* In contrast to public inheritance, compilers will generally not convert a derived class object (such as `Student`) into a base class object (such as `Person`). That's why the call to `eat` fails for the object `s`.
+* Members inherited from a private base class become private members of the derived class, even if they were protected or public in the base class.
+
+### Private inheritance means is-implemented-in-terms-of
+
+If you make a class `D` privately inherit from a class `B`, you do so because you are interested in taking advantage of some of the features available in class `B`, not because there is any conceptual relationship between objects of types `B` and `D`. As such, private inheritance is purely an implementation technique.
+
+Private inheritance means nothing during *software design*, only during *software implementation*.
+
+### Private inheritance and composition
+
+Both composition and private inheritance mean is-implemented-in-terms-of, but composition is easier to understand, so you should use it whenever you can:
+
+Suppose we're working on an application involving `Widgets`. And we decide to modify the Widget class to keep track of how many times each member function is called. At runtime, we'll periodically examine that information:
+
+```c++
+// A Timer object can be configured to tick
+// with whatever frequency we need, and on each tick, it calls a virtual function.
+class Timer {
+public:
+	explicit Timer(int tickFrequency);
+	virtual void onTick() const; // automatically called for each tick
+	...
+};
+
+
+```
+
+#### use private inheritance
+
+```c++
+class Widget: private Timer {
+private:
+	virtual void onTick() const; // look at Widget usage data, etc.
+...
+};
+```
+
+By virtue of private inheritance, Timer's public `onTick` function becomes private in `Widget`, and we keep it there when we redeclare it.
+
+#### use composition
+
+We'd just declare a private nested class inside `Widget` that would publicly inherit from `Timer`, redefine `onTick` there, and put an object of that type inside `Widget`.
+
+```c++
+class Widget {
+private:
+	class WidgetTimer: public Timer {
+		public:
+		virtual void onTick() const;
+		...
+	};
+	WidgetTimer timer;
+	...
+};
+```
+
+Two reasons why you might prefer public inheritance plus composition over private inheritance:
+
+* You might want to design `Widget` to allow for derived classes, but you might also want to prevent derived classes from redefining `onTick`. If `Widget` inherits from `Timer`, that's not possible, not even if the inheritance is private. (Recall from Item 35 that **derived classes may redefine virtual functions even if they are not permitted to call them**.) But if `WidgetTimer` is private in `Widget` and inherits from `Timer`, `Widget`'s derived classes have no access to `WidgetTimer`, hence can't inherit from it or redefine its virtual functions.
+
+* You might want to minimize `Widget`'s compilation dependencies. If `Widget` inherits from `Timer`, `Timer`'s definition must be available when `Widget` is compiled, so the file defining `Widget` probably has to `#include Timer.h`. 
+
+  On the other hand, if `WidgetTimer` is moved out of `Widget` and `Widget` contains only a pointer to a `WidgetTimer`, `Widget` can get by with a simple declaration for the `WidgetTimer` class; it need not `#include` anything to do with `Timer`.
+
+#### private inheritance can enable the empty base optimization
+
+When you're dealing with a class that has no data in it. Such classes have no non-static data members; no virtual functions (because the existence of such functions adds a vptr to each object); and no virtual base classes (because such base classes also incur a size overhead — see Item 40).
+
+Conceptually, objects of such empty classes should use no space, because there is no per-object data to be stored. However, there are technical reasons for C++ decreeing that freestanding objects must have non-zero size:
+
+```c++
+class Empty {}; 	// has no data, so objects should use no memory
+class HoldsAnInt { 	// should need only space for an int
+private:
+	int x;
+	Empty e; // should require no memory
+};
+```
+
+You'll find that `sizeof(HoldsAnInt) > sizeof(int)`; an `Empty` data member requires memory. 
+
+With most compilers, `sizeof(Empty)` is 1, because C++'s edict against zero-size **freestanding objects** is typically satisfied by the silent insertion of a char into “empty” objects. However, **alignment** requirements may cause compilers to add padding to classes like `HoldsAnInt`, so it's likely that `HoldsAnInt` objects wouldn't gain just the size of a char, they would actually enlarge enough to hold a second int.
+
+This constraint doesn't apply to base class parts of derived class objects, because they're not freestanding:
+
+```c++
+class HoldsAnInt: private Empty {
+private:
+	int x;
+};
+```
+
+You're almost sure to find that `sizeof(HoldsAnInt) == sizeof(int)`. This is known as the *empty base optimization* (EBO). 
+
+Note that EBO is generally viable only under single inheritance.
