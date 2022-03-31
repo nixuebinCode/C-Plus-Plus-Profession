@@ -1418,7 +1418,7 @@ struct ListNode{
 };
 ```
 
- ![](D:\study\C-Plus-Plus-Profession\剑指Offer刷题笔记\images\微信截图_20220322111101.png)
+ ![](images\微信截图_20220322111101.png)
 
 ### 解题思路一
 
@@ -1873,6 +1873,101 @@ bool isPopOrder(const int* pPush, const int* pPop, int nLength){
         }
     }
     return true;
+}
+```
+
+## 面试题32-1：不分行从上到下打印二叉树
+
+### 题目
+
+从上到下打印出二叉树的每个节点，同一层的节点按照从左到右的顺序打印。例如图中的二叉树，依次打印出8，6，10，5，7，9，11。二叉树的节点的定义如下：
+
+```c++
+struct BinaryTreeNode
+{
+	int m_nValue;
+    BinaryTreeNode* m_pLeft;
+	BinaryTreeNode* m_pRight;
+}；
+```
+
+ ![image-20220331193313827](images\image-20220331193313827.png)
+
+### 解题思路
+
+考查二叉树的层序遍历。每次打印一个节点的时候，如果该节点有子节点，则把该节点的子节点放到一个队列的末尾。接下来到队列的头部取出最早进入队列的节点，重复前面的打印操作，直至队列中所有的节点都被打印出来。
+
+### 代码实现
+
+```C++
+void PrintBST(BinaryTreeNode* root){
+    if(root == nullptr)
+        return;
+    deque<BinaryTreeNode*> bstque;
+    bstque.push_back(root);
+    while(!bstque.empty()){
+        BinaryTreeNode* tmp = bstque.front();
+        cout << tmp->m_nValue << '\t';
+        bstque.pop_front();
+        if(tmp->m_pLeft != nullptr)
+            bstque.push_back(tmp->m_pLeft);
+        if(tmp->m_pRight != nullptr)
+            bstque.push_back(tmp->m_pRight);
+    }
+}
+```
+
+## 面试题32-2：分行从上到下打印二叉树
+
+### 题目
+
+从上到下按层打印二叉树，同一层的节点按从左到右的顺序打印，每一层打印到一行。例如图中的打印结果为：
+
+```c++
+8
+6	10
+5	7	9	11
+```
+
+ ![image-20220331202515244](images\image-20220331202515244.png)
+
+### 解题思路
+
+参考二叉树的层序遍历，为了区分每一层，我们需要额外两个变量：
+
+* 一个变量表示在当前曾中还没有打印的节点数
+* 一个变量表示下一层节点的数目
+
+### 代码实现
+
+```c++
+void PrintBST(BinaryTreeNode* root){
+    if(root == nullptr)
+        return;
+    deque<BinaryTreeNode*> bstque;
+    bstque.push_back(root);
+    int curLayerCnt = 0;
+    int nextLayerCnt = 1;
+    while(!bstque.empty()){
+        curLayerCnt = nextLayerCnt; // 开始打印当前层时，把之前记录的下一层的节点数赋给当前层的节点数
+        nextLayerCnt = 0;
+
+        while(curLayerCnt--){      // 打印当前层
+            BinaryTreeNode* tmp = bstque.front();
+            cout << tmp->m_nValue << '\t';
+            bstque.pop_front();
+            if(tmp->m_pLeft != nullptr){
+                bstque.push_back(tmp->m_pLeft);
+                nextLayerCnt++;
+            }
+            if(tmp->m_pRight != nullptr){
+                bstque.push_back(tmp->m_pRight);
+                nextLayerCnt++;
+            }
+        }
+
+        cout << '\n';        
+    }
 }
 ```
 
