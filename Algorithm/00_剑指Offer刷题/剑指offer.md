@@ -1971,3 +1971,69 @@ void PrintBST(BinaryTreeNode* root){
 }
 ```
 
+## 面试题32-3：之字形打印二叉树
+
+### 题目
+
+请实现一个函数按照之字形顺序打印二叉树，即第一行按照从左到右的顺序打印，第二层按照从右到左的顺序打印，第三行再按照从左到右的顺序打印，其他行依次类推。例如图中二叉树的打印结果为：
+
+```c++
+1
+3	2
+4	5	6	7
+15	14	13	12	11	10	9	8
+```
+
+ ![image-20220401145413825](images\image-20220401145413825.png)
+
+### 解题思路
+
+分析图中打印的具体步骤：
+
+* 打印节点1，并把它的子节点2，3放到一个容器里，由于2，3的输出顺序为3，2，因此这个容器可以是一个栈。
+* 打印节点3，2，依次把3，2的子节点放到一个容器里，由于其子节点的输出顺序为4，5，6，7，即我们入栈的顺序应该为7，6，5，4，即需要先将其右子节点入栈，再将其左子节点入栈。
+* 打印节点4，5，6，7，同步骤1，依次将各节点的子节点按左子节点、右子节点的顺序入栈。
+
+因此总结打印过程：
+
+* 当打印奇数层时，我们依次将各节点的子节点按左子节点、右子节点的顺序入栈
+* 当打印偶数层时，我们依次将各节点的子节点按右子节点、左子节点的顺序入栈
+
+### 代码实现
+
+```c++
+void PrintBST(BinaryTreeNode* root){
+    if(root == nullptr)
+        return;
+    stack<BinaryTreeNode*> oddStack;    // 用于打印奇数层
+    stack<BinaryTreeNode*> evenStack;   // 用于打印偶数层
+    oddStack.push(root);
+    while(!oddStack.empty() || !evenStack.empty()){
+        if(!oddStack.empty()){                  		// 打印奇数层
+            while(!oddStack.empty()){                
+                BinaryTreeNode* temp = oddStack.top();
+                cout << temp->m_nValue << '\t';
+                oddStack.pop();
+                if(temp->m_pLeft != nullptr)
+                    evenStack.push(temp->m_pLeft);
+                if(temp->m_pRight != nullptr)
+                    evenStack.push(temp->m_pRight);
+            }
+            cout << '\n';
+        }
+        else{                           				// 打印偶数层
+            while(!evenStack.empty()){                
+                BinaryTreeNode* temp = evenStack.top();
+                cout << temp->m_nValue << '\t';
+                evenStack.pop();
+                if(temp->m_pRight != nullptr)
+                    oddStack.push(temp->m_pRight);
+                if(temp->m_pLeft != nullptr)
+                    oddStack.push(temp->m_pLeft); 
+            }
+            cout << '\n';
+        }
+    }
+}
+```
+
