@@ -3542,3 +3542,395 @@ private:
 You're almost sure to find that `sizeof(HoldsAnInt) == sizeof(int)`. This is known as the *empty base optimization* (EBO). 
 
 Note that EBO is generally viable only under single inheritance.
+
+## Item 40: Use multiple inheritance judiciously
+
+MI (Multiple inheritance)  just means inheriting from more than one base class.
+
+### ambiguity issues
+
+One of the first things to recognize is that when MI enters the designscape, it becomes possible to inherit the same name (e.g., function, typedef, etc.) from more than one base class:
+
+```c++
+class BorrowableItem { // something a library lets you borrow
+public:
+	void checkOut(); // check the item out from the library
+	...
+};
+class ElectronicGadget {
+private:
+	bool checkOut() const; // perform self-test,return whether test succeeds
+};
+class MP3Player: public BorrowableItem, public ElectronicGadget	   // note MI here
+{ ... }; 				 										   // class definition is unimportant
+
+MP3Player mp;
+mp.checkOut(); // ambiguous! which checkOut?
+```
+
+The call to `checkOut` is ambiguous, even though only one of the two functions is accessible. (`checkOut` is public in `BorrowableItem` but private in `ElectronicGadget`.)--before seeing whether a function is accessible, C++ first identifies the function that's the best match for the call.
+
+To resolve the ambiguity, you must specify which base class's function to call:
+
+```c++
+mp.BorrowableItem::checkOut(); // ah, that checkOut...
+```
+
+### virtual inheritance
+
+Considering the following hierachy:
+
+```c++
+class File { ... };
+class InputFile: public File { ... };
+class OutputFile: public File { ... };
+class IOFile: public InputFile, public OutputFile
+{ ... };
+```
+
+ ![image-20220401195227252](images\image-20220401195227252.png)
+
+Any time you have an inheritance hierarchy with more than one path between a base class and a derived class (such as between `File` and `IOFile` above, which has paths through both `InputFile` and `OutputFile`), you must confront the question of whether you want the data members in the base class to be **replicated** for each of the paths.
+
+For example, suppose that the `File` class has a data member, `fileName`. How many copies of this field should `IOFile` have? There may be two possible answers:
+
+* `IOFile` inherits a copy from each of its base classes, so that suggests that `IOFile` should have **two** `fileName` data members.
+* Simple logic says that an `IOFile` object has **only one** file name, so the `fileName` field it inherits through its two base classes should not be replicated.
+
+C++'s  default is to perform the replication. If that's not what you want, you must make the class with the data (i.e., `File`) a **virtual base class**. To do that, you have all classes that **immediately inherit** from it use **virtual inheritance**:
+
+```c++
+class File { ... };
+class InputFile: virtual public File { ... };
+class OutputFile: virtual public File { ... };
+class IOFile: public InputFile, public OutputFile
+{ ... };
+```
+
+ ![image-20220401195828620](images\image-20220401195828620.png)
+
+#### virtual inheritance costs
+
+Virtual inheritance imposes costs in size, speed, and complexity of initialization and assignment:
+
+* Objects created from classes using virtual inheritance are generally larger than they would be without virtual inheritance
+* Access to data members in virtual base classes is also slower than to those in non-virtual base classes
+* The responsibility for initializing a virtual base is borne by the most derived class in the hierarchy.
+
+#### advice on virtual base classes
+
+* Don't use virtual bases unless you need to. By default, use non-virtual inheritance. 
+* If you must use virtual base classes, try to avoid putting data in them. That way you won't have to worry about oddities in the initialization (and, as it turns out, assignment) rules for such classes
+
+### An example that MI can be helpful
+
+Multiple inheritance does have legitimate uses. One scenario involves combining **public inheritance from an Interface class** with **private inheritance from a class that helps with implementation**.
+
+Consider the following C++ Interface class (see Item 31) for modeling persons:
+
+```c++
+class IPerson {
+public:
+	virtual ~IPerson();
+	virtual std::string name() const = 0;
+	virtual std::string birthDate() const = 0;
+};
+```
+
+Now we will create some concrete class derived from `IPerson` , suppose this class is called `CPerson`. As a concrete class, `CPerson` must provide
+implementations for the pure virtual functions it inherits from `IPerson`. It could write these from scratch, but it would be better to take advantage of
+existing components that do most or all of what's necessary. For example, suppose an old database-specific class `PersonInfo` offers the essence of what
+`CPerson` needs:
+
+```c++
+class PersonInfo {
+public:
+	explicit PersonInfo(DatabaseID pid);
+	virtual ~PersonInfo();
+	virtual const char * theName() const;
+	virtual const char * theBirthDate() const;
+...
+private:
+	virtual const char * valueDelimOpen() const; // see
+	virtual const char * valueDelimClose() const; // below
+	...
+};
+
+const char * PersonInfo::valueDelimOpen() const
+{
+	return "["; // default opening delimiter
+}
+const char * PersonInfo::valueDelimClose() const
+{
+	return "]"; // default closing delimiter
+}
+const char * PersonInfo::theName() const
+{
+	// reserve buffer for return value; because this is
+	// static, it's automatically initialized to all zeros
+	static char value[Max_Formatted_Field_Value_Length];
+    
+	// write opening delimiter
+	std::strcpy(value, valueDelimOpen());
+    
+	// append to the string in value this object's name field
+	...
+        
+	// write closing delimiter
+	std::strcat(value, valueDelimClose());
+    
+	return value;
+}
+```
+
+`theName` calls `valueDelimOpen` to generate the opening delimiter of the string it will return, then it generates the name value itself, then it calls `valueDelimClose`. Because `valueDelimOpen` and `valueDelimClose` are virtual functions, the result returned by `theName` is dependent not only on
+`PersonInfo` but also on the classes derived from `PersonInfo`. As the implementer of `CPerson`, that's good news, because while perusing the fine print in the `IPerson` documentation, you discover that `name` and `birthDate` are required to return with no delimiters are allowed.
+
+The relationship between `CPerson` and `PersonInfo` is that `PersonInfo` happens to have some functions that would make `CPerson` easier to implement. That's all. Their relationship is thus is-implemented-in-terms-of which can be represented in composition or privare inheritance.
+
+But `CPerson` must also implement the `IPerson` interface, and that calls for public inheritance. This leads to one reasonable application of multiple inheritance: combine public inheritance of an interface with private inheritance of an implementation:
+
+```c++
+class IPerson { // this class specifies the interface to be implemented
+public:
+	virtual ~IPerson();
+	virtual std::string name() const = 0;
+	virtual std::string birthDate() const = 0;
+};
+
+class DatabaseID { ... }; // used below details are unimportant
+
+class PersonInfo { // this class has functions useful in implementing the IPerson interface
+public:
+	explicit PersonInfo(DatabaseID pid);
+	virtual ~PersonInfo();
+	...
+private:
+	virtual const char * theName() const;
+	virtual const char * theBirthDate() const;
+	virtual const char * valueDelimOpen() const;
+	virtual const char * valueDelimClose() const;
+	...
+};
+
+class CPerson: public IPerson, private PersonInfo { // note use of MI
+public:
+	explicit CPerson( DatabaseID pid): PersonInfo(pid) {}
+    // implementations of the required IPerson member functions
+	virtual std::string name() const 
+		{ return PersonInfo::theName(); }
+	virtual std::string birthDate() const
+		{ return PersonInfo::theBirthDate(); }
+private: 
+	// redefinitions of inherited virtual delimiter functions
+	const char * valueDelimOpen() const { return ""; }
+	const char * valueDelimClose() const { return ""; }
+
+};
+```
+
+ ![image-20220401202859516](images\image-20220401202859516.png)
+
+# 7. Templates and Generic Programming
+
+## Item 41: Understand implicit interfaces and compiletime polymorphism
+
+The world of object-oriented programming revolves around `explicit` interfaces and `runtime` polymorphism:
+
+```c++
+class Widget {
+public:
+	Widget();
+	virtual ~Widget();
+	virtual std::size_t size() const;
+	virtual void normalize();
+	void swap(Widget& other); // see Item 25
+	...
+};
+
+void doProcessing(Widget& w)
+{
+	if (w.size() > 10 && w != someNastyWidget) {
+		Widget temp(w);
+		temp.normalize();
+		temp.swap(w);
+	}
+}
+```
+
+In `doProcessing`:
+
+* Because `w` is declared to be of type `Widget`, `w` must support the `Widget` interface. We can look up this interface in the source code (e.g., the .h
+  file for `Widget`) to see exactly what it looks like, so I call this an **explicit interface** — one explicitly visible in the source code.
+* Because some of `Widget`'s member functions are virtual, `w`'s calls to those functions will exhibit runtime polymorphism: the specific function to call
+  will be determined at runtime based on `w`'s dynamic type.
+
+The world of templates and generic programming is fundamentally different: 
+
+```c++
+template<typename T>
+void doProcessing(T& w)
+{
+	if (w.size() > 10 && w != someNastyWidget) {
+		T temp(w);
+		temp.normalize();
+		temp.swap(w);
+	}
+}
+```
+
+in `doProcessing`:
+
+* The interface that `w` must support is determined by the operations performed on `w` in the template. In this example, it appears that `w`'s type (T)
+  must support the `size`, `normalize`, and `swap` member functions; copy construction (to create temp); and comparison for inequality (for comparison with `someNastyWidget`).
+* The calls to functions involving w such as `operator>` and `operator!=` may involve instantiating templates to make these calls succeed. Such
+  instantiation occurs during compilation. Because instantiating function templates with different template parameters leads to different functions
+  being called, this is known as compile-time polymorphism.
+
+### An explicit interface consists of function signatures, i.e., function names, parameter types, return types, etc.
+
+The `Widget` class public interface consists of a constructor, a destructor, and the functions `size`, `normalize`, and `swap`, along with the parameter types, return types, and constnesses of these functions.
+
+### An implicit interface consists of valid expressions:
+
+Consider the conditional at the beginning of the `doProcessing` template:
+
+```c++
+template<typename T>
+void doProcessing(T& w)
+{
+	if (w.size() > 10 && w != someNastyWidget) {
+	...
+```
+
+The conditional part of an if statement must be a boolean expression, so regardless of the exact types involved, whatever `w.size() > 10 && w != someNastyWidget` yields, it must be compatible with bool. The rest of the interface required by `doProcessing` is that calls to the copy constructor, to `normalize`, and to `swap` must be valid for objects of type T.
+
+
+
+The implicit interfaces imposed on a template's parameters are just as real as the explicit interfaces imposed on a class's objects, and both are checked
+during compilation. Just as you can't use an object in a way contradictory to the explicit interface its class offers (the code won't compile), you can't try to
+use an object in a template unless that object supports the implicit interface the template requires (again, the code won't compile).
+
+## Item 42: Understand the two meanings of typename
+
+When declaring a template type parameter, `class` and `typename` mean exactly the same thing：
+
+```c++
+template<class T> class Widget; // uses "class"
+template<typename T> class Widget; // uses "typename"
+```
+
+### Sometimes you must use `typename`
+
+Suppose we have a template for a function that takes an STL-compatible container holding objects that can be assigned to ints. And this function simply prints the value of its second element:
+
+```c++
+template<typename C> 					// print 2nd element in container;
+void print2nd(const C& container) 	 	// this is not valid C++!	
+{
+	if (container.size() >= 2) {
+		C::const_iterator iter(container.begin()); // get iterator to 1st element
+		++iter; // move iter to 2nd element
+		int value = *iter; // copy that element to an int
+		std::cout << value; // print the int
+	}
+}
+```
+
+* **nested dependent type name**
+
+  `C::const_iterator` is a type that depends on the template parameter `C`. Names in a template that are dependent on a template parameter are called **dependent names**. When a dependent name is nested inside a class, I call it a **nested dependent name**. `C::const_iterator` is a `nested dependent type name`, i.e., a nested dependent name that refers to a type.
+
+* **non-dependent names**
+
+  `value` has type `int`. `int` is a name that does not depend on any template parameter. Such names are known as non-dependent names
+
+Nested dependent names can lead to parsing difficulties:
+
+```c++
+template<typename C>
+void print2nd(const C& container)
+{
+	C::const_iterator * x;
+	...
+}
+```
+
+This looks like we're declaring `x` as a local variable that's a pointer to a `C::const_iterator`. But it looks that way only because we “know” that `C::const_iterator` is a type. 
+
+But what if `C::const_iterator` weren't a type? What if `C` had a static data member that happened to be named `const_iterator`, and what if `x` happened to be the name of a global variable? In that case, the code above wouldn't declare a local variable, it would be a multiplication of
+`C::const_iterator` by `x`!
+
+**C++ has a rule to resolve this ambiguity: if the parser encounters a nested dependent name in a template, it assumes that the name is not a type unless you tell it otherwise.** So we have to tell C++ that `C::const_iterator` is a type. We do that by putting `typename` immediately in front of it:
+
+```c++
+template<typename C> // this is valid C++
+void print2nd(const C& container)
+{
+	if (container.size() >= 2) {
+		typename C::const_iterator iter(container.begin());
+		...
+	}
+}
+```
+
+### `typename` should be used to identify only nested dependent type names; other names shouldn't have it
+
+```c++
+template<typename C> 				// typename allowed (as is "class")
+void f(const C& container, 			// typename not allowed
+       typename C::iterator iter); 	// typename required
+```
+
+`C` is not a nested dependent type name (it's not nested inside anything dependent on a template parameter), so it must not be preceded by `typename`
+when declaring container.
+
+`C::iterator` is a nested dependent type name, so it's required to be preceded by typename.
+
+### The exception to the “typename must precede nested dependent type names” rule
+`typename` must not precede nested dependent type names in **a list of base classes** or as **a base class identifier in a member initialization list**
+
+```c++
+template<typename T>
+class Derived: public Base<T>::Nested { // base class list: typename not allowed
+public:
+	explicit Derived(int x)
+		: Base<T>::Nested(x) // base class identifier in mem. init. list: typename not allowed
+	{ 
+		typename Base<T>::Nested temp; 	// use of nested dependent type name not in a base class list
+		... 							//  or as a base class identifier in a mem. init. list: typename required
+	}
+	... // 
+};
+```
+
+### One last `typename` example which you're going to see in real code
+
+Suppose we're writing a function template that takes an iterator, and we want to make a local copy, `temp`, of the object the iterator points to.
+
+```c++
+template<typename IterT>
+void workWithIterator(IterT iter)
+{
+	typename std::iterator_traits<IterT>::value_type temp(*iter);
+	...
+}
+```
+
+The statement declares a local variable (`temp`) of the same type as what `IterT` objects point to, and it initializes `temp` with the object that `iter` points to. If `IterT` is `vector<int>::iterator`, `temp` is of type `int`. If `IterT` is `list<string>::iterator`, `temp` is of type `string`.
+
+Because `std::iterator_traits<IterT>::value_type` is a nested dependent type name (`value_type` is nested inside `iterator_traits<IterT>`, and
+`IterT` is a template parameter), we must precede it by `typename`.
+
+If you're like most programmers, the thought of typing `std::iterator_traits<IterT>::value_type`more than once is ghastly, so you'll want to create a `typedef`:
+
+```c++
+template<typename IterT>
+void workWithIterator(IterT iter)
+{
+	typedef typename std::iterator_traits<IterT>::value_type value_type;
+	value_type temp(*iter);
+	...
+}
+```
+
