@@ -3218,7 +3218,7 @@ Filename Type Size Used Priority
 
 # 第8章 文件与文件系统的压缩
 
-### 8.2 Linux 系统常见的压缩命令
+## 8.2 Linux 系统常见的压缩命令
 
 Linux里常见的压缩文件扩展名：
 
@@ -3234,21 +3234,22 @@ Linux里常见的压缩文件扩展名：
 *.tar.xz 	tar 程序打包的文件，其中并且经过 xz 的压缩
 ```
 
-### 8.2.1 gzip，zca/zmore/zless/zgrep
+### 8.2.1 gzip，zcat/zmore/zless/zgrep
 
-gzip 可以说是应用最广的压缩命令了！目前 gzip 可以解开 compress, zip 与 gzip 等软件所压缩的文件。 至于 gzip 所创建的压缩文件为 *.gz 
+gzip 可以说是应用最广的压缩命令了，目前 gzip 可以解开 compress, zip 与 gzip 等软件所压缩的文件。 至于 gzip 所创建的压缩文件为 *.gz 
 
 ```shell
 [dmtsai@study ~]$ gzip [-cdtv#] 文件名
 [dmtsai@study ~]$ zcat 文件名.gz
 选项与参数：
 -c ：将压缩的数据输出到屏幕上，可通过数据流重导向来处理；
--d ：解压缩的参数；
--t ：可以用来检验一个压缩文件的一致性～看看文件有无错误；
+-d ：解压缩；
+-t ：可以用来检验一个压缩文件的一致性，看看文件有无错误；
 -v ：可以显示出原文件/压缩文件的压缩比等信息；
 -# ：# 为数字的意思，代表压缩等级，-1 最快，但是压缩比最差、-9 最慢，但是压缩比最好！默认是 -6
+
 范例一：找出 /etc 下面 （不含子目录） 容量最大的文件，并将它复制到 /tmp ，然后以 gzip 压缩
-[dmtsai@study ~]$ ls -ldSr /etc/* # 忘记选项意义？请自行 man 啰！
+[dmtsai@study ~]$ ls -ldSr /etc/*
 .....（前面省略）.....
 -rw-r--r--. 1 root root 25213 Jun 10 2014 /etc/dnsmasq.conf
 -rw-r--r--. 1 root root 69768 May 4 17:55 /etc/ld.so.cache
@@ -3262,3 +3263,575 @@ services: 79.7% -- replaced with services.gz
 -rw-r--r--. 1 dmtsai dmtsai 136088 Jun 30 18:40 /tmp/services.gz
 ```
 
+当你使用gzip进行压缩时，在默认的状态下原本的文件会被压缩成为.gz后缀的文件，**源文件就不再存在了**。
+
+```shell
+范例二：由于 services 是文本文件，请将范例一的压缩文件的内容读出来！
+[dmtsai@study tmp]$ zcat services.gz
+# 由于 services 这个原本的文件是是文本文件，因此我们可以尝试使用 zcat/zmore/zless 去读取
+# 此时屏幕上会显示 servcies.gz 解压缩之后的原始文件内容
+
+范例三：将范例一的文件解压缩
+[dmtsai@study tmp]$ gzip -d services.gz
+# 与 gzip 相反， gzip -d 会将原本的 .gz 删除，回复到原本的 services 文件。
+
+范例四：将范例三解开的 services 用最佳的压缩比压缩，并保留原本的文件
+[dmtsai@study tmp]$ gzip -9 -c services > services.gz
+
+范例五：由范例四再次创建的 services.gz 中，找出 http 这个关键字在哪几行？
+[dmtsai@study tmp]$ zgrep -n 'http' services.gz
+14:# http://www.iana.org/assignments/port-numbers
+89:http 80/tcp www www-http # WorldWideWeb HTTP
+90:http 80/udp www www-http # HyperText Transfer Protocol
+.....（下面省略）.....
+```
+
+* -c 与 > 的使用
+
+  -c可以将原本要转成压缩文件的数据内容，将它变成文字类型从屏幕输出，然后我们可以通过 > 这个符号，将原本应该由屏幕输出的数据，转成输出到文件而不是屏幕，所以就能够建立压缩文件了。
+
+* zcat/zmore/zless 可以对应于cat/more/less 的方式来读取纯文本文件被压缩后的压缩文件
+
+### 8.2.2 bzip2, bzcat/bzmore/bzless/bzgrep
+
+若说 gzip 是为了取代 compress 并提供更好的压缩比而成立的，那么 bzip2 则是为了取代 gzip 并提供更佳的压缩比而来的。
+
+```shell
+[dmtsai@study ~]$ bzip2 [-cdkzv#] 文件名
+[dmtsai@study ~]$ bzcat 文件名.bz2
+选项与参数：
+-c ：将压缩的过程产生的数据输出到屏幕上
+-d ：解压缩
+-k ：保留原始文件，而不会删除原始的文件
+-z ：压缩 （默认值，可以不加）
+-v ：可以显示出原文件/压缩文件的压缩比等信息；
+-# ：与 gzip 同样的，都是在计算压缩比的参数， -9 最佳， -1 最快！
+
+范例一：将刚刚 gzip 范例留下来的 /tmp/services 以 bzip2 压缩
+[dmtsai@study tmp]$ bzip2 -v services
+services: 5.409:1, 1.479 bits/Byte, 81.51% saved, 670293 in, 123932 out.
+[dmtsai@study tmp]$ ls -l services*
+-rw-r--r--. 1 dmtsai dmtsai 123932 Jun 30 18:40 services.bz2
+-rw-rw-r--. 1 dmtsai dmtsai 135489 Jun 30 18:46 services.gz
+# 此时 services 会变成 services.bz2 之外，你也可以发现 bzip2 的压缩比要较 gzip 好
+# 压缩率由 gzip 的 79% 提升到 bzip2 的 81% 
+
+范例二：将范例一的文件内容读出来！
+[dmtsai@study tmp]$ bzcat services.bz2
+
+范例三：将范例一的文件解压缩
+[dmtsai@study tmp]$ bzip2 -d services.bz2
+
+范例四：将范例三解开的 services 用最佳的压缩比压缩，并保留原本的文件
+[dmtsai@study tmp]$ bzip2 -9 -c services > services.bz2
+```
+
+### 8.2.3 xz, xzcat/xzmore/xzless/xzgrep
+
+xz 是压缩比更高的软件。
+
+```shell
+[dmtsai@study ~]$ xz [-dtlkc#] 文件名
+[dmtsai@study ~]$ xcat 文件名.xz
+选项与参数：
+-d ：解压缩
+-t ：测试压缩文件的完整性，看有没有错误
+-l ：列出压缩文件的相关信息
+-k ：保留原本的文件不删除
+-c ：同样的，就是将数据由屏幕上输出的意思
+-# ：同样的，也有较佳的压缩比的意思
+
+范例一：将刚刚由 bzip2 所遗留下来的 /tmp/services 通过 xz 来压缩！
+[dmtsai@study tmp]$ xz -v services
+services （1/1）
+100 % 97.3 KiB / 654.6 KiB = 0.149
+[dmtsai@study tmp]$ ls -l services*
+-rw-rw-r--. 1 dmtsai dmtsai 123932 Jun 30 19:09 services.bz2
+-rw-rw-r--. 1 dmtsai dmtsai 135489 Jun 30 18:46 services.gz
+-rw-r--r--. 1 dmtsai dmtsai 99608 Jun 30 18:40 services.xz
+# 容量又进一步下降的更多
+
+范例二：列出这个压缩文件的信息，然后读出这个压缩文件的内容
+[dmtsai@study tmp]$ xz -l services.xz
+Strms Blocks Compressed Uncompressed Ratio Check Filename
+1 1 97.3 KiB 654.6 KiB 0.149 CRC64 services.xz
+# 可以列出这个文件的压缩前后的容量
+[dmtsai@study tmp]$ xzcat services.xz
+
+范例三：将他解压缩吧
+[dmtsai@study tmp]$ xz -d services.xz
+
+范例四：保留原文件的文件名，并且创建压缩文件！
+[dmtsai@study tmp]$ xz -k services
+```
+
+## 8.3 打包命令： tar
+前一小节谈到的命令大多仅能针对单一文件来进行压缩，虽然 gzip，bizip2，xz也能够针对目录来进行压缩，但是，它指的是**将目录内的所有文件分别进行压缩**的操作。这种将多个文件或目录包成一个大文件的命令功能，我们称它是一种**打包命令**。
+
+```shell
+[dmtsai@study ~]$ tar [-z|-j|-J] [cv] [-f 待建立的新文件名] filename... <==打包与压缩
+[dmtsai@study ~]$ tar [-z|-j|-J] [tv] [-f 既有的 tar文件名] <==查看文件名
+[dmtsai@study ~]$ tar [-z|-j|-J] [xv] [-f 既有的 tar文件名] [-C 目录] <==解压缩
+选项与参数：
+-c ：建立打包文件，可搭配 -v 来查看过程中被打包的文件名（filename）
+-t ：查看打包文件的内容含有哪些文件名，重点在察看“文件名”
+-x ：解打包或解压缩的功能，可以搭配 -C （大写） 在特定目录解开
+
+特别留意的是， -c, -t, -x 不可同时出现在一串命令行中。
+-z ：通过 gzip 的支持进行压缩/解压缩：此时文件名最好为 *.tar.gz
+-j ：通过 bzip2 的支持进行压缩/解压缩：此时文件名最好为 *.tar.bz2
+-J ：通过 xz 的支持进行压缩/解压缩：此时文件名最好为 *.tar.xz
+特别留意， -z, -j, -J 不可以同时出现在一串命令行中
+
+-v ：在压缩/解压缩的过程中，将正在处理的文件名显示出来
+-f filename：-f 后面要立刻接要被处理的文件名，建议 -f 单独写一个选项（比较不会忘记）
+-C 目录 ：这个选项用在解压缩，若要在特定目录解压缩，可以使用这个选项。
+
+其他后续练习会使用到的选项介绍：
+-p（小写） ：保留备份数据的原本权限与属性，常用于备份（-c）重要的配置文件
+-P（大写） ：保留绝对路径，亦即允许备份数据中含有根目录存在之意；
+--exclude=FILE：在压缩的过程中，不要将 FILE 打包
+```
+
+其实最简单的使用tar就只要记住下面的命令即可
+
+```shell
+压　缩：tar -jcv -f filename.tar.bz2 要被压缩的文件或目录名称
+查　询：tar -jtv -f filename.tar.bz2
+解压缩：tar -jxv -f filename.tar.bz2 -C 欲解压缩的目录
+```
+
+注意 tar 并不会主动的产生建立的文件名，我们要通过 -f 选项自定义，所以扩展名就显得很重要了。
+
+#### 使用 tar 加入 -z, -j 或 -J 的参数备份 /etc/ 目录
+
+```shell
+[dmtsai@study ~]$ su - # 因为备份 /etc 需要 root 的权限，否则会出现一堆错误
+[root@study ~]# time tar -zpcv -f /root/etc.tar.gz /etc
+tar: Removing leading `/' from member names <==注意这个警告信息
+/etc/
+....（中间省略）....
+/etc/hostname
+/etc/aliases.db
+real 0m0.799s # 多了 time 会显示程序运行的时间！看 real 就好了！花去了 0.799s
+user 0m0.767s
+sys 0m0.046s
+# 由于加上 -v 这个选项，因此正在作用中的文件名就会显示在屏幕上。
+# 至于 -p 的选项，重点在于“保留原本文件的权限与属性”之意。
+
+[root@study ~]# time tar -jpcv -f /root/etc.tar.bz2 /etc
+....（前面省略）....
+real 0m1.913s
+user 0m1.881s
+sys 0m0.038s
+
+[root@study ~]# time tar -Jpcv -f /root/etc.tar.xz /etc
+....（前面省略）....
+real 0m9.023s
+user 0m8.984s
+sys 0m0.086s
+# 使用了 -J 时，会花更多时间
+
+[root@study ~]# ll /root/etc*
+-rw-r--r--. 1 root root 6721809 Jul 1 00:16 /root/etc.tar.bz2
+-rw-r--r--. 1 root root 7758826 Jul 1 00:14 /root/etc.tar.gz
+-rw-r--r--. 1 root root 5511500 Jul 1 00:16 /root/etc.tar.xz
+[root@study ~]# du -sm /etc
+28 /etc # 实际目录约占有 28MB 的意思！
+```
+
+#### 查看 tar 文件的数据内容 （可查看文件名）
+
+```shell
+[root@study ~]# tar -jtv -f /root/etc.tar.bz2
+....（前面省略）....
+-rw-r--r-- root/root 131 2015-05-25 17:48 etc/locale.conf
+-rw-r--r-- root/root 19 2015-05-04 17:56 etc/hostname
+-rw-r--r-- root/root 12288 2015-05-04 17:59 etc/aliases.db
+```
+
+加上 -v 这个选项，详细的文件权限/属性都会被列出来，如果只是想要知道文件名而已，那么就将 -v 拿掉即可。
+
+从上面的数据我们可以发现，每个文件名都没有了根目录。删掉根目录是为了安全，在tar所记录的文件名就是解压缩后实际文件名。如果拿掉了根目录，假设你将备份在 /tmp 解开，那么解压缩的文件名就会变成【/tmp/etc/xxx】。但是如果没有去掉根目录，解压缩后的文件名就会是绝对路径，即解压缩后的数据一定会被放置到 /etc/xxx 去，如此一来，可能会覆盖原本 etc 下面的数据。
+
+如果你确定要备份根目录到 tar 的文件中，那可以使用 -P（大写）这个选项
+
+```shell
+范例：将文件名中的（根）目录也备份下来，并查看一下备份文件的内容文件名
+[root@study ~]# tar -jpPcv -f /root/etc.and.root.tar.bz2 /etc
+[root@study ~]# tar -jtf /root/etc.and.root.tar.bz2
+/etc/locale.conf
+/etc/hostname
+/etc/aliases.db
+# 这次查看文件名不含 -v 选项，所以仅有文件名而已，没有详细属性/权限等参数。
+```
+
+#### 将备份的数据解压缩，并考虑特定目录的解压缩动作 （-C 选项的应用）
+
+```shell
+[root@study ~]# tar -jxv -f /root/etc.tar.bz2
+[root@study ~]# ll
+....（前面省略）....
+drwxr-xr-x. 131 root root 8192 Jun 26 22:14 etc
+....（后面省略）....
+```
+
+此时打包文件会在本目录下进行解压缩操作，利用 -C 可以指定解压缩的目录
+
+```shell
+[root@study ~]# tar -jxv -f /root/etc.tar.bz2 -C /tmp
+[root@study ~]# ll /tmp
+....（前面省略）....
+drwxr-xr-x. 131 root root 8192 Jun 26 22:14 etc
+....（后面省略）....
+```
+
+#### 仅解开单一文件的方法
+
+解开打包文件内的其中一个文件
+
+```shell
+# 1. 先找到我们要的文件名，假设解开 shadow 文件：
+[root@study ~]# tar -jtv -f /root/etc.tar.bz2 | grep 'shadow'
+---------- root/root 721 2015-06-17 00:20 etc/gshadow
+---------- root/root 1183 2015-06-17 00:20 etc/shadow-
+---------- root/root 1210 2015-06-17 00:20 etc/shadow <==这是我们要的
+---------- root/root 707 2015-06-17 00:20 etc/gshadow-
+# 2. 将该文件解开,语法与实际做法如下：
+[root@study ~]# tar -jxv -f /root/etc.tar.bz2 etc/shadow
+etc/shadow
+[root@study ~]# ll etc
+total 4
+----------. 1 root root 1210 Jun 17 00:20 shadow
+# 此时只会解开一个文件而已，不过，重点是那个文件名，你要找到正确的文件名。
+# 在本例中，你不能写成 /etc/shadow ，因为记录在 etc.tar.bz2 内的并没有 / 
+```
+
+#### 打包某目录，但不含该目录下的某些文件
+
+假设我们想要打包 /etc/ /root 这几个重要的目录，但却不想要打包 /root/etc* 开头的文件，而且假设这个新的打包文件要放置成为 /root/system.tar.bz2 ，当然这个文件自己不要打包自己 （因为这个文件放置在 /root 下面），此时我们可以通过 --exclude 的帮忙， 那个 exclude 就是不包含的意思：
+
+```shell
+[root@study ~]# tar -jcv -f /root/system.tar.bz2 --exclude=/root/etc* \
+> --exclude=/root/system.tar.bz2 /etc /root
+# 一条命令如果想要两行输入时，最后面加上反斜杠 \ ，并立刻按下[Enter]就好了
+```
+
+#### 仅备份比某个时刻还要新的文件
+
+有两个选项，一个是“ --newer ”另一个就是“ --newer-mtime ”，当使用“ --newer ”时，表示后续的日期包含“ mtime 与 ctime ”，而 “--newer-mtime” 则仅是 mtime 而已
+
+```shell
+# 1. 先由 find 找出比 /etc/passwd 还要新的文件
+[root@study ~]# find /etc -newer /etc/passwd
+....（过程省略）....
+# 此时会显示出比 /etc/passwd 这个文件的 mtime 还要新的文件名
+[root@study ~]# ll /etc/passwd
+-rw-r--r--. 1 root root 2092 Jun 17 00:20 /etc/passwd
+# 2. 好了，那么使用 tar 来进行打包吧！日期为上面看到的 2015/06/17
+[root@study ~]# tar -jcv -f /root/etc.newer.then.passwd.tar.bz2 \
+> --newer-mtime="2015/06/17" /etc/*
+tar: Option --newer-mtime: Treating date `2015/06/17' as 2015-06-17 00:00:00
+tar: Removing leading `/' from member names
+/etc/abrt/
+....（中间省略）....
+/etc/alsa/
+/etc/yum.repos.d/
+....（中间省略）....
+tar: /etc/yum.repos.d/CentOS-fasttrack.repo: file is unchanged; not dumped
+# 最后行显示的是“没有被备份的”，亦即 not dumped 的意思！
+# 3. 显示出文件即可
+[root@study ~]# tar -jtv -f /root/etc.newer.then.passwd.tar.bz2 | grep -v '/$'
+# 通过这个命令可以调用出 tar.bz2 内的结尾非 / 的文件名,就是我们要的
+```
+
+#### 基本名称： tarfile, tarball
+
+如果仅是打包而已，就是“ tar -cv -f file.tar ”，这个文件我们称呼为 tarfile。
+
+如果还有进行压缩的支持，例如“ tar -jcv -f file.tar.bz2 ”时，我们就称呼为 tarball。
+
+此外，tar 除了可以将数据打包成为文件之外，还能够将文件打包到某些特别的设备中去，举例来说， 磁带机（tape） 就是一个常见的例子。磁带由于是一次性读取/写入的设备，因此我们不能够使用类似 cp 等指令来复制， 那如果想要将 /home, /root, /etc 备份到磁带（/dev/st0） 时，就可以使用：
+
+“tar -cv -f /dev/st0 /home /root /etc”
+
+#### 特殊应用：利用管线命令与数据流
+
+```shell
+# 1. 将 /etc 整个目录一边打包一边在 /tmp 解开
+[root@study ~]# cd /tmp
+[root@study tmp]# tar -cvf - /etc | tar -xvf -
+# 这个动作有点像是 cp -r /etc /tmp ,依旧是有其用途的
+# 要注意的地方在于输出文件变成 - 而输入文件也变成 - ，又有一个 | 存在
+# 这分别代表 standard output, standard input 与管线命令
+# 简单的想法中，你可以将 - 想成是在内存中的一个设备（缓冲区）。
+```
+
+## 8.4 XFS 文件系统的备份与还原
+
+#### 8.4.1 XFS 文件系统备份 xfsdump
+
+xfsdump 除了可以进行文件系统的*完整备份*之外，还可以进行*增量备份*。假设你的 /home 是独立的一个文件系统，那你在第一次使用 xfsdump 进行完整备份后，等过一段时间的文件系统自然运行后， 你再进行第二次 xfsdump 时，就可以选择增量备份了，此时新备份的数据只会记录与第一次完整备份有所差异的文件。
+
+ ![image-20220402210119951](images\image-20220402210119951.png)
+
+上方的“实时文件系统”是一直随着时间而变化的数据，例如在 /home 里面的文件数据会一直变化一样。 而下面的方块则是 xfsdump 备份起来的数据，第一次备份一定是完整备份，完整备份在 xfsdump 当中被定义为 level 0 ，等到第二次备份时，/home 文件系统内的数据已经与 level 0 不一样了，而 level 1 仅只是比较目前的文件系统与 level 0 之间的差异后，备份有变化过的文件而已。**至于 level 2 则是与 level 1 进行比较**。
+
+使用 xfsdump 的限制：
+
+* xfsdump 不支持没有挂载的文件系统备份
+* xfsdump 必须使用 root 的权限才能操作
+* xfsdump 只能备份 XFS 文件系统
+* xfsdump 备份下来的数据 （文件或存储媒介） 只能让 xfsrestore 解析
+* xfsdump 是通过文件系统的 UUID 来分辨各个备份文件的，因此不能备份两个具有相同 UUID 的文件系统
+
+```shell
+[root@study ~]# xfsdump [-L S_label] [-M M_label] [-l #] [-f 备份文件] 待备份数据
+[root@study ~]# xfsdump -I
+选项与参数：
+-L ：xfsdump 会纪录每次备份的 session 标头，这里可以填写针对此文件系统的简易说明
+-M ：xfsdump 可以纪录存储媒介的标头，这里可以填写此媒介的简易说明
+-l ：是 L 的小写，就是指定等级，有 0~9 共 10 个等级 （默认为 0，即完整备份）
+-f ：有点类似 tar ，后面接产生的文件，亦可接例如 /dev/st0 设备文件名或其他一般文件文件名等
+-I ：从 /var/lib/xfsdump/inventory 列出目前备份的信息状态
+```
+
+##### 用 xfsdump 备份完整的文件系统**
+
+```shell
+# 1. 先确定 /boot 是独立的文件系统
+[root@study ~]# df -h /boot
+Filesystem Size Used Avail Use% Mounted on
+/dev/vda2 1014M 131M 884M 13% /boot # 挂载 /boot 的是 /dev/vda 设备
+# 确实是独立的文件系统喔 /boot 是挂载点
+# 2. 将完整备份的文件名记录成为 /srv/boot.dump ：
+[root@study ~]# xfsdump -l 0 -L boot_all -M boot_all -f /srv/boot.dump /boot
+xfsdump -l 0 -L boot_all -M boot_all -f /srv/boot.dump /boot
+xfsdump: using file dump （drive_simple） strategy
+xfsdump: version 3.1.4 （dump format 3.0） - type ^C for status and control
+xfsdump: level 0 dump of study.centos.vbird:/boot 			# 开始备份本机/boot
+xfsdump: dump date: Wed Jul 1 18:43:04 2015 # 备份的时间
+xfsdump: session id: 418b563f-26fa-4c9b-98b7-6f57ea0163b1 	# 这次dump的ID
+xfsdump: session label: "boot_all" 							# 简单给予一个名称
+xfsdump: ino map phase 1: constructing initial dump list 	# 开始备份程序
+xfsdump: ino map phase 2: skipping （no pruning necessary）
+xfsdump: ino map phase 3: skipping （only one dump stream）
+xfsdump: ino map construction complete
+xfsdump: estimated dump size: 103188992 Bytes
+xfsdump: creating dump session media file 0 （media 0, file 0）
+xfsdump: dumping ino map
+xfsdump: dumping directories
+xfsdump: dumping non-directory files
+xfsdump: ending media file
+xfsdump: media file size 102872168 Bytes
+xfsdump: dump size （non-dir files） : 102637296 Bytes
+xfsdump: dump complete: 1 seconds elapsed
+xfsdump: Dump Summary:
+xfsdump: stream 0 /srv/boot.dump OK （success）
+xfsdump: Dump Status: SUCCESS
+# 在命令的执行方面，你也可以不加 -L 及 -M 的，只是那就会进入交互模式，要求你 enter！
+[root@study ~]# ll /srv/boot.dump
+-rw-r--r--. 1 root root 102872168 Jul 1 18:43 /srv/boot.dump
+[root@study ~]# ll /var/lib/xfsdump/inventory
+-rw-r--r--. 1 root root 5080 Jul 1 18:43 506425d2-396a-433d-9968-9b200db0c17c.StObj
+-rw-r--r--. 1 root root 312 Jul 1 18:43 94ac5f77-cb8a-495e-a65b-2ef7442b837c.InvIndex
+-rw-r--r--. 1 root root 576 Jul 1 18:43 fstab
+# 使用了 xfsdump 之后才会有上述 /var/lib/xfsdump/inventory 内的文件产生
+```
+
+##### 用 xfsdump 进行增量备份 
+
+```shell
+# 0. 看一下有没有任何文件系统被 xfsdump 过的数据？
+[root@study ~]# xfsdump -I
+file system 0:
+fs id: 94ac5f77-cb8a-495e-a65b-2ef7442b837c
+session 0:
+mount point: study.centos.vbird:/boot
+device: study.centos.vbird:/dev/vda2
+time: Wed Jul 1 18:43:04 2015
+session label: "boot_all"
+session id: 418b563f-26fa-4c9b-98b7-6f57ea0163b1
+level: 0
+resumed: NO
+subtree: NO
+streams: 1
+stream 0:
+pathname: /srv/boot.dump
+start: ino 132 offset 0
+end: ino 2138243 offset 0
+interrupted: NO
+media files: 1
+media file 0:
+mfile index: 0
+mfile type: data
+mfile size: 102872168
+mfile start: ino 132 offset 0
+mfile end: ino 2138243 offset 0
+media label: "boot_all"
+media id: a6168ea6-1ca8-44c1-8d88-95c863202eab
+xfsdump: Dump Status: SUCCESS
+# 我们可以看到目前仅有一个 session 0 的备份数据而已,而且是 level 0
+# 1. 创建一个大约 10 MB 的文件在 /boot 内：
+[root@study ~]# dd if=/dev/zero of=/boot/testing.img bs=1M count=10
+10+0 records in
+10+0 records out
+10485760 Bytes （10 MB） copied, 0.166128 seconds, 63.1 MB/s
+# 2. 开始创建差异备份文件，此时我们使用 level 1 吧：
+[root@study ~]# xfsdump -l 1 -L boot_2 -M boot_2 -f /srv/boot.dump1 /boot
+....（中间省略）....
+[root@study ~]# ll /srv/boot*
+-rw-r--r--. 1 root root 102872168 Jul 1 18:43 /srv/boot.dump
+-rw-r--r--. 1 root root 10510952 Jul 1 18:46 /srv/boot.dump1
+# 看看文件大小，岂不是就是刚刚我们所创建的那个大文件的容量吗？
+# 3. 最后再看一下是否有记录 level 1 备份的时间点呢？
+[root@study ~]# xfsdump -I
+file system 0:
+fs id: 94ac5f77-cb8a-495e-a65b-2ef7442b837c
+session 0:
+mount point: study.centos.vbird:/boot
+device: study.centos.vbird:/dev/vda2
+....（中间省略）....
+session 1:
+mount point: study.centos.vbird:/boot
+device: study.centos.vbird:/dev/vda2
+time: Wed Jul 1 18:46:21 2015
+session label: "boot_2"
+session id: c71d1d41-b3bb-48ee-bed6-d77c939c5ee8
+level: 1
+resumed: NO
+subtree: NO
+streams: 1
+stream 0:
+pathname: /srv/boot.dump1
+start: ino 455518 offset 0
+....（下面省略）....
+```
+
+#### 8.4.2 XFS 文件系统还原 xfsrestore
+
+```shell
+[root@study ~]# xfsrestore -I <==用来查看备份文件
+[root@study ~]# xfsrestore [-f 备份文件] [-L S_label] [-s] 待复原目录 <==单一文件全系统恢复
+[root@study ~]# xfsrestore [-f 备份文件] -r 待复目录 <==通过增量备份文件来恢复系统
+[root@study ~]# xfsrestore [-f 备份文件] -i 待复目录 <==进入交互模式
+选项与参数：
+-I ：跟 xfsdump 相同的输出。可查询备份数据，包括 Label 名称与备份时间等
+-f ：后面接的就是备份文件，企业界很有可能会接 /dev/st0 等磁带机，我们这里接文件名。
+-L ：就是 Session 的 Label name ，可用 -I 查询到的数据，在这个选项后输入
+-s ：需要接某特定目录，亦即仅恢复某一个文件或目录之意
+-r ：如果是用文件来存储备份数据，那这个就不需要使用。如果是一个磁带内有多个文件，需要这东西来完成累积恢复
+-i ：进入交互模式，高级管理员使用的，一般我们不太需要操作它
+```
+
+##### 用 xfsrestore 观察 xfsdump 后的备份数据内容
+
+```shell
+[root@study ~]# xfsrestore -I
+file system 0:
+fs id: 94ac5f77-cb8a-495e-a65b-2ef7442b837c
+session 0:
+mount point: study.centos.vbird:/boot
+device: study.centos.vbird:/dev/vda2
+time: Wed Jul 1 18:43:04 2015
+session label: "boot_all"
+session id: 418b563f-26fa-4c9b-98b7-6f57ea0163b1
+level: 0
+pathname: /srv/boot.dump
+mfile size: 102872168
+media label: "boot_all"
+session 1:
+mount point: study.centos.vbird:/boot
+device: study.centos.vbird:/dev/vda2
+time: Wed Jul 1 18:46:21 2015
+session label: "boot_2"
+session id: c71d1d41-b3bb-48ee-bed6-d77c939c5ee8
+level: 1
+pathname: /srv/boot.dump1
+mfile size: 10510952
+media label: "boot_2"
+xfsrestore: Restore Status: SUCCESS
+# 我们可以看到这个文件系统是 /boot 载点，然后有两个备份，一个 level 0 一个 level 1。
+# 也看到这两个备份的数据的内容大小,更重要的，就是那个 session label
+```
+
+##### 简单恢复 level 0 的文件系统
+
+```shell
+# 1. 直接将数据给它覆盖回去即可。
+[root@study ~]# xfsrestore -f /srv/boot.dump -L boot_all /boot
+xfsrestore: using file dump （drive_simple） strategy
+xfsrestore: version 3.1.4 （dump format 3.0） - type ^C for status and control
+xfsrestore: using online session inventory
+xfsrestore: searching media for directory dump
+xfsrestore: examining media file 0
+xfsrestore: reading directories
+xfsrestore: 8 directories and 327 entries processed
+xfsrestore: directory post-processing
+xfsrestore: restoring non-directory files
+xfsrestore: restore complete: 1 seconds elapsed
+xfsrestore: Restore Summary:
+xfsrestore: stream 0 /srv/boot.dump OK （success） # 是否是正确的文件？
+xfsrestore: Restore Status: SUCCESS
+# 2. 将备份数据在 /tmp/boot 下面解开！
+[root@study ~]# mkdir /tmp/boot
+[root@study ~]# xfsrestore -f /srv/boot.dump -L boot_all /tmp/boot
+```
+
+##### 恢复增量备份数据
+
+```shell
+# 继续恢复 level 1 到 /tmp/boot 当中！
+[root@study ~]# xfsrestore -f /srv/boot.dump1 /tmp/boot
+```
+
+##### 仅还原部分文件的 xfsrestore 交互模式
+
+刚刚的 -s 可以接部分数据来还原，但是，如果我们根本不知道备份文件里面有啥文件，就可以通过 -i 这个交互界面来完成。
+
+```shell
+# 1. 先进入备份文件内，找出需要备份的文件，同时预计还原到 /tmp/boot3 当中
+[root@study ~]# mkdir /tmp/boot3
+[root@study ~]# xfsrestore -f /srv/boot.dump -i /tmp/boot3
+========================== subtree selection dialog ==========================
+the following commands are available:
+pwd
+ls [ <path> ]
+cd [ <path> ]
+add [ <path> ] # 可以加入恢复文件列表中
+delete [ <path> ] # 从恢复列表拿掉文件名，并非删除
+extract # 开始恢复操作
+quit
+help
+-> ls
+	455517 initramfs-3.10.0-229.el7.x86_64kdump.img
+	138 initramfs-3.10.0-229.el7.x86_64.img
+	141 initrd-plymouth.img
+	140 vmlinuz-0-rescue-309eb890d09f440681f596543d95ec7a
+	139 initramfs-0-rescue-309eb890d09f440681f596543d95ec7a.img
+	137 vmlinuz-3.10.0-229.el7.x86_64
+	136 symvers-3.10.0-229.el7.x86_64.gz
+	135 config-3.10.0-229.el7.x86_64
+	134 System.map-3.10.0-229.el7.x86_64
+	133 .vmlinuz-3.10.0-229.el7.x86_64.hmac
+	1048704 grub2/
+	131 grub/
+-> add grub
+-> add grub2
+-> add config-3.10.0-229.el7.x86_64
+-> extract
+[root@study ~]# ls -l /tmp/boot3
+-rw-r--r--. 1 root root 123838 Mar 6 19:45 config-3.10.0-229.el7.x86_64
+drwxr-xr-x. 2 root root 26 May 4 17:52 grub
+drwxr-xr-x. 6 root root 104 Jun 25 00:02 grub2
+# 就只会有 3 个文件名被恢复，当然，如果文件名是目录，那下面的子文件当然也会被还原回来的
+```
+
+## 8.5 光盘写入工具
+
+命令行模式的刻录操作通常是：
+
+* 先将所需备份的数据创建成为一个镜像文件（iso），利用 mkisofs 命令来处理
+* 将该镜像文件刻录至CD或DVD当中，利用cdrecord命令来处理
+
+### mkisofs：创建镜像文件
