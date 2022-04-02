@@ -1,9 +1,5 @@
 # 剑指offer
 
-***
-
-
-
 ## 面试题4：二维数组中的查找
 
 ### 题目
@@ -55,8 +51,6 @@ bool findNum(int a[][], int rows, int columns, int number){
     }
 }
 ```
-
-***
 
 ## 面试题5：替换空格
 
@@ -122,8 +116,6 @@ int main(){
 }
 ```
 
-***
-
 ## 面试题6：从尾到头打印链表
 
 ### 题目
@@ -166,13 +158,11 @@ void PrintListReversingly_Recursively(ListNode* pHead){
 }
 ```
 
-***
-
 ## 面试题7：重建二叉树
 
 ### 题目
 
-输入某二叉树的前序遍历和中序遍历的结果，请重建出该二叉树。假设输入的前序遍历和中序遍历的结果中都不含重复的数字。例如输入前序遍历序列{1, 2, 4, 7, 3, 5, 6, 8}和中序遍历序列{4, 7, 2, 1, 5, 3, 8, 6}，则重建出图所示的二叉树并输出它的头结点。二叉树节点的定义如下：
+输入某二叉树的前序遍历和中序遍历的结果，请重建出该二叉树。假设输入的前序遍历和中序遍历的结果中都不含重复的数字。例如输入前序遍历序列{1, 2, 4, 7, 3, 5, 6, 8}和中序遍历序列{4, 7, 2, 1, 5, 3, 8, 6}，则重建出如图所示的二叉树并输出它的头结点。二叉树节点的定义如下：
 
  ![image-20220226160048561](/images/image-20220226160048561.png)
 
@@ -181,7 +171,7 @@ struct BinaryTreeNode{
     int m_nValue;
     BinaryTreeNode* m_pLeft;
     BinaryTreeNode* m_pRight;
-}
+};
 ```
 
 ### 解题思路
@@ -296,8 +286,6 @@ BinaryTreeNode* getNexeNode(BinaryTreeNode *pNode){
 }
 ```
 
-***
-
 ## 面试题9：用两个栈实现队列
 
 ### 题目
@@ -355,8 +343,6 @@ template<typename T>T CQueue::deleteHead(){
 }
 ```
 
-***
-
 ## 面试题10：求斐波那契数列的第n项
 
 ### 题目
@@ -410,8 +396,6 @@ long long Fabonacci(unsigned n){
     return ret;
 }
 ```
-
-***
 
 ## 面试题11：旋转数组的最小数字
 
@@ -473,8 +457,6 @@ int Min(int *numbers, int length){
     return numbers[high];
 }
 ```
-
-***
 
 ## 面试题12：矩阵中的路径
 
@@ -545,8 +527,6 @@ bool hasPathCore(const char *matrix, int rows, int cols, int row, int col,
 }
 ```
 
-***
-
 ## 面试题13：机器人的运动范围
 
 ### 题目
@@ -593,8 +573,6 @@ int countGridCore(int threshold, int rows, int cols, int row, int col, bool *vis
     return count;
 }
 ```
-
-***
 
 ## 面试题14：剪绳子
 
@@ -657,8 +635,6 @@ int maxProduct(int length){
 ```
 
 **这里需要注意的是，对于product[2]，因为题目要求至少剪一刀，因此f(2)应当返回1，但是实际上我们可以不剪，即2>1×1，因此product[2] = 2；同理f(3)也可以不剪，3>f(3)，因此product[3] = 3**
-
-***
 
 ## 面试题15：二进制中1的个数
 
@@ -726,8 +702,6 @@ int NUmberOf1(int n){
     return count;
 }
 ```
-
-***
 
 ## 面试题16：数值的整数次方
 
@@ -826,8 +800,6 @@ double PowerPositive(double base, int exponent){
     return result;
 }
 ```
-
-***
 
 ## 面试题17：打印从1到最大的n位数
 
@@ -950,8 +922,6 @@ void Print1ToMaxOfNDigits_2(int n)
 }
 ```
 
-***
-
 ## 面试题18-1：在O(1)时间内删除链表节点
 
 ### 题目
@@ -1007,8 +977,6 @@ void DeleteNode(ListNode** pListHead, ListNode* pToBeDeleted){
 }
 ```
 
-***
-
 ## 面试题18-2：删除链表中重复的节点
 
 ### 题目
@@ -1060,8 +1028,6 @@ void deleteDuplication(ListNode **pHead){
     }
 }
 ```
-
-***
 
 ## 面试题19：正则表达式匹配
 
@@ -1126,8 +1092,6 @@ bool regularMatch(const char* str, const char* pattern){
 }
 ```
 
-***
-
 ## 面试题20：表示数值的字符串
 
 ### 题目
@@ -1191,8 +1155,6 @@ bool scanInteger(const char **str){
 }
 ```
 
-***
-
 ## 面试题21：调整数组顺序使奇数位于偶数前面
 
 ### 题目
@@ -1237,8 +1199,6 @@ bool isEven(int number){     // 判断一个数字是否是偶数
 }
 ```
 
-***
-
 ## 面试题22：链表中倒数第k个节点
 
 ### 题目
@@ -1279,8 +1239,6 @@ ListNode* FindKthToTail(ListNode *pHead, int k){
     return pSlow;
 }
 ```
-
-***
 
 ## 面试题23：链表中环的入口节点
 
@@ -1361,8 +1319,6 @@ ListNode* entryOfLoop(ListNode* pHead){
 }
 ```
 
-***
-
 ## 面试题24：反转链表
 
 ### 题目
@@ -1402,8 +1358,6 @@ ListNode* reverseLst(ListNode* pHead){
     return nullptr;
 }
 ```
-
-***
 
 ## 面试题25：合并两个排序的链表
 
@@ -1491,8 +1445,6 @@ ListNode* mergeRecursive(ListNode* pHead1, ListNode* pHead2){
 }
 ```
 
-***
-
 ## 面试题26：
 
 ### 题目
@@ -1575,8 +1527,6 @@ bool HasSubTree2(BinaryTreeNode* pRoot1, BinaryTreeNode* pRoot2){
 }
 ```
 
-***
-
 ## 面试题27：二叉树的镜像
 
 ### 题目：
@@ -1622,8 +1572,6 @@ void MirrorRecursively(BinaryTreeNode* pNode){
         MirrorRecursively(pNode->m_pRight);
 }
 ```
-
-***
 
 ## 面试题28：对称的二叉树
 
@@ -2034,6 +1982,51 @@ void PrintBST(BinaryTreeNode* root){
             cout << '\n';
         }
     }
+}
+```
+
+## 面试题33：二叉搜索树的后序遍历序列
+
+### 题目
+
+输入一个整数数组，判断该数组是不是某二叉搜索树的后序遍历结果。如果是则返回true，否则返回false。假设输入的数组的任意两个数字都互不相同。例如，输入数组{5，7，6，9，11，10，8}，则返回true，因为这个整数序列是图中二叉搜索树的后序遍历结果。如果输入的数组是{7，4，6，5}，则由于没有哪棵二叉搜索树的后序遍历结果是这个序列，因此返回false。
+
+ ![image-20220402092933751](images\image-20220402092933751.png)
+
+### 解题思路
+
+在后序遍历得到的序列中，最后一个数字是树的根节点的值。数组中前面的数字可以分为两部分：第一部分是左子树节点的值，它们都比根节点的值小；第二部分是右子树节点的值，它们都比根节点的值大。
+
+例如对于序列{5，7，6，9，11，10，8}，8为根节点，前3个数字5、7、6比8小，是8的左子树节点；后3个数字9、11、10比8大，是8的右子树节点
+接下来利用递归的方法分别检测8的左子树和右子树：{5，7，6}的根节点为6，5为其左子树节点，7为其右子树节点。{9，11，10}的根节点为10，9为其左子树节点，11为其右子树节点.
+
+对于序列{7，4，6，5}，5为根节点，我们发现第一个值7就比5大，因此7，4，6均为5的右子树节点，根据二叉搜索树的特性，我们知道7，4，6均应该大于根节点5，其中4小于5，因此该序列不是二叉搜索树的后序遍历序列。
+
+通过以上分析，可以确定程序思路：
+
+对于某一序列，其最后一个值为根节点，从前向后遍历该序列，找到第一个大于根节点的值，那么从该值起到倒数第二个值应该为根节点的右子树节点，若其中有比根节点小的值，则返回false，否则递归地检查根节点地左子树序列，和右子树序列。
+
+### 代码实现
+
+```c++
+bool isPostOrderOfBST(int *postOrder, int length){
+    if(postOrder == nullptr || length < 0)
+        return false;
+    if(length == 1 || length == 0)         	// 递归终止条件：序列中只有一个节点或没有节点
+        return true;
+    int root = postOrder[length - 1];
+    int rightTreeStr = 0;
+    while(postOrder[rightTreeStr] < root)   // 查找右子树的起始节点
+        rightTreeStr++;
+    for(int i = rightTreeStr; i < length - 1; i++){ // 检查右子树的节点是否都大于根节点
+        if(postOrder[i] < root)
+            return false;
+    }
+    int leftTreeLen = rightTreeStr;
+    int rightTreeLen = length - leftTreeLen - 1;
+    return isPostOrderOfBST(postOrder, leftTreeLen) &&      // 递归检查其左子树和右子树
+            isPostOrderOfBST(postOrder + rightTreeStr, rightTreeLen);
+
 }
 ```
 
