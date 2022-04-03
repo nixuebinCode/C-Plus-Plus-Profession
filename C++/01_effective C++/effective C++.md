@@ -4138,3 +4138,201 @@ private:
 Now many — maybe all — of `SquareMatrix`'s member functions can be simple inline calls to (non-inline) base class versions that are shared with all other matrices holding the same type of data, regardless of their size. At the same time, SquareMatrix objects of different sizes are distinct types.
 
 e.g., `SquareMatrix<double, 5>` and `SquareMatrix<double, 10>` objects use the same member functions in `SquareMatrixBase<double>`
+
+## Item 45: Use member function templates to accept “all compatible types.”
+Built-in pointers support implicit conversions:
+
+```c++
+class Top { ... };
+class Middle: public Top { ... };
+class Bottom: public Middle { ... };
+Top *pt1 = new Middle; // convert Middle* ⇒ Top*
+Top *pt2 = new Bottom; // convert Bottom* ⇒ Top*
+const Top *pct2 = pt1; // convert Top* ⇒ const Top*
+```
+
+Emulating such conversions in user-defined smart pointer classes is tricky:
+
+```c++
+template<typename T>
+class SmartPtr {
+public: 								// smart pointers are typically
+	explicit SmartPtr(T *realPtr); 		// initialized by built-in pointers
+	...
+};
+SmartPtr<Top> pt1 = SmartPtr<Middle>(new Middle); // convert SmartPtr<Middle> ⇒ SmartPtr<Top>
+SmartPtr<Top> pt2 = SmartPtr<Bottom>(new Bottom); // convert SmartPtr<Bottom> ⇒ martPtr<Top>
+SmartPtr<const Top> pct2 = pt1; 				  // convert SmartPtr<Top> ⇒ SmartPtr<const Top>
+```
+
+There is no inherent relationship among different instantiations of the same template, so compilers view `SmartPtr<Middle>` and `SmartPtr<Top>` as completely different classes. To get the conversions among `SmartPtr` classes that we want, we have to program them explicitly.
+
+### constructor template
+
+Such templates are examples of member function templates (often just known as member templates) — templates that generate member functions of a class:
+
+```c++
+template<typename T>
+class SmartPtr {
+public:
+	template<typename U> SmartPtr(const SmartPtr<U>& other);// member template for a "generalized copy constructor"
+	... 
+};
+```
+
+This says that for every type `T` and every type `U`, a `SmartPtr<T>` can be created from a `SmartPtr<U>`, because `SmartPtr<T>` has a constructor that takes a `SmartPtr<U>` parameter.
+
+Constructors like this — ones that create one object from another object whose type is a different instantiation of the same template (e.g., create a `SmartPtr<T>` from a `SmartPtr<U`>) — are sometimes known as **generalized copy constructors**.
+
+### restrict the conversions
+
+We want to be able to create a `SmartPtr<Top>` from a `SmartPtr<Bottom>`, but we don't want to be able to create a `SmartPtr<Bottom>` from a `SmartPtr<Top>`, as that's contrary to the meaning of public inheritance. We also don't want to be able to create a `SmartPtr<int>` from a
+`SmartPtr<double>`, because there is no corresponding implicit conversion from `int*` to `double*`.
+
+```c++
+template<typename T>
+class SmartPtr {
+public:
+	template<typename U> SmartPtr(const SmartPtr<U>& other) // initialize this held ptr with other's held ptr
+		: heldPtr(other.get()) { ... } 
+	T* get() const { return heldPtr; }
+	...
+private: 
+	T *heldPtr; // built-in pointer held by the SmartPtr
+};
+```
+
+We use the member initialization list to initialize `SmartPtr<T>`'s data member of type `T*` with the pointer of type `U*` held by the `SmartPtr<U>`. This will compile only if there is an implicit conversion from a `U*` pointer to a `T*` pointer, and that's precisely what we want.
+
+### member function templates for assignment
+
+An excerpt from TR1's specification for `tr1::shared_ptr`:
+
+```c++
+template<class T> class shared_ptr {
+public:
+	template<class Y> explicit shared_ptr(Y * p);					// construct from any compatible built-in pointer,
+	template<class Y> shared_ptr(shared_ptr<Y> const& r);			//	shared_ptr, (the generalized copy constructor)
+	template<class Y> explicit shared_ptr(weak_ptr<Y> const& r);	// weak_ptr
+	template<class Y> explicit shared_ptr(auto_ptr<Y>& r);			// or auto_ptr
+
+	template<class Y> shared_ptr& operator=(shared_ptr<Y> const& r);// assign from any compatible shared_ptr 
+	template<class Y> shared_ptr& operator=(auto_ptr<Y>& r); 		// or auto_ptr
+	...
+};
+```
+
+### member templates don't change the rules of the language
+
+The rules state that if a copy constructor is needed and you don't declare one, one will be generated for you automatically.
+
+Declaring a generalized copy constructor (a member template) in a class doesn't keep compilers from generating their own copy constructor (a non-template), so if you want to control all aspects of copy construction, you must declare both a generalized copy constructor as well as the “normal” copy constructor. The same applies to assignment:
+
+```C++
+template<class T> class shared_ptr {
+public:
+	shared_ptr(shared_ptr const& r); 						// copy constructor
+	template<class Y> shared_ptr(shared_ptr<Y> const& r);	// generalized copy constructor
+
+	shared_ptr& operator=(shared_ptr const& r); 						// copy assignment
+	template<class Y> shared_ptr& operator=(shared_ptr<Y> const& r);	// generalized copy assignment
+	...
+};
+```
+
+## Item 46: Define non-member functions inside templates when type conversions are desired
+Templatizes both `Rational` and `operator*` in Item 24:
+
+```c++
+template<typename T>
+class Rational {
+public:
+	Rational(const T& numerator = 0, const T& denominator = 1);
+	const T numerator() const;
+	const T denominator() const;
+    ...
+};
+template<typename T>
+const Rational<T> operator*(const Rational<T>& lhs, const Rational<T>& rhs)
+{ ... }
+
+Rational<int> oneHalf(1, 2);
+Rational<int> result = oneHalf * 2; // error! mix mode multiplication won't compile
+```
+
+The fact that the last statement fails to compile suggests that there's something that the templatized `Rational` is different from the non-template version:
+
+In the non-template version, compilers know what function we're trying to call (operator* taking two Rationals), but here, compilers do not know which function we want to call. Instead, they're trying to figure out what function to instantiate from the template named `operator*`, taking two parameters of type `Rational<T>`
+
+In attempting to deduce `T`, they look at the types of the arguments being passed in the call to `operator*`. In this case, those types are `Rational<int>` and `int`. Each parameter is considered separately.
+
+* The deduction using `Rational<int>` is easy. `operator*`'s first parameter is declared to be of type `Rational<T>`, and the first argument passed to `operator*` (`oneHalf`) is of type `Rational<int>`, so `T` must be `int`.
+* Unfortunately, the deduction for the other parameter is not so simple. `operator*`'s second parameter is declared to be of type `Rational<T>`, but the second argument passed to `operator*` (2) is of type `int`. You might expect them to use `Rational<int>`'s non-explicit constructor to convert 2 into a `Rational<int>`, thus allowing them to deduce that `T` is `int`, but they don't do that. **Because implicit type conversion functions are never considered during template argument deduction**.
+
+### A `friend` declaration in a template class can refer to a specific function
+The class `Rational<T>` can declare `operator*` for `Rational<T>` as a friend function. So T is always known at the time the class `Rational<T>` is instantiated.
+
+```c++
+template<typename T>
+class Rational {
+public:
+	...
+	friend const Rational operator*(const Rational& lhs, const Rational& rhs); // declare operator* function
+    																		   // inside Rational<T>, we can just 
+    																		   // write Rational instead of Rational<T>.
+};
+template<typename T> // define operator* functions
+const Rational<T> operator*(const Rational<T>& lhs, const Rational<T>& rhs)//
+{ ... }
+```
+
+In this case, when the object `oneHalf` is declared to be of type `Rational<int>`, the class `Rational<int>` is instantiated, and as part of that process, the friend function `operator*` that takes `Rational<int>` parameters is automatically declared. As a declared function (not a function template), compilers can use implicit conversion functions (such as `Rational`'s non-explicit constructor) when calling it, and that's how they make the mixed-mode call succeed.
+
+### Define those functions as friends inside the class template
+Although the code above will compile, it won't link:
+
+The mixed-mode code compiles, because compilers know that we want to call a specific function (`operator*` taking a `Rational<int>` and a `Rational<int>`), but that function is only declared inside `Rational`, not defined there. If we declare a function ourselves (which is what we're doing inside the `Rational` template), we're also responsible for defining that function. In this case, we never provide a definition, and that's why linkers can't find one.
+
+The simplest thing that could possibly work is to merge the body of `operator*` into its declaration:
+
+```c++
+template<typename T>
+class Rational {
+public:
+	...
+	friend const Rational operator*(const Rational& lhs, const Rational& rhs)
+	{
+		return Rational(lhs.numerator() * rhs.numerator(), lhs.denominator() * rhs.denominator());
+	}
+};
+```
+
+Functions defined inside a class are implicitly declared `inline`, and that includes friend functions like `operator*`. You can minimize the impact of such `inline` declarations by having `operator*` do nothing but **call a helper function defined outside of the class**.
+
+```c++
+template<typename T> class Rational; // declare Rational template
+
+template<typename T> // declare helper template
+const Rational<T> doMultiply(const Rational<T>& lhs, const Rational<T>& rhs);
+
+template<typename T>
+class Rational {
+public:
+	...
+	friend const Rational<T> operator*(const Rational<T>& lhs, const Rational<T>& rhs) // Have friend call helper
+		{ return doMultiply(lhs, rhs); }
+	...
+};
+```
+
+```c++
+template<typename T> // define helper template in header file, if necessary
+const Rational<T> doMultiply(const Rational<T>& lhs, const Rational<T>& rhs) 
+{ 
+	return Rational<T>(lhs.numerator() * rhs.numerator(), lhs.denominator() * rhs.denominator());
+}
+```
+
+As a template, of course, `doMultiply` won't support mixed-mode multiplication, but it doesn't need to. In essence, the function `operator*` supports
+whatever type conversions are necessary to ensure that two `Rational` objects are being multiplied, then it passes these two objects to an appropriate
+instantiation of the `doMultiply` template to do the actual multiplication.
