@@ -2030,3 +2030,71 @@ bool isPostOrderOfBST(int *postOrder, int length){
 }
 ```
 
+## 面试题34：二叉树中和为某一值的路径
+
+### 题目
+
+输入一棵二叉树和一个整数，打印出二叉树中节点值的和为输入整数的所有路径。从树的根节点开始往下一直到叶节点所经过的节点形成一条路径。例如输入图中的二叉树和整数22，则打印出两条路径，第一条路径包括节点10、12，第二条路径包括节点10、5、7。二叉树节点的定义如下：
+
+```c++
+struct BinaryTreeNode
+{
+	int m_nValue;
+    BinaryTreeNode* m_pLeft;
+	BinaryTreeNode* m_pRight;
+}；
+```
+
+ ![image-20220403095736154](images\image-20220403095736154.png)
+
+### 解题思路
+
+由于路径是由根节点出发的，我们首先要遍历根节点，在树的几种遍历算法中，只有前序遍历是首先访问根节点。
+
+以图中的二叉树为例：
+
+* 先序遍历，每访问一个节点，我们就把当前节点添加到路径中去，当到达节点5时，路径中包括10，5，接下来遍历到节点4，我们把4也添加到路径中去，因为4是叶子节点，我们计算路径的和，为19，不符合要求。
+* 我们接着遍历下一个节点，在遍历7之前，**先要从节点4返回节点5**，此时我们需要把4从路径中删除，接下来访问节点7，由于7是叶子节点，计算路径的和，为22，符合要求，则打印出路径。
+* 同理，继续遍历下一个节点，在遍历12之前，**先要从节点7返回节点5，然后从节点5返回节点10**，此时需要把路径中的7，5从路径中删除，接下来访问节点12，由于12是叶子节点，计算路径的和，为22，符合要求，则打印出路径。
+
+因此我们可以总结出程序的步骤：
+
+* 先序遍历二叉树，每遍历到一个节点，将其加入路径中去，当加入的节点为叶子节点时，计算路径之和，若符合要求则打印路径。
+* 继续遍历，若遍历时从某个节点返回其父亲节点，则把该节点从路径中删除，即当前层递归结束的时候，把它删除。（可以注意到我们每次从路径中删除的节点都是最后加入路径的，因此可以借助栈来完成）。
+
+### 代码实现
+
+```c++
+void PrintPath(BinaryTreeNode*, int, int &, vector<BinaryTreeNode*> &);
+
+void PrintPath(BinaryTreeNode* root, int sumOfPath){
+    if(root == nullptr || sumOfPath < 0)
+        return;
+    vector<BinaryTreeNode*> path;   // 用curSum记录当前路径之和，避免每次重新遍历路径，计算路径和
+    int curSum = 0;
+    PrintPath(root, sumOfPath, curSum, path);
+}
+// 注意这里curSum和path使用引用类型，这样在下层递归中修改curSum和path时，能够影响上层递归。
+void PrintPath(BinaryTreeNode* pNode, int sumOfPath, int &curSum, vector<BinaryTreeNode*> &path){									if(pNode == nullptr)    // 递归终止条件
+        return;    
+    path.push_back(pNode);   // 将当前节点加入路径
+    curSum += pNode->m_nValue;
+    if(pNode->m_pLeft == nullptr && pNode->m_pRight == nullptr){  // 当前节点为叶子节点
+        if(curSum == sumOfPath){
+            for(auto item : path)
+                cout << item->m_nValue << '\t';
+            cout << endl;
+        }
+    }
+    PrintPath(pNode->m_pLeft, sumOfPath, curSum, path);
+    PrintPath(pNode->m_pRight, sumOfPath, curSum, path);
+    // 当前递归结束，返回上层
+    path.pop_back();
+    curSum -= pNode->m_nValue;
+}
+```
+
+
+
+
+
