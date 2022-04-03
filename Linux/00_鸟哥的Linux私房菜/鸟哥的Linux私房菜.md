@@ -1,5 +1,7 @@
 
 
+
+
 # 第2章 主机规划与磁盘分区
 
 ## 2.1 各硬件设备在Linux中的文件名
@@ -3834,4 +3836,320 @@ drwxr-xr-x. 6 root root 104 Jun 25 00:02 grub2
 * 先将所需备份的数据创建成为一个镜像文件（iso），利用 mkisofs 命令来处理
 * 将该镜像文件刻录至CD或DVD当中，利用cdrecord命令来处理
 
-### mkisofs：创建镜像文件
+### 8.5.1 mkisofs：创建镜像文件
+
+#### 制作一般数据光盘镜像文件
+
+```shell
+[root@study ~]# mkisofs [-o 镜像文件] [-Jrv] [-V vol] [-m file] 待备份文件... \
+> -graft-point isodir=systemdir ...
+选项与参数：
+-o ：后面接你想要产生的那个镜像文件文件名。
+-J ：产生较兼容于 windows 机器的文件名结构，可增加文件名长度到 64 个 unicode 字符
+-r ：通过 Rock Ridge 产生支持 Unix/Linux 的文件数据，可记录较多的信息（如 UID/GID等） ；
+-v ：显示创建 ISO文件的过程
+-V vol ：创建 Volume，有点像 Windows 在文件资源管理器内看到的 CD 卷标
+-m file ：-m 为排除文件 （exclude） 的意思，后面的文件不备份到镜像文件中，也能使用 * 通配符
+-graft-point：graft有转嫁或移植的意思，相关内容在下面文章内说明。
+```
+
+光盘的格式一般称为 iso9660 ，这种格式一般仅支持旧版的 DOS 文件名，亦即文件名只能以 8.3 （文件名8个字符，扩展名3个字符） 的方式存在。如果加上 -r 的选项之后，那么文件信息能够被记录的比较完整，可包括UID/GID与权限等等！ 所以，记得加这个 -r 的选项。
+
+一般默认的情况下，所有要被加到镜像文件中的文件都会被放置到镜像文件中的根目录， 如此一来可能会造成刻录后的文件分类不易的情况。所以，你可以使用 -graft-point 这个选项，当你使用这个选项之后， 可以利用如下的方法来定义位于镜像文件中的目录：
+
+* 镜像文件中的目录所在=实际 Linux 文件系统的目录所在
+* /movies/=/srv/movies/ （在 Linux 的 /srv/movies 内的文件，加至镜像文件中的 /movies/ 目录）
+* /linux/etc=/etc （将 Linux 中的 /etc/ 内的所有数据备份到镜像文件中的 /linux/etc/ 目录中）
+
+```shell
+[root@study ~]# mkisofs -r -v -o /tmp/system.img /root /home /etc
+I: -input-charset not specified, using utf-8 （detected in locale settings）
+genisoimage 1.1.11 （Linux）
+Scanning /root
+.....（中间省略）.....
+Scanning /etc/scl/prefixes
+Using SYSTE000.;1 for /system-release-cpe （system-release） 		# 被改名子了
+Using CENTO000.;1 for /centos-release-upstream （centos-release） # 被改名子了
+Using CRONT000.;1 for /crontab （crontab）
+genisoimage: Error: '/etc/crontab' and '/root/crontab' have the same Rock Ridge name 'crontab'.
+Unable to sort directory 										 # 文件名不可一样
+NOTE: multiple source directories have been specified and merged into the root
+of the filesystem. Check your program arguments. genisoimage is not tar.
+# 因为文件名一模一样，所以就不给你创建 ISO 文件了
+# 请先删除 /root/crontab 这个文件，然后再重复执行一次 mkisofs
+[root@study ~]# rm /root/crontab
+[root@study ~]# mkisofs -r -v -o /tmp/system.img /root /home /etc
+.....（前面省略）.....
+83.91% done, estimate finish Thu Jul 2 18:48:04 2015
+92.29% done, estimate finish Thu Jul 2 18:48:04 2015
+Total translation table size: 0
+Total rockridge attributes Bytes: 600251
+Total directory Bytes: 2150400
+Path table size（Bytes）: 12598
+Done with: The File（s） Block（s） 58329
+Writing: Ending Padblock Start Block 59449
+Done with: Ending Padblock Block（s） 150
+Max brk space used 548000
+59599 extents written （116 MB）
+[root@study ~]# ll -h /tmp/system.img
+-rw-r--r--. 1 root root 117M Jul 2 18:48 /tmp/system.img
+[root@study ~]# mount -o loop /tmp/system.img /mnt
+[root@study ~]# df -h /mnt
+Filesystem Size Used Avail Use% Mounted on
+/dev/loop0 117M 117M 0 100% /mnt
+[root@study ~]# ls /mnt
+abrt festival mail.rc rsyncd.conf
+adjtime filesystems makedumpfile.conf.sample rsyslog.conf
+alex firewalld man_db.conf rsyslog.d
+# 三个目录（/root /home /etc）的数据通通放置到了镜像文件的最顶层目录中
+[root@study ~]# umount /mnt
+# 测试完毕要记得卸载
+```
+可以看到三个目录（/root /home /etc）的数据通通放置到了镜像文件的最顶层目录中，而且由于 /root/etc 的存在，导致 /etc 的数据似乎没有被包含进来。
+
+```shell
+[root@study ~]# mkisofs -r -V 'linux_file' -o /tmp/system.img \
+> -m /root/etc -graft-point /root=/root /home=/home /etc=/etc
+[root@study ~]# ll -h /tmp/system.img
+-rw-r--r--. 1 root root 92M Jul 2 19:00 /tmp/system.img
+# 上面的指令会创建一个大文件，其中 -graft-point 后面接的就是我们要备份的数据。
+# 必须要注意的是那个等号的两边，等号左边是在镜像文件内的目录，右侧则是实际的数据。
+[root@study ~]# mount -o loop /tmp/system.img /mnt
+[root@study ~]# ll /mnt
+dr-xr-xr-x. 131 root root 34816 Jun 26 22:14 etc
+dr-xr-xr-x. 5 root root 2048 Jun 17 00:20 home
+dr-xr-xr-x. 8 root root 4096 Jul 2 18:48 root
+# 数据是分门别类的在各个目录中,最后将数据卸载一下：
+[root@study ~]# umount /mnt
+```
+
+### 8.5.2 cdrecord：光盘刻录工具
+
+新版的 CentOS 7 使用的是 wodim 这个命令来进行刻录的操作。
+
+```shell
+[root@study ~]# wodim --devices dev=/dev/sr0... 		<==查询刻录机的 bus 位置
+[root@study ~]# wodim -v dev=/dev/sr0 blank=[fast|all] 	<==抹除重复读写盘
+[root@study ~]# wodim -v dev=/dev/sr0 -format 			<==格式化DVD+RW
+[root@study ~]# wodim -v dev=/dev/sr0 [可用选项功能] file.iso
+选项与参数：
+--devices ：用在扫描磁盘总线并找出可用的刻录机，后续的设备为 ATA 接口
+-v ：在 cdrecord 运行的过程中显示过程
+dev=/dev/sr0 ：可以找出此光驱的 bus 地址，非常重要
+blank=[fast|all]：blank 为抹除可重复写入的CD/DVD-RW，使用fast较快，all较完整
+-format ：对光盘片进行格式化，但是仅针对 DVD+RW 这种格式的 DVD 而已；
+[可用选项功能] 主要是写入 CD/DVD 时可使用的选项，常见的选项包括有：
+	-data ：指定后面的文件以数据格式写入，不是以 CD 音轨（-audio）方式写入
+	speed=X ：指定刻录速度，例如CD可用 speed=40，DVD则可用 speed=4 之类
+	-eject ：指定刻录完毕后自动推出光盘
+	fs=Ym ：指定缓冲内存大小，可用在将镜像文件先暂存至缓冲内存。默认为 4m，
+			一般建议可增加到 8m ，不过，还是得视你的刻录机而定。
+针对 DVD 的选项功能：
+	driveropts=burnfree ：打开 Buffer Underrun Free 模式的写入功能
+	-sao ：支持 DVD-RW 的格式
+```
+
+#### 检测你的刻录机所在位置
+
+```shell
+[root@study ~]# ll /dev/sr0
+brw-rw----+ 1 root cdrom 11, 0 Jun 26 22:14 /dev/sr0 # 一般 Linux 光驱名称
+[root@demo ~]# wodim --devices dev=/dev/sr0
+wodim: Overview of accessible drives （1 found） :
+-------------------------------------------------------------------------
+0 dev='/dev/sr0' rwrw-- : 'ASUS' 'DRW-24D1ST'
+-------------------------------------------------------------------------
+```
+
+#### 进行 CD/DVD 的刻录操作
+
+```shell
+# 0. 先抹除光盘的原始内容：（非可重复读写则可略过此步骤）
+[root@demo ~]# wodim -v dev=/dev/sr0 blank=fast
+# 中间会跑出一堆信息告诉你抹除的进度，而且会有 10 秒钟的时间等待你的取消
+# 1. 开始刻录：
+[root@demo ~]# wodim -v dev=/dev/sr0 speed=4 -dummy -eject /tmp/system.img
+....（前面省略）....
+Waiting for reader process to fill input buffer ... input buffer ready.
+Starting new track at sector: 0
+Track 01: 86 of 86 MB written （fifo 100%） [buf 97%] 4.0x. # 这里有流程时间
+Track 01: Total Bytes read/written: 90937344/90937344 （44403 sectors）.
+Writing time: 38.337s 		# 写入的总时间
+Average write speed 1.7x. 	# 换算下来的写入时间
+Min drive buffer fill was 97%
+Fixating...
+Fixating time: 120.943s
+wodim: fifo had 1433 puts and 1433 gets.
+wodim: fifo was 0 times empty and 777 times full, min fill was 89%.
+# 因为有加上 -eject 这个选项的缘故，因此刻录完成后，DVD 会被推出光驱，记得推回去
+# 2. 刻录完毕后，测试挂载一下，检验内容：
+[root@demo ~]# mount /dev/sr0 /mnt
+[root@demo ~]# df -h /mnt
+Filesystem Size Used Avail Use% Mounted on
+/dev/sr0 87M 87M 0 100% /mnt
+[root@demo ~]# ll /mnt
+dr-xr-xr-x. 135 root root 36864 Jun 30 04:00 etc
+dr-xr-xr-x. 19 root root 8192 Jul 2 13:16 root
+[root@demo ~]# umount /mnt <==不要忘了卸载
+```
+
+## 8.6 其他常见的压缩与备份工具
+
+### 8.6.1 dd
+
+dd 可以读取磁盘设备的内容（几乎是直接读取扇区），然后将整个设备备份成一个文件。
+
+```shell
+[root@study ~]# dd if="input_file" of="output_file" bs="block_size" count="number"
+选项与参数：
+if ：就是 input file ,也可以是设备
+of ：就是 output file ,也可以是设备
+bs ：规划的一个 block 的大小，若未指定则默认是 512 Bytes（一个 sector 的大小）
+count：多少个 bs 的意思。
+
+范例一：将 /etc/passwd 备份到 /tmp/passwd.back 当中
+[root@study ~]# dd if=/etc/passwd of=/tmp/passwd.back
+4+1 records in
+4+1 records out
+2092 Bytes （2.1 kB） copied, 0.000111657 s, 18.7 MB/s
+[root@study ~]# ll /etc/passwd /tmp/passwd.back
+-rw-r--r--. 1 root root 2092 Jun 17 00:20 /etc/passwd
+-rw-r--r--. 1 root root 2092 Jul 2 23:27 /tmp/passwd.back
+# 仔细的看一下，我的 /etc/passwd 文件大小为 2092 Bytes，因为我没有设置 bs ，
+# 所以默认是 512 Bytes 为一个单位，因此，上面那个 4+1 表示有 4 个完整的 512 Bytes，
+# 以及未满 512 Bytes 的另一个 block 的意思,事实上，感觉好像是 cp 这个指令
+
+范例二：将刚刚刻录的光驱的内容，再次的备份下来成为镜像文件
+[root@study ~]# dd if=/dev/sr0 of=/tmp/system.iso
+177612+0 records in
+177612+0 records out
+90937344 Bytes （91 MB） copied, 22.111 s, 4.1 MB/s
+# 要将数据抓下来用这个方法，如果是要将镜像文件写入 U盘，就会变如下一个范例
+
+范例三：假设你的 USB 是 /dev/sda 好了，请将刚刚范例二的 image 刻录到U盘中
+[root@study ~]# lsblk /dev/sda
+NAME MAJ:MIN RM SIZE RO TYPE MOUNTPOINT
+sda 8:0 0 2G 0 disk # 确实是 disk 而且有 2GB
+[root@study ~]# dd if=/tmp/system.iso of=/dev/sda
+[root@study ~]# mount /dev/sda /mnt
+[root@study ~]# ll /mnt
+dr-xr-xr-x. 131 root root 34816 Jun 26 22:14 etc
+dr-xr-xr-x. 5 root root 2048 Jun 17 00:20 home
+dr-xr-xr-x. 8 root root 4096 Jul 2 18:48 root
+# 如果你不想要使用 DVD 来作为启动设备，那可以将镜像文件使用这个 dd 写入 USB 磁盘，
+# 该磁盘就会变成跟可启动光盘一样的功能，可以让你用U盘来安装 Linux ，速度快很多
+
+范例四：将你的 /boot 整个文件系统通过 dd 备份下来
+[root@study ~]# df -h /boot
+Filesystem Size Used Avail Use% Mounted on
+/dev/vda2 1014M 149M 866M 15% /boot # 请注意！备份的容量会到 1G
+[root@study ~]# dd if=/dev/vda2 of=/tmp/vda2.img
+[root@study ~]# ll -h /tmp/vda2.img
+-rw-r--r--. 1 root root 1.0G Jul 2 23:39 /tmp/vda2.img
+# 等于是将整个 /dev/vda2 通通保存下来的意思，所以，文件容量会跟整块磁盘的最大量一样大
+```
+
+#### 举例：将你的 /dev/vda2 完整硬盘分区上
+
+```shell
+# 1. 先进行分区的操作
+[root@study ~]# fdisk /dev/sda
+Command （m for help）: n
+Partition type:
+p primary （0 primary, 0 extended, 4 free）
+e extended
+Select （default p）: p
+Partition number （1-4, default 1）: 1
+First sector （2048-4195455, default 2048）: Enter
+Using default value 2048
+Last sector, +sectors or +size{K,M,G} （2048-4195455, default 4195455）: Enter
+Using default value 4195455
+Partition 1 of type Linux and of size 2 GiB is set
+Command （m for help）: p
+Device Boot Start End Blocks Id System
+/dev/sda1 2048 4195455 2096704 83 Linux
+Command （m for help）: w
+[root@study ~]# partprobe
+# 2. 不需要格式化，直接进行 sector 表面的复制
+[root@study ~]# dd if=/dev/vda2 of=/dev/sda1
+2097152+0 records in
+2097152+0 records out
+1073741824 Bytes （1.1 GB） copied, 71.5395 s, 15.0 MB/s
+[root@study ~]# xfs_repair -L /dev/sda1 # 一定要先清除一堆 log 才行！、
+[root@study ~]# uuidgen # 下面两行在给予一个新的 UUID
+896c38d1-bcb5-475f-83f1-172ab38c9a0c
+[root@study ~]# xfs_admin -U 896c38d1-bcb5-475f-83f1-172ab38c9a0c /dev/sda1
+# 因为 XFS 文件系统主要使用 UUID 来分辨文件系统，但我们使用 dd 复制，连 UUID 也都复制成为相同。
+# 当然就得要使用上述的 xfs_repair 及 xfs_admin 来修订一下
+[root@study ~]# mount /dev/sda1 /mnt
+[root@study ~]# df -h /boot /mnt
+Filesystem Size Used Avail Use% Mounted on
+/dev/vda2 1014M 149M 866M 15% /boot
+/dev/sda1 1014M 149M 866M 15% /mnt
+# 这两个玩意儿会“一模一样”
+# 3. 接下来,让我们将文件系统放大吧
+[root@study ~]# xfs_growfs /mnt
+[root@study ~]# df -h /boot /mnt
+Filesystem Size Used Avail Use% Mounted on
+/dev/vda2 1014M 149M 866M 15% /boot
+/dev/sda1 2.0G 149M 1.9G 8% /mnt
+[root@study ~]# umount /mnt
+```
+
+新划分出来的硬盘分区不需要经过格式化，因为 dd 可以在原本旧的硬盘分区上面将扇区的数据整个复制过来。当然连同超级区块、启动扇区、原数组等也会复制过来。
+
+### 8.6.2 cpio
+
+cpio 不会主动地去找文件来备份，一般来说，cpio 要配合类似 find 等可以查找文件地命令来告知 cpio 该备份地数据在哪里。
+
+```shell
+[root@study ~]# cpio -ovcB > [file|device] <==备份
+[root@study ~]# cpio -ivcdu > [file|device] <==还原
+[root@study ~]# cpio -ivct > [file|device] <==查看
+备份会使用到的选项与参数：
+	-o ：将数据复制输出到文件或设备上
+	-B ：让默认的 Blocks 可以增加至 5120 Bytes ，默认是 512 Bytes
+　 　 	这样的好处是可以让大文件的储存速度加快（请参考 i-nodes 的概念）
+还原会使用到的选项与参数：
+	-i ：将数据自文件或设备复制出来到系统当中
+	-d ：自动创建目录！使用 cpio 所备份的数据内容不见得会在同一层目录中，因此我们
+		必须要让 cpio 在还原时可以创建新目录，此时就得要 -d 选项的帮助
+	-u ：自动地将较新的文件覆盖较旧的文件
+	-t ：需配合 -i 选项，可用在"查看"以 cpio 创建的文件或设备的内容
+一些可共享的选项与参数：
+	-v ：让储存的过程中文件名称可以在屏幕上显示
+	-c ：一种较新的 portable format 方式储存
+```
+
+因为 cpio 会将数据整个显示到屏幕上，因此我们可以通过将这些屏幕的数据重新导向 （>） 一个新的文件。 至于还原，就是将备份文件读进 cpio （<） 进行处理。
+
+```shell
+范例：找出 /boot 下面的所有文件，然后将他备份到 /tmp/boot.cpio 去
+[root@study ~]# cd /
+[root@study /]# find boot -print
+boot
+boot/grub
+boot/grub/splash.xpm.gz
+....（以下省略）....
+# 通过 find 我们可以找到 boot 下面应该要存在的文件名,包括文件与目录,但请千万不要是绝对路径
+[root@study /]# find boot | cpio -ocvB > /tmp/boot.cpio
+[root@study /]# ll -h /tmp/boot.cpio
+-rw-r--r--. 1 root root 108M Jul 3 00:05 /tmp/boot.cpio
+[root@study ~]# file /tmp/boot.cpio
+/tmp/boot.cpio: ASCII cpio archive （SVR4 with no CRC）
+```
+
+我们使用 find boot 可以找出文件名，然后通过那条管线就能将文件名传给 cpio 来进行处理。
+
+我么必须要先转换目录到 / 再去找 boot ， 不能直接找 /boot ，这是因为 cpio 不会理会你给的是绝对路径还是相对路径的文件名，所以如果你加上绝对路径的 / 开头， 那么未来解开的时候，它就一定会覆盖掉原本的 /boot。
+
+```shell
+范例：将刚刚的文件给他在 /root/ 目录下解开
+[root@study ~]# cd ~
+[root@study ~]# cpio -idvc < /tmp/boot.cpio
+[root@study ~]# ll /root/boot
+# 你可以自行比较一下 /root/boot 与 /boot 的内容是否一模一样
+```
+
+# 第9章 vim 程序编辑器
+
