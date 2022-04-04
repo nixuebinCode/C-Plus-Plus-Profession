@@ -2094,7 +2094,79 @@ void PrintPath(BinaryTreeNode* pNode, int sumOfPath, int &curSum, vector<BinaryT
 }
 ```
 
+## 面试题35：复杂链表的复制
 
+### 题目
 
+请实现函数 ComplexListNode* Clone(ComplexListNode* pHead)，复制一个复杂链表。在复杂链表中，每个节点除了有一个 m_pNext 指针指向下一个节点，还有一个 m_pSibling 指针指向链表中的任意节点或者 nullptr，如图为一个含有5个节点的复杂链表。实线箭头表示 m_pNext 指针，虚线箭头表示 m_pSibling 指针。节点的定义如下：
 
+```c++
+struct ComplexListNode{
+	int m_nValue;
+    ComplexListNode* m_pNext;
+    ComplexListNode* m_pSibling;
+}
+```
+
+ ![image-20220404093244501](images\image-20220404093244501.png)
+
+### 解题思路
+
+>最直观的做法是把复制过程分成两步：第一步是复制原始链表上的每个节点，并用 m_pNext 链接起来；第二步是设置每个节点的 m_pSibling 指针，由于查找每个节点的 m_pSibling 指针所指向的节点都需要从表头沿着 m_pNext 遍历，因此这种方法的时间复杂度为 O(n^2)
+>
+>由于上述方法的时间主要花费在定位节点的 m_pSibling 上面，我们试着在这方面优化：第一步仍然是复制原始链表上的每个节点 N 创建 N‘，并用 m_pNext 链接起来，同时我们把<N, N'>的配对信息放到一个哈希表中；第二步仍然是设置节点的 m_pSibling 指针，对于节点 N‘ ，假设原始节点的 m_pSibling 为 S，则 N’ 的 m_pSibling 应为对应的 S‘，可以由第一步保存的哈希表中由 S 直接得出。这种方法虽然减少了时间复杂度，但是利用了哈希表，空间复杂度为O(n)
+
+最优解法：
+
+* 根据原始链表的每个节点N创建对应的N'，这一次，我们把N’链接到N的后面：
+
+   ![image-20220404094904211](images\image-20220404094904211.png)
+
+* 设置复制出来的节点的 m_pSibling 。假设原始链表上的 N 的 m_pSibling 指向节点 S ，那么对应的 N‘ 是 N 的m_pNext，同样 S’ 也是 S 的 m_pNext ，因此我们可以利用 S 的 m_pSibling 的 m_pNext 找到 N‘ 的 m_pSibling 
+
+ ![image-20220404095222282](images\image-20220404095222282.png)
+
+* 将这个长链表拆分为两个链表：把奇数位置的节点用 m_pNext 链接起来就是原始链表。偶数位置的节点用 m_pNext 链接起来就是复制出来的链表。
+
+### 代码实现
+
+```C++
+ComplexListNode* Clone(ComplexListNode* pHead){
+    if(pHead == nullptr)
+        return nullptr;
+    // Step1: 把复制的节点接在原始节点后面
+    ComplexListNode *pNode = pHead;
+    while(pNode != nullptr){
+        // 创建复制节点
+        ComplexListNode* pNodeCopy = new ComplexListNode();
+        pNodeCopy->m_nValue = pNode->m_nValue;
+
+        pNodeCopy->m_pNext = pNode->m_pNext;
+        pNode->m_pNext = pNodeCopy;
+        pNode = pNodeCopy->m_pNext;
+    }
+    // Step2：设置复制的节点的 m_pSibling 指针
+    pNode = pHead;
+    ComplexListNode *pNodecpy = nullptr;
+    while(pNode != nullptr){
+        pNodecpy = pNode->m_pNext;
+        if(pNode->m_pSibling != nullptr)        // 有些节点的 m_pSibling 可能指向nullptr
+            pNodecpy->m_pSibling = pNode->m_pSibling->m_pNext;
+        pNode = pNode->m_pNext->m_pNext;
+    }
+    // Step3：将复制链表从长链表中拆下来
+    pNode = pHead;
+    ComplexListNode *pRet = pNode->m_pNext;
+    while(pNode != nullptr){
+        pNodecpy = pNode->m_pNext;
+        pNode->m_pNext = pNodecpy->m_pNext;
+        if(pNode->m_pNext == nullptr)
+            pNodecpy->m_pNext = nullptr;
+        else
+            pNodecpy->m_pNext = pNode->m_pNext->m_pNext;
+        pNode = pNode->m_pNext;
+    }
+    return pRet;
+}
+```
 
