@@ -4336,3 +4336,276 @@ const Rational<T> doMultiply(const Rational<T>& lhs, const Rational<T>& rhs)
 As a template, of course, `doMultiply` won't support mixed-mode multiplication, but it doesn't need to. In essence, the function `operator*` supports
 whatever type conversions are necessary to ensure that two `Rational` objects are being multiplied, then it passes these two objects to an appropriate
 instantiation of the `doMultiply` template to do the actual multiplication.
+
+## Item 47: Use traits classes for information about types
+
+### STL iterator categories
+
+* **Input iterators**
+
+  Input iterators can move only forward, can move only one step at a time, can only read what they point to, and can read what they're pointing to only once. They're modeled on the read pointer into an input file; the C++ library's `istream_iterators` are representative of this category.
+
+* **Output iterators**
+
+  Output iterators move only forward, move only one step at a time, can only write what they point to, and can write it only once. They're modeled on the write pointer into an output file; `ostream_iterators` are representative of this category.
+
+* **forward iterators**
+
+  Forward iterators can do everything input and output iterators can do, plus they can read or write what they point to more than once.
+
+* **Bidirectional iterators**
+
+  Bidirectional iterators add to forward iterators the ability to move backward as well as forward. Iterators for the STL's `list` are in this category, as are iterators for `set`, `multiset`, `map`, and `multimap`.
+
+* **Random access iterators**
+
+  Random access iterators add to bidirectional iterators the ability to perform “iterator arithmetic,” i.e., to jump forward or backward an arbitrary distance in constant time. Iterators for `vector`, `deque`, and `string` are random access iterators.
+
+The inheritance relationships among these iterators:
+
+```c++
+struct input_iterator_tag {};
+struct output_iterator_tag {};
+struct forward_iterator_tag: public input_iterator_tag {};
+struct bidirectional_iterator_tag: public forward_iterator_tag {};
+struct random_access_iterator_tag: public bidirectional_iterator_tag {};
+```
+
+### `advance`：a utility template of STL
+
+`advance` moves a specified iterator a specified distance：
+
+```c++
+template<typename IterT, typename DistT> 	// move iter d units forward; 
+void advance(IterT& iter, DistT d);			// if d < 0, move iter backward
+```
+
+Conceptually, `advance` just does iter += d, but `advance` can't be implemented that way, because only random access iterators support the += operation. Less powerful iterator types have to implement advance by iteratively applying ++ or -- `d` times.
+
+To implement `advance`, random access iterators support constant-time iterator arithmetic, and we'd like to take advantage of that ability when it's present. We might write code like this:
+
+```c++
+template<typename IterT, typename DistT>
+void advance(IterT& iter, DistT d)
+{
+	if (iter is a random access iterator) {
+		iter += d; // use iterator arithmetic for random access iters
+	} 
+	else {
+		if (d >= 0) { while (d--) ++iter; } // use iterative calls to ++ or -- for other iterator categories
+		else { while (d++) --iter; } 
+	} 
+}
+```
+
+In other words, we need to get some information about a type. That's what **traits** let you do: they allow you to get information about a type during compilation.
+
+### traits
+
+The standard technique is to put trait into a template and one or more specializations of that template. For iterators, the template in the standard library is named `iterator_traits`:
+
+```c++
+template<typename IterT> 	// template for information about
+struct iterator_traits; 	// iterator types
+```
+
+By convention, traits are always implemented as structs. The structs used to implement traits are known as traits classes.
+
+The way `iterator_traits` works is that for each type `IterT`, a typedef named `iterator_category` is declared in the struct `iterator_traits<IterT>`:
+
+* First, it imposes the requirement that any user-defined iterator type must contain a nested typedef named `iterator_category` that identifies the appropriate tag struct:
+
+  ```c++
+  template < ... > 	// deque's iterators are random access
+  class deque {
+  public:
+  	class iterator {
+  	public:
+  		typedef random_access_iterator_tag iterator_category;
+  		...
+  	};
+  	...
+  };
+  
+  template < ... >	// list's iterators are bidirectional
+  class list {
+  public:
+  	class iterator {
+  	public:
+  		typedef bidirectional_iterator_tag iterator_category;
+  	...
+  	};
+  	...
+  };
+  
+  // the iterator_category for type IterT is whatever IterT says it is;
+  template<typename IterT>
+  struct iterator_traits {
+  	typedef typename IterT::iterator_category iterator_category;
+  	...
+  };
+  ```
+
+  This works well for user-defined types, but it doesn't work at all for iterators that are pointers, because there's no such thing as a pointer with a nested typedef.
+
+* Second, to handle iterators that are pointers,  `iterator_traits` offers a **partial template specialization** for pointer types.
+
+  ```c++
+  template<typename T> 		// partial template specialization
+  struct iterator_traits<T*> 	// for built-in pointer types
+  {
+  	typedef random_access_iterator_tag iterator_category;	// Pointers act as random access iterators
+  	...
+  };
+  ```
+
+Given `iterator_traits`,  we can refine our pseudocode for `advance`:
+
+```c++
+template<typename IterT, typename DistT>
+void advance(IterT& iter, DistT d)
+{
+	if (typeid(typename std::iterator_traits<IterT>::iterator_category) == typeid(std::random_access_iterator_tag))
+		...
+}
+```
+
+### using overload to evaluate the conditional construct during compilation
+
+The code above has a issue: `IterT`'s type is known during compilation, so `iterator_traits<IterT>::iterator_category` can also be determined during compilation. Yet the `if` statement is evaluated at runtime. Why do something at runtime that we can do during compilation? It wastes time (literally), and it bloats our executable. What we really want is a conditional construct (i.e., an if...else statement) for types that is evaluated during compilation.
+
+When you overload some function `f`, you specify different parameter types for the different overloads. When you call `f`, compilers pick the best overload, based on the arguments you're passing. To get `advance` to behave the way we want, all we have to do is create multiple versions of an overloaded function containing the “guts” of advance, declaring each to take a different type of `iterator_category` object.
+
+```c++
+template<typename IterT, typename DistT> // use this impl for random access iterators
+void doAdvance(IterT& iter, DistT d, std::random_access_iterator_tag)
+{
+	iter += d;
+}
+template<typename IterT, typename DistT> // use this impl for bidirectional iterators
+void doAdvance(IterT& iter, DistT d, std::bidirectional_iterator_tag) //
+{
+	if (d >= 0) { while (d--) ++iter; }
+	else { while (d++) --iter; }
+}
+template<typename IterT, typename DistT> // use this impl for input iterators
+void doAdvance(IterT& iter, DistT d, std::input_iterator_tag)
+{
+	if (d < 0 ) {
+		throw std::out_of_range("Negative distance"); // see below
+	}
+	while (d--) ++iter;
+}
+```
+
+Because `forward_iterator_tag` inherits from `input_iterator_tag`, the version of `doAdvance` for `input_iterator_tag` will also handle forward iterators. 
+
+Given the various overloads for `doAdvance`, all `advance` needs to do is call them, passing an extra object of the appropriate iterator category type so that the compiler will use overloading resolution to call the proper implementation:
+
+```c++
+template<typename IterT, typename DistT>
+void advance(IterT& iter, DistT d)
+{
+	doAdvance(iter, d, typename std::iterator_traits<IterT>::iterator_category()); // call the version of doAdvance
+																					// that is appropriate for iter's iterator																						// category
+} 
+```
+
+### Summary
+
+How to design and implement a traits class:
+
+* Identify some information about types you'd like to make available (e.g., for iterators, their iterator category).
+* Choose a name to identify that information (e.g., `iterator_category`).
+* Provide a template and set of specializations (e.g., `iterator_traits`) that contain the information for the types you want to support.
+
+How to use a traits class:
+
+* Create a set of overloaded “worker” functions or function templates (e.g., `doAdvance`) that differ in a traits parameter. Implement each function in
+  accord with the traits information passed.
+* Create a “master” function or function template (e.g., `advance`) that calls the workers, passing information provided by a traits class.
+
+## Item 48: Be aware of template metaprogramming
+
+Template metaprogramming (TMP) is the process of writing template-based C++ programs that execute during compilation. **They can shift work from runtime to compile-time**. One consequence is that some kinds of errors that are usually detected at runtime can be found during compilation. Another is that C++ programs making use of TMP can be more efficient in just about every way: **smaller executables, shorter runtimes, lesser memory requirements.**
+
+Reconsider the code in Item 47, there are two approches to implemt the `advance`: `typeid`-based approach and the one using traits.
+
+`typeid`-based approach: 
+
+```c++
+template<typename IterT, typename DistT>
+void advance(IterT& iter, DistT d)
+{
+	if (typeid(typename std::iterator_traits<IterT>::iterator_category) == typeid(std::random_access_iterator_tag))
+		iter += d;
+	}
+	else {
+		if (d >= 0) { while (d--) ++iter; }
+		else { while (d++) --iter; }
+	}
+}
+```
+
+This typeid-based approach is less efficient than the one using traits, because with this approach, (1) the type testing occurs at runtime instead of during compilation, and (2) the code to do the runtime type testing must be present in the executable. 
+
+Moreover, this approach can lead to compilation problems:
+
+```c++
+std::list<int>::iterator iter;
+...
+advance(iter, 10); // move iter 10 elements forward;
+				   // won't compile with above impl.
+```
+
+Consider the version of `advance` that will be generated for the above call. After substituting `iter`'s and `10`'s types for the template parameters `IterT` and `DistT`, we get this:
+
+```c++
+void advance(std::list<int>::iterator& iter, int d)
+{
+	if (typeid(std::iterator_traits<std::list<int>::iterator>::iterator_category) ==
+			typeid(std::random_access_iterator_tag)) {
+		iter += d; // error! won’t compile
+	}
+	else {
+		if (d >= 0) { while (d--) ++iter; }
+		else { while (d++) --iter; }
+	}
+}
+```
+
+In this case, we're trying to use `+=` on a `list<int>::iterator`, but `list<int>::iterator` is a bidirectional iterator, so it doesn't support `+=`. Although we know that the `typeid` test will always fail for `list<int>::iterators`, but compilers are obliged to make sure that all source code is valid, even if it's not executed, and “`iter += d`” isn't valid when `iter` isn't a random access iterator.
+
+### loops in TMP
+
+TMP has no real looping construct, so the effect of loops is accomplished via recursion -- *recursive template instantiations*
+
+TMP factorial computation:
+
+```c++
+template<unsigned n> // general case: the value of Factorial<n> is n times the value of Factorial<n-1>
+struct Factorial {
+	enum { value = n * Factorial<n-1>::value };
+};
+
+template<> 			// special case: the value of Factorial<0> is 1
+struct Factorial<0> {
+	enum { value = 1 };
+};
+```
+
+Given this template metaprogram (really just the single template metafunction `Factorial`), you get the value of factorial(n) by referring to
+`Factorial<n>::value`.
+
+```c++
+int main()
+{
+	std::cout << Factorial<5>::value; // prints 120
+	std::cout << Factorial<10>::value; // prints 3628800
+}
+```
+
+
+
+
+
