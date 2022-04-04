@@ -4153,3 +4153,178 @@ boot/grub/splash.xpm.gz
 
 # 第9章 vim 程序编辑器
 
+## 9.1 vi 与 vim
+
+vi 是老式的文本编辑器，很多软件的编辑接口都会主动调用 vi，vim 则是 vi 的高级版本，vim 会依据文件的扩展名或是文件内的开头信息，判断该文件的内容而自动调用该程序的语法判断样式，再以颜色来显示程序代码与一般信息。也就是说，vim 是个程序编辑器。
+
+## 9.2 vi 的使用
+
+vi 分为 3 种模式：
+
+* **一般命令模式（command mode）**
+
+  以 vi 打开一个文件就直接进入一般命令模式了，在这个模式中，可以使用【上下左右】按键来移动光标，可以使用【删除字符】或【删除整行】来处理文件内容，也可以使用【复制、粘贴】来处理文件内容。
+
+* **编辑模式（insert mode）**
+
+  在一般命令模式中，按下【i, I, o, O, a, A, r, R】任何一个字母进入编辑模式。左下方会出现【INSERT】或【REPLACE】，可以编辑文件的内容。
+
+* **命令行模式（Command-line mode）**
+
+  在一般命令模式中，输入【：/ ？】任何一个，就可以将光标移动到最下面那一行。在这个模式中，可以提供你【查找数据、读取、保存、批量替换字符、推出 vi、显示行号】等操作。
+
+3个模式之间的关系：
+
+ ![image-20220404201039751](images\image-20220404201039751.png)
+
+### 9.2.1 简易执行范例
+
+#### 1. 使用“ vi filename ”进入一般命令模式
+
+```shell
+[dmtsai@study ~]$ /bin/vi welcome.txt
+# 在 CentOS 7 当中，由于一般帐号默认 vi 已经被 vim 取代了，因此得要输入绝对路径来执行才行
+```
+
+进入后，整个界面主要分为两部分，上半部分显示的是文件的实际内容，最下面一行则是状态显示行，或是命令执行行。
+
+ ![image-20220404201527107](images\image-20220404201527107.png)
+
+#### 2. 按下 i 进入编辑模式，开始编辑文字
+
+在编辑模式中，左下角状态栏中会出现-INSERT-的字样，就是可以输入任意字符的提示。
+
+#### 3. 按下 [ESC] 键回到一般命令模式
+
+当我们编辑完毕后，按下 [ESC] 键，就会返回一般命令模式，左下角的-INSERT-不见了。
+
+#### 4. 进入命令行模式，文件保存并退出 vi 环境
+
+保存 （write） 并退出 （quit） 的命令很简单，输入【:wq】即可保存退出。 （注意了，按下 : 该光标就会移动到最下面一行去）。
+
+如此一来，文件welcome.txt就已经建立，需要注意的是，如果你的文件没有 w 权限，可能会无法写入，此时可以使用【:wq!】强制写入，不过只有在你的权限可以改变的情况下才能成立。
+
+### 9.2.2 按键说明
+
+#### 第一部分：一般命令模式可用的功能按键说明，光标移动、复制粘贴、查找替换等
+
+ ![image-20220404202710933](images\image-20220404202710933.png)
+
+如果想要进行多次移动的话，例如向下移动30行，可用使用 “30j” 或者 “30↓” 的组合按键。
+
+![image-20220404202934882](images\image-20220404202934882.png)
+
+![image-20220404203613106](images\image-20220404203613106.png)
+
+![image-20220404203741756](images\image-20220404203741756.png)
+
+![image-20220404203927755](images\image-20220404203927755.png)
+
+![image-20220404203943948](images\image-20220404203943948.png)
+
+#### 第二部分：一般命令模式切换到编辑模式的可用的按键说明
+
+![image-20220404204847440](images\image-20220404204847440.png)
+
+![image-20220404205007681](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20220404205007681.png)
+
+#### 第三部分：一般命令模式切换到命令行模式的可用按键说明
+
+![image-20220404205043929](images\image-20220404205043929.png)
+
+![image-20220404205103998](images\image-20220404205103998.png)
+
+特别注意，在 vi 中，【数字】是很有意义的，数字通常代表重复做几次的意思，也有可能代表去到第几个什么什么的意思。
+
+### 9.2.3 vim 的缓存、恢复与打开时的警告信息
+
+当我么在使用 vim 编辑时，vim会在与被编辑的文件的目录下，再建立一个名为 .filename.swp 的文件，你对文件做的操作就会被记录到这个 swp 当中。如果你的系统因为某些原因掉线了，导致你编辑的文件还没有保存，这个时候 swp 文件就能够发挥恢复的功能了。
+
+例如假设我们在编辑 man_db.conf 文件的时候，系统掉线了，当你重新使用 vim 打开该文件时，会有如下提醒：
+
+```shell
+[dmtsai@study vitest]$ vim man_db.conf
+E325: ATTENTION <==错误代码
+Found a swap file by the name ".man_db.conf.swp" <==下面数行说明有缓存文件的存在
+owned by: dmtsai dated: Mon Jul 6 23:54:16 2015
+file name: /tmp/vitest/man_db.conf <==这个缓存文件属于哪个实际的文件？
+modified: no
+user name: dmtsai host name: study.centos.vbird
+process ID: 31851
+While opening file "man_db.conf"
+dated: Mon Jul 6 23:47:21 2015
+下面说明可能发生这个错误的两个主要原因与解决方案。
+（1） Another program may be editing the same file. If this is the case,
+be careful not to end up with two different instances of the same
+file when making changes. Quit, or continue with caution.
+（2） An edit session for this file crashed.
+If this is the case, use ":recover" or "vim -r man_db.conf"
+to recover the changes （see ":help recovery"）.
+If you did this already, delete the swap file ".man_db.conf.swp"
+to avoid this message.
+Swap file ".man_db.conf.swp" already exists! 下面说明你可进行的动作
+[O]pen Read-Only, （E）dit anyway, （R）ecover, （D）elete it, （Q）uit, （A）bort:
+```
+
+当 vim 的工作被不正常地中断，导致缓存无法借由正常流程来结束，缓存就不会消失，而继续保留下来，由于缓存存在的关系，vim 会主动地判断这个文件有问题，并提示两点主要地问题与解决方案：
+
+* 问题一：可能有其他人或程序同时在编辑这个文件
+
+  * 找到另外那个程序或人员，请他将该 vim 的工作结束，然后你再继续处理。
+  * 如果你只是要看该文件的内容并不会有任何修改编辑的行为，那么可以选择打开成为只读（O）文件， 亦即上述画面反白部分输入英文“ o ”即可，其实就是 [O]pen Read-Only 的选项
+* 问题二：在前一个 vim 的环境中，可能因为某些不知名原因导致 vim 中断（crashed）：
+  * 如果你之前的 vim 处理动作尚未保存，此时你应该要按下“R”，亦即使用 （R）ecover 的选项， 此时 vim 会载入 .man_db.conf.swp 的内容，让你自己来决定要不要保存。这样就能够救回来你之前未保存的工作。 不过那个 .man_db.conf.swp 并不会在你结束 vim 后自动删除，所以你离开 vim 后还得要自行删除 .man_db.conf.swp 才能避免每次打开这个文件都会出现这样的警告
+  * 如果你确定这个缓存是没有用的，那么你可以直接按下“D”删除掉这个缓存，亦即 （D）elete it 这个选项即可。 此时 vim 会载入 man_db.conf ，并且将旧的 .man_db.conf.swp 删除后，创建这次会使用的新的 .man_db.conf.swp
+
+
+## 9.3 vim 的额外功能
+
+基本上，vim 的一般用法与 vi 完全一模一样，没有不同。
+
+### 9.3.1 可视区块
+
+刚刚提到的简单的 vi 操作过程中，几乎都是以行为单位操作，如果我们想以列为单位操作呢？比如像下面这种格式的文件：
+
+```shell
+192.168.1.1 host1.class.net
+192.168.1.2 host2.class.net
+192.168.1.3 host3.class.net
+192.168.1.4 host4.class.net
+.....中间省略......
+```
+
+我们像要将host1、host2等复制起来，并且加到每一行的后面，即第二行的结果是【192.168.1.2 host2.class.net host2】
+
+当我么按下【v】或【V】或【Ctrl+v】时，光标移动过的地方就会开始反白，可视区块的按键意义：
+
+![image-20220404214252395](images\image-20220404214252395.png)
+
+以上述操作为例，具体的操作为：
+
+1. 使用 vim hosts 来打开该文件
+2. 将光标移动到第一列的 host 那个 h 上头，然后按下 [ctrl]-v ，左下角出现区块示意字样
+3. 将光标移动到最底部，此时光标移动过的区域会反白
+4. 此时你可以按下“ y ”来进行复制，当你按下 y 之后，反白的区块就会消失不见
+5. 最后，将光标移动到第一行的最右边，并且再用编辑模式向右按两个空白键，回到一般命令模式后， 再按下【P】
+
+通过上述的功能，你可以复制一个区块，并且是贴在某个【区块的范围】内。
+
+### 9.3.2 多文件编辑
+
+如果你想要将A文件内的10条数据拷贝到B文件去，我们可以使用 vim 后面同时接好几个文件来同时打开，相关的按键有：
+
+![image-20220404222428369](images\image-20220404222428369.png)
+
+假设你要将刚刚的 hosts 内的前四行 IP 数据复制到你的 /etc/hosts 文件内：
+
+1. 通过“ vim hosts /etc/hosts ”指令来使用一个 vim 打开两个文件
+
+2. 在 vim 中先使用“ :files ”查看一下编辑的文件数据有啥？结果如下所示。 至于下图的最后一行显示的是“按下任意键”就会回到 vim 的一般命令模式中
+
+    ![image-20220404223319368](images\image-20220404223319368.png)
+
+3. 在第一行输入“ 4yy ”复制四行
+4. 在 vim 的环境下输入“ :n ”会来到第二个编辑的文件，亦即 /etc/hosts 内
+5. 在 /etc/hosts 下按“ G ”到最后一列，再输入“ p ”粘贴
+6. 按下多次的“ u ”来还原原本的文件数据
+7. 最终按下“ :q ”来离开 vim 的多文件编辑
