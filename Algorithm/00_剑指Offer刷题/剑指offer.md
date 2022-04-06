@@ -2170,3 +2170,66 @@ ComplexListNode* Clone(ComplexListNode* pHead){
 }
 ```
 
+## 面试题36：二叉搜索树与双向链表
+
+### 题目
+
+输入一棵二叉搜索树，将该二叉搜索树转换成一个排序的双向链表。要求不能创建任何新的节点，只能调整树中节点指针的指向。比如输入图中左边的二叉搜索树，则输出转换之后的排序双向链表。二叉树节点的定义如下：
+
+```c++
+struct BinaryTreeNode
+{
+	int m_nValue;
+    BinaryTreeNode* m_pLeft;
+	BinaryTreeNode* m_pRight;
+}；
+```
+
+ ![image-20220406095418017](images\image-20220406095418017.png)
+
+### 解题思路
+
+我们在将二叉搜索树转换成排序双向链表时， 原先指向左子节点的指针调整为链表中指向前一个节点的指针， 原先指向右子节点的指针调整为链表中指向后一个节点的指针。
+
+很容易想到利用二叉树的中序遍历来从小到大遍历序列，这里的难点是在中序遍历过程中，需要想办法记录当前遍历的节点pNodeCur和它的前驱节点pNodePre。前者在当前递归记录即可，因此采用本地变量记录，后者需要在上层递归中记录，因此采用引用形参的方式记录。
+
+### 代码实现
+
+```c++
+void ConvertBSTtoLst(BinaryTreeNode* pNode, BinaryTreeNode* &pNodePre);
+
+BinaryTreeNode* ConvertBSTtoLst(BinaryTreeNode* pRoot){
+    if(pRoot == nullptr)
+        return nullptr;
+    BinaryTreeNode* pNodePre = nullptr;	// 用于递归中记录前驱节点
+    
+    ConvertBSTtoLst(pRoot, pNodePre);
+    pNodePre->m_pRight = nullptr;   // 处理尾节点
+    // 找到链表的头节点
+    BinaryTreeNode* pHeadOfLst = pRoot;
+    while(pHeadOfLst->m_pLeft != nullptr)
+        pHeadOfLst = pHeadOfLst->m_pLeft;
+    return pHeadOfLst;
+}
+
+void ConvertBSTtoLst(BinaryTreeNode* pNode, BinaryTreeNode* &pNodePre){
+    if(pNode == nullptr)
+        return;
+    BinaryTreeNode* pNodeCur = pNode;   // 记录当前遍历节点
+    // 遍历左子树
+    if(pNode->m_pLeft != nullptr)
+        ConvertBSTtoLst(pNode->m_pLeft, pNodePre);
+    
+    // 处理指针
+    if(pNodePre != nullptr)
+        pNodePre->m_pRight = pNodeCur;
+    pNodeCur->m_pLeft = pNodePre;
+    // 当前节点处理完毕，更新pNodePre
+    pNodePre = pNodeCur;
+
+    // 遍历右子树
+    if(pNode->m_pRight != nullptr)
+        ConvertBSTtoLst(pNode->m_pRight, pNodePre);
+}
+```
+
