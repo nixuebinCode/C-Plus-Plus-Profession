@@ -4321,10 +4321,132 @@ Swap file ".man_db.conf.swp" already exists! 下面说明你可进行的动作
 
 2. 在 vim 中先使用“ :files ”查看一下编辑的文件数据有啥？结果如下所示。 至于下图的最后一行显示的是“按下任意键”就会回到 vim 的一般命令模式中
 
-    ![image-20220404223319368](images\image-20220404223319368.png)
+     ![image-20220404223319368](images\image-20220404223319368.png)
 
 3. 在第一行输入“ 4yy ”复制四行
 4. 在 vim 的环境下输入“ :n ”会来到第二个编辑的文件，亦即 /etc/hosts 内
 5. 在 /etc/hosts 下按“ G ”到最后一列，再输入“ p ”粘贴
 6. 按下多次的“ u ”来还原原本的文件数据
 7. 最终按下“ :q ”来离开 vim 的多文件编辑
+
+### 9.3.3 多窗口功能
+
+当我们有一个文件非纯的大，查看后面的数据时，想要对照前面的数据，是否需要使用 [ctrl]+f 与 [ctrl]+b （或 pageup, pagedown 功能键） 来跑前跑后查看？
+
+在命令行模式输入【:sp{filename}】，可以将一个文件划分成多个窗口展现。这个 filename 可有可无，如果想要在新窗口启动另一个文件，就加入文件名，否则仅输入 :sp 时，出现的则是同一个文件在两个窗口间。
+
+例如先使用【vim /etc/man_db.conf】打开这个文件，然后【1G】去到第一行，之后输入【:sp】再次打开这个文件依次，然后输入【G】移动到最后一行，结果如图所示：
+
+ ![image-20220406170654228](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20220406170654228.png)
+
+划分窗口之后有如下按键功能
+
+![image-20220406170832522](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20220406170832522.png)
+
+### 9.3.4 vim 的关键词补全功能
+
+几个主要的 vim 补齐功能
+
+![image-20220406195416410](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20220406195416410.png)
+
+例如在用 vim 编辑 html 文件的时候，直接输入 b 然后按下 [crtl]+x 再按下 [crtl]+o 就会出现相应的相关字词可以选择，此时可以使用上下按键来挑选所需要的关键元素。
+
+### 9.3.5 vim 环境设置与记录： ~/.vimrc, ~/.viminfo
+
+vim 会主动地将你曾经做过的操作记录下来，好让你下次可以轻松地作业，这个记录操作的文件就是： ~/.viminfo。因此如果我们以 vim 来查找一个文件内部的某个字符串时，这个字符串会被反白，而下次我们再次以 vim 编辑这个文件时，该查找的字符串反白情况还是存在的，甚至在编辑其他文件时， 如果其他文件内也存在这个字串，还是主动反白。另外，当我们重复编辑同一个文件时，当第二次进入该文件时， 光标就在上次离开的那一行上面。
+
+此外，每个Linux 发行版对 vim 的默认环境都不太相同，举例来说，某些版本在查找到关键词时并不会高亮度反白， 有些版本则会主动的帮你进行缩进的操作。这些都是可以自行设置的，如果想知道目前的设置值，可以在一般命令模式时输入【:set all】来查看，下面列举一些常用的设置值
+
+ ![image-20220406200545710](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20220406200545710.png)
+
+ ![image-20220406200648984](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20220406200648984.png)
+
+如果我们不想每次使用 vim 都重新设置一次各个参数值，可以通过配置文件来直接规定我们习惯的 vim 操作环境。整体 vim 的设置值一般是放置在 /etc/vimrc 这个文件，不过，不建议你修改它， 你可以修改 ~/.vimrc 这个文件 （默认不存在，请你自行手动建立），将你所希望的设置值写入。例如：
+
+```shell
+[dmtsai@study ~]$ vim ~/.vimrc
+"这个文件的双引号 （"） 是注解
+set hlsearch "高亮度反白
+set backspace=2 "可随时用倒退键删除
+set autoindent "自动缩排
+set ruler "可显示最后一列的状态
+set showmode "左下角那一列的状态
+set nu "可以在每一列的最前面显示行号啦！
+set bg=dark "显示不同的底色色调
+syntax on "进行语法检验，颜色显示。
+```
+
+### 9.3.6 vim 常用命令示意图
+
+ ![image-20220406201009655](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20220406201009655.png)
+
+## 9.4 其他 vim 使用注意事项
+
+### 9.4.1 中文编码的问题
+
+假设文件的中文编码为 GBK，使用下面的命令来修正预系编码：
+
+```shell
+[dmtsai@study ~]$ LANG=zh_CN.gb18030
+[dmtsai@study ~]$ export LC_ALL=zh_CN.gb18030
+```
+
+然后在终端工具栏的【终端】-->【设置字符编码】-->【中文（简体）】选项点选一下。
+
+### 9.4.2 DOS 与 Linux 的换行符
+
+DOS （Windows 系统）使用的换行符为 ^M$ ，我们称为 CR 与 LF 两个符号，而在 Linux 下面，则是仅有 LF （\$ ）这个换行符。
+
+因此在不同的系统之间复制一些纯文本文件时，需要将格式转换成为 Linux。可以使用 dos2unix 和 unix2dos 这个软件。
+
+```shell
+[dmtsai@study ~]$ dos2unix [-kn] file [newfile]
+[dmtsai@study ~]$ unix2dos [-kn] file [newfile]
+选项与参数：
+-k ：保留该文件原本的 mtime 时间格式 （不更新文件上次内容经过自定义的时间）
+-n ：保留原本的旧文件，将转换后的内容输出到新文件，如： dos2unix -n old new
+
+范例一：将 /etc/man_db.conf 重新复制到 /tmp/vitest/ 下面，并将其修改成为 dos 换行
+[dmtsai@study ~]# cd /tmp/vitest
+[dmtsai@study vitest]$ cp -a /etc/man_db.conf .
+[dmtsai@study vitest]$ ll man_db.conf
+-rw-r--r--. 1 root root 5171 Jun 10 2014 man_db.conf
+[dmtsai@study vitest]$ unix2dos -k man_db.conf
+unix2dos: converting file man_db.conf to DOS format ...
+# 屏幕会显示上述的讯息，说明换行转为 DOS 格式了
+[dmtsai@study vitest]$ ll man_db.conf
+-rw-r--r--. 1 dmtsai dmtsai 5302 Jun 10 2014 man_db.conf
+# 换行符多了 ^M ，所以容量增加了
+
+范例二：将上述的 man_db.conf 转成 Linux 换行符，并保留旧文件，新文件放于 man_db.conf.linux
+[dmtsai@study vitest]$ dos2unix -k -n man_db.conf man_db.conf.linux
+dos2unix: converting file man_db.conf to file man_db.conf.linux in Unix format ...
+[dmtsai@study vitest]$ ll man_db.conf*
+-rw-r--r--. 1 dmtsai dmtsai 5302 Jun 10 2014 man_db.conf
+-rw-r--r--. 1 dmtsai dmtsai 5171 Jun 10 2014 man_db.conf.linux
+[dmtsai@study vitest]$ file man_db.conf*
+man_db.conf: ASCII text, with CRLF line terminators 很清楚说明是 CRLF 断行！
+man_db.conf.linux: ASCII text
+```
+
+### 9.4.3 语系编码转换
+
+举例来说，想要将 Big5 编码转成 UTF-8，可以使用【iconv】这个命令
+
+```shell
+[dmtsai@study ~]$ iconv --list
+[dmtsai@study ~]$ iconv -f 原本编码 -t 新编码 filename [-o newfile]
+选项与参数：
+--list ：列出 iconv 支持的语系数据
+-f ：from ，亦即来源之意，后接原本的编码格式；
+-t ：to ，亦即后来的新编码要是什么格式；
+-o file：如果要保留原本的文件，那么使用 -o 新文件名，可以创建新编码文件。
+
+范例一：将 /tmp/vitest/vi.big5 转成 utf8 编码吧
+[dmtsai@study ~]$ cd /tmp/vitest
+[dmtsai@study vitest]$ iconv -f big5 -t utf8 vi.big5 -o vi.utf8
+[dmtsai@study vitest]$ file vi*
+vi.big5: ISO-8859 text, with CRLF line terminators
+vi.utf8: UTF-8 Unicode text, with CRLF line terminators
+```
+
