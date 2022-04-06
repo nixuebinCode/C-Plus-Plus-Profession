@@ -4605,7 +4605,236 @@ int main()
 }
 ```
 
+# 8. Customizing new and delete
 
+## Item 49: Understand the behavior of the new-handler
 
+When `operator new` can't satisfy a memory allocation request, it throws an exception. Before `operator new` throws an exception, it calls a client specifiable error-handling function called a **new-handler**. To specify the out-of-memory-handling function, clients call `set_new_handler`, a standard library function declared in `<new>`:
 
+```c++
+namespace std {
+	typedef void (*new_handler)();
+	new_handler set_new_handler(new_handler p) throw();
+}
+```
 
+`new_handler` is a typedef for a pointer to a function that takes and returns nothing, and `set_new_handler` is a function that takes and returns a `new_handler`. The `throw()` at the end of `set_new_handler`'s declaration is an exception specification. It essentially says that this function won't throw any exceptions. `set_new_handler`'s parameter is a pointer to the function `operator new` should call if it can't allocate the requested memory. The return value of `set_new_handler` is a pointer to the function in effect for that purpose before `set_new_handler` was called:
+
+```c++
+// function to call if operator new can't allocate enough memory
+void outOfMem()
+{
+	std::cerr << "Unable to satisfy request for memory\n";
+	std::abort();
+}
+int main()
+{
+	std::set_new_handler(outOfMem);
+	int *pBigDataArray = new int[100000000L];
+	...
+}
+```
+
+When `operator new` is unable to fulfill a memory request, it calls the new-handler function **repeatedly** until it can find enough memory. So a well-designed new-handler function must do one of the following:
+
+* **Make more memory available**
+
+* **Install a different new-handler**
+
+* **Deinstall the new-handler**
+
+  i.e., pass the null pointer to `set_new_handler`. With no new-handler installed, operator new will throw an exception when memory allocation is unsuccessful.
+
+* **Throw an exception of type `bad_alloc` or some type derived from `bad_alloc`**
+
+* **Not return, typically by calling `abort` or `exit`**
+
+### Handle memory allocation failures in different ways
+
+Sometimes you'd like to handle memory allocation failures in different ways, depending on the class of the object being allocated:
+
+```c++
+class X {
+public:
+	static void outOfMemory();
+	...
+};
+class Y {
+public:
+	static void outOfMemory();
+	...
+};
+X* p1 = new X; // if allocation is unsuccessful, call X::outOfMemory
+Y* p2 = new Y; // if allocation is unsuccessful, call Y::outOfMemory
+```
+
+You just have each class provide its own versions of `set_new_handler` and `operator new`, for example, suppose you want to handle memory allocation failures for the `Widget` class.:
+
+```c++
+class Widget {
+public:
+	static std::new_handler set_new_handler(std::new_handler p) throw();
+	static void* operator new(std::size_t size) throw(std::bad_alloc);
+private:
+	static std::new_handler currentHandler;
+};
+
+// Static class members must be defined outside the class definition (unless they're const and integral)
+std::new_handler Widget::currentHandler = 0; // init to null in the class impl. file
+
+// Save whatever pointer is passed to it, and return whatever pointer had been saved prior to the call
+std::new_handler Widget::set_new_handler(std::new_handler p) throw()
+{
+	std::new_handler oldHandler = currentHandler;
+	currentHandler = p;
+	return oldHandler;
+}
+ 
+class NewHandlerHolder {	// treat the global new-handler as a resource
+public:
+	explicit NewHandlerHolder(std::new_handler nh) // acquire current newhandler
+		: handler(nh) {}
+	~NewHandlerHolder() // release it
+		{ std::set_new_handler(handler); }
+private:
+	std::new_handler handler; // remember it
+    
+	NewHandlerHolder(const NewHandlerHolder&); // prevent copying
+	NewHandlerHolder& operator=(const NewHandlerHolder&);
+};
+
+void* Widget::operator new(std::size_t size) throw(std::bad_alloc)
+{
+	NewHandlerHolder h(std::set_new_handler(currentHandler)); 	// install Widget's new-handler, and use old global 
+    															// new-handler to initialize NewHandlerHolder
+	return ::operator new(size); 								// allocate memory or throw 
+}// call NewHandlerHolder's destructor, restore global newhandler
+```
+
+`Widget`'s `operator new` will do the following:
+
+1. Call the standard `set_new_handler` with `Widget`'s error-handling function. This installs `Widget`'s new-handler as the global new-handler.
+
+2. Call the global `operator new` to perform the actual memory allocation. If allocation fails, the global `operator new` invokes `Widget`'s new-handler,
+   because that function was just installed as the global new-handler. 
+
+   If the global `operator new` is ultimately unable to allocate the memory, it throws a `bad_alloc` exception. In that case, **`Widget`'s `operator new` must restore the original global new-handler**, then propagate the exception. **To ensure that the original new-handler is always reinstated, `Widget` treats the global new-handler as a resource** and follows the advice of Item 13 to use resource-managing objects to prevent resource leaks.
+
+3. If the global `operator new` was able to allocate enough memory for a `Widget` object, `Widget`'s `operator new` returns a pointer to the allocated
+   memory. The destructor for the object managing the global new-handler automatically restores the global new-handler to what it was prior to the
+   call to `Widget`'s operator new.
+
+Clients of `Widget` use its new-handling capabilities like this:
+
+```c++
+void outOfMem(); // decl. of func. to call if mem. alloc. for Widget objects fails
+Widget::set_new_handler(outOfMem); // set outOfMem as Widget's new-handling function
+Widget *pw1 = new Widget; // if memory allocation fails, call outOfMem
+
+std::string *ps = new std::string; // if memory allocation fails, call the global newhandling function (if there is one)
+
+Widget::set_new_handler(0); // set the Widget-specific new-handling function to nothing (i.e., null)
+Widget *pw2 = new Widget; 	// if mem. alloc. fails, throw an exception immediately. (There is no new- handling function for
+							// class Widget.)
+```
+
+### Create a base class that's designed to allow derived classes to to set a class-specific new-handler
+
+The code for implementing the scheme above is the same regardless of the class, so a reasonable goal would be to reuse it in other places. An easy way to make that possible is to create a “mixin-style” base class. Then turn the base class into a template, so that you get a different copy of the class data for
+each inheriting class.
+
+```c++
+template<typename T> // "mixin-style" base class for set_new_handler class-specific support
+class NewHandlerSupport{
+public:
+	static std::new_handler set_new_handler(std::new_handler p) throw();
+	static void* operator new(std::size_t size) throw(std::bad_alloc);
+	...
+private:
+	static std::new_handler currentHandler;
+};
+
+// this initializes each currentHandler to null
+template<typename T>
+std::new_handler NewHandlerSupport<T>::currentHandler = 0;
+template<typename T>
+std::new_handler NewHandlerSupport<T>::set_new_handler(std::new_handler p) throw()
+{ 
+    std::new_handler oldHandler = currentHandler;
+	currentHandler = p;
+	return oldHandler;
+}
+template<typename T>
+void* NewHandlerSupport<T>::operator new(std::size_t size) throw(std::bad_alloc)
+{
+	NewHandlerHolder h(std::set_new_handler(currentHandler));
+	return ::operator new(size);
+}
+
+class Widget: public NewHandlerSupport<Widget> {
+	... // as before, but without declarations for set_new_handler or operator new
+}; 
+```
+
+Note tha**t the `NewHandlerSupport` template never uses its type parameter `T`**. It doesn't need to. All we need is a different copy of `NewHandlerSupport` — in particular, its static data member `currentHandler` — for each class that inherits from `NewHandlerSupport`. The template parameter `T` just distinguishes one inheriting class from another. The template mechanism itself automatically generates a copy of `currentHandler` for each `T` with which `NewHandlerSupport` is instantiated.
+
+## Item 50: Understand when it makes sense to replace `new` and `delete`
+
+* **To detect usage errors**
+
+  Failure to `delete` memory conjured up by `new` leads to memory leaks. Using more than one `delete` on newed memory yields undefined behavior. If `operator new` keeps a list of allocated addresses and `operator delete` removes addresses from the list, it's easy to detect such usage errors.
+  
+* **To collect usage statistics**
+
+  Custom versions of `operator new` and `operator delete` make it easy to collect information: What is the distribution of allocated block sizes? What is the distribution of their lifetimes? Do they tend to be allocated and deallocated in FIFO (“first in, first out”) order, LIFO (“last in, first out”) order, or something closer to random order? Do the usage patterns change over time...
+
+* **To increase the speed of allocation and deallocation**
+
+  General-purpose allocators are often (though not always) a lot slower than custom versions, especially if the custom versions are designed for objects of a particular type.
+
+* **To reduce the space overhead of default memory management**
+
+  General-purpose memory managers often incur some overhead for each allocated block. Allocators tuned for small objects (such as those in Boost's Pool library) essentially eliminate such overhead.
+
+* **To compensate for suboptimal alignment in the default allocator**
+
+  The `operator news` that ship with some compilers don't guarantee eight-byte alignment for dynamic allocations of doubles. In such cases, replacing the default `operator new` with one that guarantees eight-byte alignment could yield big increases in program performance.
+
+* **To cluster related objects near one another**
+
+  It can make sense to create a separate heap for particular data structures so they are clustered together on as few pages as possible. Placement versions of `new` and `delete` (see Item 52) can make it possible to achieve such clustering.
+
+* **To obtain unconventional behavior**
+
+  
+
+### An example: writing a custom `operator new`
+
+Here's a quick first pass at a global `operator new` that facilitates the detection of data overruns (writing beyond the end of an allocated block)
+and underruns (writing prior to the beginning of an allocated block)--overallocate blocks so there's room to put known byte patterns (“signatures”) before and after the memory made available to clients. `operator delete`s can check to see if the signatures are still intact:
+
+  ```c++
+  static const int signature = 0xDEADBEEF;
+  typedef unsigned char Byte;
+  // this code has several flaws—see below
+  void* operator new(std::size_t size) throw(std::bad_alloc)
+  {
+  	using namespace std;
+  	size_t realSize = size + 2 * sizeof(int); // increase size of request so 2 signatures will also fit inside
+  	void *pMem = malloc(realSize); 			  // call malloc to get the actual memory
+  	if (!pMem) throw bad_alloc();
+  	// write signature into first and last parts of the memory
+  	*(static_cast<int*>(pMem)) = signature;
+  	*(reinterpret_cast<int*>(static_cast<Byte*>(pMem)+realSizesizeof(int))) = signature;
+  	// return a pointer to the memory just past the first signature
+  	return static_cast<Byte*>(pMem) + sizeof(int);
+  }
+  ```
+
+### An issue in this `operator new`: alignment
+
+Many computer architectures require that data of particular types be placed in memory at particular kinds of addresses. For example, an architecture might require that pointers occur at addresses that are a multiple of four or that doubles must occur at addresses that are a multiple of eight.
+
+C++ requires that all `operator new`s return pointers that are suitably aligned for any data type. `malloc` labors under the same requirement, so having `operator new` return a pointer it gets from `malloc` is safe. However, in `operator new` above, we're not returning a pointer we got from `malloc`, we're returning a pointer we got from `malloc` offset by the size of an `int`.
+
+For example, if the client called `operator new` to get enough memory for a `double` and we were running on a machine where `int`s were four bytes in size but `double`s were required to be eight-byte aligned, we'd probably return a pointer with improper alignment.
