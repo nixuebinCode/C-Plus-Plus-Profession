@@ -2233,3 +2233,61 @@ void ConvertBSTtoLst(BinaryTreeNode* pNode, BinaryTreeNode* &pNodePre){
 }
 ```
 
+## 面试题37：序列化二叉树
+
+### 题目
+
+请实现两个函数，分别用来序列化和反序列化二叉树。
+
+### 解题思路
+
+回忆面试题7，我们可以根据二叉树的前序遍历和中序遍历结果来重建一棵二叉树，因此最简单的序列化方法就是得到这棵二叉树的前序遍历和后序遍历。但是这种方法有一个问题，就是要求树中不能有数值重复的节点，且只有当两个序列中的所有数据都读出后才能开始反序列化。
+
+因此我们考虑根据前序遍历的顺序来序列化二叉树，遍历二叉树碰到 nullptr 指针时，把这些 nullptr 指针序列化为一个特殊的字符（如'$'）。例如图中的二叉树序列化成字符串“1，2，4，\$，\$，\$，3，5，\$，\$，6，\$，\$”
+
+ ![image-20220407103900706](images\image-20220407103900706.png)
+
+接着来分析如何反序列化二叉树，第一个读出来的数字是1，由于是先序遍历，1为跟节点。接下来读入数字2，根据先序遍历，2应该为1的左子节点。同样接下来的4是2的左子节点，接着两个\$，意味着4的左、右子节点均为 nullptr，因此4是一个叶节点。接下来回到2节点，重建它的右子节点，由于下一个字符是 \$，着表面2的右子节点为 nullptr，再接下来回到根节点，构造根节点的右子树...
+
+### 代码实现
+
+```c++
+struct BinaryTreeNode
+{
+	int m_nValue;
+    BinaryTreeNode* m_pLeft;
+	BinaryTreeNode* m_pRight;
+};
+
+void Serialize(const BinaryTreeNode* pRoot, ostream& stream){
+    if(pRoot == nullptr){
+        stream << "$,";
+        return;
+    }
+    stream << pRoot->m_nValue << ',';
+    Serialize(pRoot->m_pLeft, stream);
+    Serialize(pRoot->m_pRight, stream); 
+}
+
+// 每次从输入流中读入一个字符，反序列化二叉树
+void DeSerialize(BinaryTreeNode **pRoot, istream& stream){
+    int number;
+    char ch;
+    stream >> ch;
+    while(ch == ',')
+        stream >> ch;
+    
+    if(ch >= '0' && ch <= '9'){
+        stream.putback(ch);
+        stream >> number;
+        *pRoot = new BinaryTreeNode();
+        (*pRoot)->m_nValue = number;
+        (*pRoot)->m_pLeft = nullptr;
+        (*pRoot)->m_pRight = nullptr;
+
+        DeSerialize(&((*pRoot)->m_pLeft), stream);
+        DeSerialize(&((*pRoot)->m_pRight), stream);
+    }
+}
+```
+
