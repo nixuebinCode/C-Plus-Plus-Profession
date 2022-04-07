@@ -4337,17 +4337,17 @@ Swap file ".man_db.conf.swp" already exists! 下面说明你可进行的动作
 
 例如先使用【vim /etc/man_db.conf】打开这个文件，然后【1G】去到第一行，之后输入【:sp】再次打开这个文件依次，然后输入【G】移动到最后一行，结果如图所示：
 
- ![image-20220406170654228](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20220406170654228.png)
+ ![image-20220406170654228](images\image-20220406170654228.png)
 
 划分窗口之后有如下按键功能
 
-![image-20220406170832522](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20220406170832522.png)
+![image-20220406170832522](images\image-20220406170832522.png)
 
 ### 9.3.4 vim 的关键词补全功能
 
 几个主要的 vim 补齐功能
 
-![image-20220406195416410](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20220406195416410.png)
+![image-20220406195416410](images\image-20220406195416410.png)
 
 例如在用 vim 编辑 html 文件的时候，直接输入 b 然后按下 [crtl]+x 再按下 [crtl]+o 就会出现相应的相关字词可以选择，此时可以使用上下按键来挑选所需要的关键元素。
 
@@ -4357,9 +4357,9 @@ vim 会主动地将你曾经做过的操作记录下来，好让你下次可以�
 
 此外，每个Linux 发行版对 vim 的默认环境都不太相同，举例来说，某些版本在查找到关键词时并不会高亮度反白， 有些版本则会主动的帮你进行缩进的操作。这些都是可以自行设置的，如果想知道目前的设置值，可以在一般命令模式时输入【:set all】来查看，下面列举一些常用的设置值
 
- ![image-20220406200545710](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20220406200545710.png)
+ ![image-20220406200545710](images\image-20220406200545710.png)
 
- ![image-20220406200648984](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20220406200648984.png)
+ ![image-20220406200648984](images\image-20220406200648984.png)
 
 如果我们不想每次使用 vim 都重新设置一次各个参数值，可以通过配置文件来直接规定我们习惯的 vim 操作环境。整体 vim 的设置值一般是放置在 /etc/vimrc 这个文件，不过，不建议你修改它， 你可以修改 ~/.vimrc 这个文件 （默认不存在，请你自行手动建立），将你所希望的设置值写入。例如：
 
@@ -4378,7 +4378,7 @@ syntax on "进行语法检验，颜色显示。
 
 ### 9.3.6 vim 常用命令示意图
 
- ![image-20220406201009655](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20220406201009655.png)
+ ![image-20220406201009655](images\image-20220406201009655.png)
 
 ## 9.4 其他 vim 使用注意事项
 
@@ -4449,4 +4449,217 @@ man_db.conf.linux: ASCII text
 vi.big5: ISO-8859 text, with CRLF line terminators
 vi.utf8: UTF-8 Unicode text, with CRLF line terminators
 ```
+
+# 第 10 章 认识与学习 BASH
+
+## 10.1 认识 BASH 这个 Shell
+
+### 10.1.1 硬件、核心与 Shell
+
+我们必须通过 Shell 将我们输入的命令与内核沟通，好让内核可以控制硬件来正确无误地工作。
+
+如下图所示操作系统图例，应用程序其实是在最外层，就如同鸡蛋的外壳一样，因此这个东西就被称为壳程序（Shell）。
+
+ ![image-20220407213130222](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20220407213130222.png)
+
+其实壳程序的功能只是提供使用者操作系统的一个接口，因此这个壳程序需要可以调用其他软件才好。 之前介绍的命令，包括 man, chmod, chown, vi, fdisk,
+mkfs 等等命令，这些命令都是独立的应用程序， 但是我们可以通过**壳程序 （就是命令行模式）** 来操作这些应用程序，让这些应用程序调用核心来运行所需的任务。
+
+也就是说，只要能够操作应用程序的软件都能够称为壳程序。狭义的壳程序指的是命令行方面的软件，包括本章要介绍的 bash 等。 广义的壳程序则包括图形用户界面模式的软件，因为图形用户界面模式其实也能够操作各种应用程序来调用内核工作啊。
+
+### 10.1.3 系统的合法 shell 与 /etc/shells 功能
+
+shell 依据发展者的不同就有许多的版本，Linux 使用的这一种版本就称为【Bourne Again SHell （简称 bash）】
+
+我们目前的 Linux，可以检查一下 /etc/shells 这个文件，至少就有下面这几个可以用的 shells
+
+* /bin/sh （已经被 /bin/bash 所取代）
+* /bin/bash （就是 Linux 默认的 shell）
+* /bin/tcsh （整合 C Shell ，提供更多的功能）
+* /bin/csh （已经被 /bin/tcsh 所取代）
+
+### 10.1.4 Bash shell 的功能
+
+bash 主要的优点：
+
+* **历史命令（history）**
+
+  只要在命令行按【上下键】就可以找到前/后一个输入的命令。这些命令被记录在你的家目录的 .bash_history 里，不过需要注意的是~/.bash_history 记录的是前一次登录以前所执行过的命令， 而至于这一次登录所执行的命令都被缓存在内存中，当你成功的注销系统后，该命令才会记录到 .bash_history 当中。
+
+* **命令与文件补全功能： （[Tab] 按键的好处）**
+
+  [Tab] 接在一串命令的第一个字的后面，则为命令补全；
+
+  [Tab] 接在一串命令的第二个字的后面，则为文件补齐；
+
+  若安装 bash-completion 软件，则在某些指令后面使用 [Tab] 按键时，可以进行“选项/参数的补齐”功能；
+
+* **命令别名设置功能： （alias）**
+
+  比如你想用 lm 替换 ls -al 这个命令，可以利用 alias 这样做：
+
+  ```shell
+  alias lm='ls -al'
+  ```
+
+* **程序化脚本：（shell scripts）**
+
+  可以将平时管理系统常需要执行的连续命令写成一个文件
+
+* **通配符：（Wildcard）**
+
+  例如想知道 /usr/bin 下面有多少以 X 为开头的文件：
+
+  ```shell
+  ls -l /usr/bin/X*
+  ```
+
+### 10.1.5 查询命令是否为 Bash shell 的内置命令： type
+
+为了方便 shell 的操作，其实 bash 已经内置了很多命令了，例如 cd ， 还有例如 umask 等命令，都是内置在 bash 当中。
+
+可以通过 type 这个命令查看命令是来自于外部命令（指的是其他非 bash 所提供的命令）或是内置在 bash 中。
+
+```shell
+[dmtsai@study ~]$ type [-tpa] name
+选项与参数：
+：不加任何选项与参数时，type 会显示出 name 是外部指令还是 bash 内置指令
+-t ：当加入 -t 参数时，type 会将 name 以下面这些字眼显示出他的意义：
+file ：表示为外部指令；
+alias ：表示该指令为命令别名所设置的名称；
+builtin ：表示该指令为 bash 内置的指令功能；
+-p ：如果后面接的 name 为外部指令时，才会显示完整文件名；
+-a ：会由 PATH 变量定义的路径中，将所有含 name 的指令都列出来，包含 alias
+
+范例一：查询一下 ls 这个指令是否为 bash 内置？
+[dmtsai@study ~]$ type ls
+ls is aliased to `ls --color=auto' <==未加任何参数，列出 ls 的最主要使用情况
+[dmtsai@study ~]$ type -t ls
+alias <==仅列出 ls 执行时的依据
+[dmtsai@study ~]$ type -a ls
+ls is aliased to `ls --color=auto' <==最先使用 aliase
+ls is /usr/bin/ls <==还有找到外部指令在 /bin/ls
+范例二：那么 cd 呢？
+[dmtsai@study ~]$ type cd
+cd is a shell builtin <==看到了吗？ cd 是 shell 内置命令
+```
+
+另外，由于利用 type 查找后面的名称时，如果后面接的名称并不能以可执行文件的状态被找到， 那么该名称是不会被显示出来的。也就是说， type 主要在找出“可执行文件”而不是一般文件。所以，这个 type 也可以用来作为类似 which 命令的用途。
+
+### 10.1.6 命令的执行与快速编辑按钮
+
+当命令串太长时，可以用 \ 转义[Enter]键，在下一行继续命令的输入。当转义成功后，下一行最前面会主动出现 > 符号。
+
+```shell
+[dmtsai@study ~]$ cp /var/spool/mail/root /etc/crontab \
+> /etc/fstab /root
+```
+
+当你输入了一串错误的命令时，有以下组合键可供删除
+
+![image-20220407221448400](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20220407221448400.png)
+
+## 10.2 Shell 的变量功能
+
+### 10.2.1 什么是变量
+
+变量就是以一组文字或符号，来替换一些设置或一串保留的数据。
+
+### 10.2.2 变量的使用与设置： echo、变量的设置规则、unset
+
+#### 变量的使用：echo
+
+变量在被使用时，前面必须要加上美元符号【$】或是以【\${变量}】的方式来使用。
+
+```shell
+[dmtsai@study ~]$ echo $variable
+[dmtsai@study ~]$ echo $PATH
+/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/dmtsai/.local/bin:/home/dmtsai/bin
+[dmtsai@study ~]$ echo ${PATH}
+```
+
+修改某个变量的内容，直接用等号就可以了
+
+```shell
+[dmtsai@study ~]$ echo ${myname}
+<==这里并没有任何数据，因为这个变量尚未被设置，是空的
+[dmtsai@study ~]$ myname=VBird
+[dmtsai@study ~]$ echo ${myname}
+VBird <==出现了,因为这个变量已经被设置了
+```
+
+#### 变量的设置规则
+
+* 变量与变量内容以一个等号“=”来连接，如下所示： myname=VBird
+* 等号两边不能直接接空格，如下所示为错误： myname = VBird或myname=VBird Tsai 
+* 变量名称只能是英文字母与数字，但是开头字符不能是数字，如下为错误：2myname=VBird
+* 变量内容若有空格可使用双引号【“】或单引号【‘】将变量内容结合起来，但
+  * 双引号内的特殊字符如 \$ 等，可以保有原本的特性，如下所示： var="lang is \$LANG"则“echo $var”可得lang is zh_TW.UTF-8
+  * 单引号内的特殊字符则仅为一般字符 （纯文本），如下所示： var='lang is \$LANG'则“echo \$var”可得lang is $LANG
+* 可用转义字符“ \ ”将特殊符号（如 [Enter], $, \, 空格, ' 等）变成一般字符，如：myname=VBird\ Tsai
+* 在一串命令的执行中，还需要借由其他额外的命令所提供的信息时，可以使用反单引号【\`命令\`】或 【\$(命令)】。特别注意，那个 ` 是键盘上方的数字键 1 左边那个按键，而不是单引号！ 例如想要取得核心版本的设置： version=\$（uname -r）再echo $version可得3.10.0-229.el7.x86_64
+* 若该变量为扩增变量内容时，则可用 "\$变量名称" 或 \${变量} 累加内容，如下所示：PATH="\$PATH":/home/bin或PATH=${PATH}:/home/bin
+* 若该变量需要在其他子程序执行，则需要以 export 来使变量变成环境变量： export PATH
+* 通常大写字符为系统默认变量，自行设置变量可以使用小写字符，方便判断 
+* 取消变量的方法为使用 unset ：【unset 变量名称】例如取消 myname 的设置： unset myname
+
+```shell
+范例一：设置变量 name ，且内容为 VBird
+[dmtsai@study ~]$ 12name=VBird
+bash: 12name=VBird: command not found... <==屏幕会显示错误,因为不能以数字开头
+[dmtsai@study ~]$ name = VBird <==还是错误，因为有空格
+[dmtsai@study ~]$ name=VBird <==OK
+
+范例二：承上题，若变量内容为 VBird's name 呢，就是变量内容含有特殊符号时：
+[dmtsai@study ~]$ name=VBird's name
+# 单引号与双引号必须要成对，在上面的设置中仅有一个单引号，因此当你按下 enter 后，
+# 你还可以继续输入变量内容。这与我们所需要的功能不同，失败
+# 记得，失败后要复原请按下 [ctrl]-c 结束
+
+[dmtsai@study ~]$ name="VBird's name" <==OK
+# 命令是由左边向右找，先遇到的引号先有用，因此如上所示， 单引号变成一般字符
+
+[dmtsai@study ~]$ name='VBird's name' <==失败
+# 因为前两个单引号已成对，后面就多了一个不成对的单引号了,因此也就失败了
+
+[dmtsai@study ~]$ name=VBird\'s\ name <==OK
+# 利用反斜线 （\） 转义特殊字符，例如单引号与空白键，这也是 OK 的
+
+范例三：我要在 PATH 这个变量当中“累加”:/home/dmtsai/bin 这个目录
+[dmtsai@study ~]$ PATH=$PATH:/home/dmtsai/bin
+[dmtsai@study ~]$ PATH="$PATH":/home/dmtsai/bin
+[dmtsai@study ~]$ PATH=${PATH}:/home/dmtsai/bin
+# 上面这三种格式在 PATH 里头的设置都是 OK 的，但是下面的例子就不见得
+
+范例四：承范例三，我要将 name 的内容多出 "yes" 呢？
+[dmtsai@study ~]$ name=$nameyes
+# 知道了吧，如果没有双引号，那么变量成了啥，name 的内容是 $nameyes 这个变量
+# 我们可没有设置过 nameyes 这个变量，所以，应该是下面这样才对
+[dmtsai@study ~]$ name="$name"yes
+[dmtsai@study ~]$ name=${name}yes <==以此例较佳
+
+范例五：如何让我刚刚设置的 name=VBird 可以用在下个 shell 的程序？
+[dmtsai@study ~]$ name=VBird
+[dmtsai@study ~]$ bash <==进入到所谓的子进程
+[dmtsai@study ~]$ echo $name <==子进程：再次的 echo 一下；
+<==并没有刚刚设置的内容
+[dmtsai@study ~]$ exit <==子进程：离开这个子进程
+[dmtsai@study ~]$ export name
+[dmtsai@study ~]$ bash <==进入到所谓的子进程
+[dmtsai@study ~]$ echo $name <==子进程：在此执行
+VBird <==出现设置值了
+[dmtsai@study ~]$ exit <==子进程：离开这个子进程
+```
+
+在我目前这个 shell 的情况下，去启用另一个新的 shell ，新的那个 shell 就是子进程，在一般的状态下，父程序的自定义变量是无法在子程序内使用的。但是通过 export 将变量变成环境变量后，就能够在子进程下面应用了。
+
+```shell
+范例六：如何进入到您目前核心的模块目录--内含目录$(命令)的使用方法
+[dmtsai@study ~]$ cd /lib/modules/`uname -r`/kernel
+[dmtsai@study ~]$ cd /lib/modules/$（uname -r）/kernel # 以此例较佳！
+```
+
+### 10.2.3 环境变量的功能
+
+
 
