@@ -4838,3 +4838,204 @@ Many computer architectures require that data of particular types be placed in m
 C++ requires that all `operator new`s return pointers that are suitably aligned for any data type. `malloc` labors under the same requirement, so having `operator new` return a pointer it gets from `malloc` is safe. However, in `operator new` above, we're not returning a pointer we got from `malloc`, we're returning a pointer we got from `malloc` offset by the size of an `int`.
 
 For example, if the client called `operator new` to get enough memory for a `double` and we were running on a machine where `int`s were four bytes in size but `double`s were required to be eight-byte aligned, we'd probably return a pointer with improper alignment.
+
+## Item 51: Adhere to convention when writing new and delete
+
+### Implementing a conformant `operator new`
+
+The convention when writing `operator new`
+
+* Having the right return value
+* Calling the new-handling function when insufficient memory is available
+* Being prepared to cope with requests for no memory
+
+`operator new` actually tries to allocate memory more than once, calling the new-handling function after each failure. The assumption here is that the new-handling function might be able to do something to free up some memory. Only when the pointer to the new-handling function is null does operator new throw an exception.
+
+Curiously, C++ requires that `operator new` return a legitimate pointer even when zero bytes are requested.
+
+```c++
+void * operator new(std::size_t size) throw(std::bad_alloc)
+{ // your operator new might take additional params
+	using namespace std;
+	if (size == 0) { // handle 0-byte requests
+		size = 1; 	 // by treating them as 1-byte requests
+	}
+	while (true) {
+		attempt to allocate size bytes;
+		if (the allocation was successful)
+			return (a pointer to the memory);
+		// allocation was unsuccessful; find out what the
+		// current new-handling function is (see below)
+		new_handler globalHandler = set_new_handler(0);
+		set_new_handler(globalHandler);
+		if (globalHandler) (*globalHandler)();
+		else throw std::bad_alloc();
+	}
+}
+```
+
+### Implementing a conformant `operator delete`
+
+All you need to remember is that C++ guarantees **it's always safe to delete the null pointer**.
+
+Here's pseudocode for a non-member `operator delete`:
+
+```c++
+void operator delete(void *rawMemory) throw()
+{
+	if (rawMemory == 0) return; // do nothing if the null pointer is being deleted
+	deallocate the memory pointed to by rawMemory;
+}
+```
+
+The member version of this function is simple, too, except you've got to be sure to check the size of what's being deleted. Assuming your class-specific
+`operator new` forwards requests of the “wrong” size to `::operator new`, you've got to forward “wrongly sized” deletion requests to `::operator delete`:
+
+```c++
+class Base {
+public:
+	static void* operator new(std::size_t size) throw(std::bad_alloc);
+	static void operator delete(void *rawMemory, std::size_t size) throw();
+	...
+};
+void Base::operator delete(void *rawMemory, std::size_t size) throw()
+{
+	if (rawMemory == 0) return; // check for null pointer
+	if (size != sizeof(Base)) { // if size is "wrong,"
+		::operator delete(rawMemory); // have standard operator delete handle the request
+		return;
+	}
+	deallocate the memory pointed to by rawMemory;
+	return;
+}
+```
+
+## Item 52: Write placement `delete` if you write placement `new`
+
+When you write a new expression such as this:
+
+```c++
+Widget *pw = new Widget;
+```
+
+Two functions are called: one to `operator new` to allocate memory, a second to `Widget`'s default constructor.
+
+Suppose that the first call succeeds, but the second call results in an exception being thrown. In that case, the memory allocation performed in step 1 must be undone. Otherwise we'll have a memory leak.
+
+The responsibility for undoing step 1 must therefore fall on the C++ runtime system. The runtime system is happy to call the `operator delete` that corresponds to the version of `operator new` it called in step 1, **but it can do that only if it knows which operator delete — there may be many — is the proper one to cal**l. Thus when you start declaring non-normal forms of operator new — forms that take additional parameters, the which-`delete`-goes-with-this-`new` issue does arise:
+
+```c++
+class Widget {
+public:
+	...
+	static void* operator new(std::size_t size, std::ostream& logStream) throw(std::bad_alloc); // non-normal form of new
+	static void operator delete(void *pMemory, std::size_t size) throw(); // normal classs-specific form of delete
+	...
+};
+```
+
+When an `operator new` function takes extra parameters (other than the mandatory `size_t` argument), that function is known as a placement version of `new`.
+
+This design is problematic. The difficulty is that this class will give rise to subtle memory leaks:
+
+```c++
+Widget *pw = new (std::cerr) Widget; // call operator new, passing cerr as the ostream; this leaks memory
+									 // if the Widget constructor throws
+```
+
+If memory allocation succeeds and the `Widget` constructor throws an exception, the runtime system is responsible for undoing the allocation that `operator new` performed. The runtime system looks for a version of `operator delete` that takes the same number and types of extra arguments as `operator new`. In this case, the corresponding `operator delete` would have this signature:
+
+```c++
+void operator delete(void*, std::ostream&) throw();
+```
+
+In this case, `Widget` declares no placement version of `operator delete`, so the runtime system doesn't know how to undo what the call to placement `new` does. As a result, it does nothing. In this example, no `operator delete` is called if the `Widget` constructor throws an exception.
+
+To eliminate the memory leak in the code above, `Widget` needs to declare a placement `delete` that corresponds to the placement `new`:
+
+```c++
+class Widget {
+public:
+	...
+	static void* operator new(std::size_t size, std::ostream& logStream) throw(std::bad_alloc);
+	static void operator delete(void *pMemory) throw();
+	static void operator delete(void *pMemory, std::ostream& logStream) throw();
+	...
+};
+```
+
+### Avoid having class-specific news hide other news
+For example, if you have a base class that declares only a placement version of `operator new`, clients will find that the normal form of `new` is unavailable to them:
+
+```c++
+class Base {
+public:
+	...
+	static void* operator new(std::size_t size, std::ostream& logStream) throw(std::bad_alloc); // this new hides the normal
+																								// global forms
+	...
+};
+Base *pb = new Base; // error! the normal form of operator new is hidden
+Base *pb = new (std::cerr) Base; // fine, calls Base's placement new
+```
+
+Similarly, `operator new`s in derived classes hide both global and inherited versions of operator new:
+
+```c++
+class Derived: public Base { // inherits from Base above
+public:
+	...
+	static void* operator new(std::size_t size) throw(std::bad_alloc); // redeclares the normal form of new
+ 	// 
+	...
+};
+
+Derived *pd = new (std::clog) Derived; // error! Base's placement new is hidden
+Derived *pd = new Derived; // fine, calls Derived's operator new
+```
+
+By default, C++ offers the following forms of operator new at global scope:
+
+```c++
+void* operator new(std::size_t) throw(std::bad_alloc); // normal new
+void* operator new(std::size_t, void*) throw(); // placement new
+void* operator new(std::size_t, const std::nothrow_t&) throw();// nothrow new
+```
+
+If you declare any `operator new`s in a class, you'll hide all these standard forms. An easy way to do this is to create a base class containing all the normal
+forms of `new` and `delete`:
+
+```c++
+class StandardNewDeleteForms {
+public:
+	// normal new/delete
+	static void* operator new(std::size_t size) throw(std::bad_alloc)
+		{ return ::operator new(size); }
+	static void operator delete(void *pMemory) throw()
+		{ ::operator delete(pMemory); }
+	// placement new/delete
+	static void* operator new(std::size_t size, void *ptr) throw()
+		{ return ::operator new(size, ptr); }
+	static void operator delete(void *pMemory, void *ptr) throw()
+		{ return ::operator delete(pMemory, ptr); }
+	// nothrow new/delete
+	static void* operator new(std::size_t size, const std::nothrow_t& nt) throw()
+		{ return ::operator new(size, nt); }
+	static void operator delete(void *pMemory, const std::nothrow_t&) throw()
+		{ ::operator delete(pMemory); }
+};
+```
+
+Clients who want to augment the standard forms with custom forms can then just use inheritance and using declarations (see Item 33) to get the standard forms:
+
+```c++
+class Widget: public StandardNewDeleteForms { // inherit std forms
+public:
+	using StandardNewDeleteForms::operator new; // make those forms visible
+	using StandardNewDeleteForms::operator delete;
+	static void* operator new(std::size_t size, std::ostream& logStream) throw(std::bad_alloc); // add a custom placement new
+	static void operator delete(void *pMemory, std::ostream& logStream) throw(); // add the corresponding placement delete
+	...
+};
+```
+
