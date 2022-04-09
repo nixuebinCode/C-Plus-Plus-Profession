@@ -2805,7 +2805,7 @@ This means that if you **inherit** from a base class with **overloaded functions
 
 It's conceivable that you sometimes won't want to inherit all the functions from your base classes. Under public inheritance, this should never be the case, because it violates public inheritance's is-a relationship between base and derived classes. Under private inheritance, however, it can make sense.
 
-Suppose `Derived` privately inherits from Base, and the only version of mf1 that Derived wants to inherit is the one taking no parameters. A using declaration won't do the trick here, because a using declaration makes all inherited functions with a given name visible in the derived class. In this case, you can use a technique named **forwarding function**（转交函数）.
+Suppose `Derived` privately inherits from `Base`, and the only version of `mf1` that `Derived` wants to inherit is the one taking no parameters. A using declaration won't do the trick here, because a using declaration makes all inherited functions with a given name visible in the derived class. In this case, you can use a technique named **forwarding function**（转交函数）.
 
 ```c++
 class Base {
@@ -5038,4 +5038,33 @@ public:
 	...
 };
 ```
+
+# 9. Miscellany
+
+## Item 53: Pay attention to compiler warnings
+
+For example, here's an error everybody makes at one time or another:
+
+```c++
+class B {
+public:
+	virtual void f() const;
+};
+class D: public B {
+public:
+	virtual void f();
+};
+```
+
+The idea is for `D::f` to redefine the virtual function `B::f`, but there's a mistake: in `B`, `f` is a `const` member function, but in `D` it's not declared `const`. One compiler I know says this about that:
+
+```c++
+warning: D::f() hides virtual B::f()
+```
+
+This compiler is trying to tell you that the `f` declared in `B` has not been redeclared in `D`; instead, it's been hidden entirely.
+
+So in C++, take compiler warnings seriously, and strive to compile warning-free at the maximum warning level supported by your compilers.
+
+
 
