@@ -2291,3 +2291,53 @@ void DeSerialize(BinaryTreeNode **pRoot, istream& stream){
 }
 ```
 
+## 面试题38：字符串的排列
+
+### 题目
+
+输入一个字符串，打印出该字符串中字符的所有排列。例如，输入字符串 abc，则打印出由字符 a、b、c 所能排列出来的所有字符串 abc、acb、bac、bca、cab 和 cba。
+
+### 解题思路
+
+我们把一个字符串看成由两部分组成：第一部分是它的第一个字符；第二部分是后面的所有字符。
+
+第一步求所有可能出现在第一个位置的字符，即对于给定的字符串，把第一个字符和后面所有的字符（包括它自身）进行交换。
+
+第二步固定第一个字符，求后面所有字符的排列，这个时候我们仍然把后面的所有字符分成两部分：后面字符的第一个字符，以及这个字符之后的所有字符。然后把第一个字符逐一和它后面的字符交换。
+
+ ![image-20220409161021486](images\image-20220409161021486.png)
+
+### 代码实现
+
+```c++
+void Permutation(char* pStr, char* pBegin);
+
+void Permutation(char* pStr){
+    if(pStr == nullptr)
+        return;
+    Permutation(pStr, pStr);
+}
+
+// pBegin 指向当前操作的字符串的第一个字符
+void Permutation(char* pStr, char* pBegin){
+    if(*pBegin == '\0'){	// 当 pBegin 指向的是 pStr 的末尾时，则说明前面的所有字符都已经交换完毕，递归终止，并打印出当前字符串
+        printf("%s\n", pStr);
+        return;
+    }
+    // 交换当前操作的字符串的第一个字符和其余字符
+    for(char* pCh = pBegin; *pCh != '\0'; pCh++){
+        char temp = *pBegin;
+        *pBegin = *pCh;
+        *pCh = temp;
+
+        //交换完成后，对字串执行递归操作
+        Permutation(pStr, pBegin + 1);
+
+        // 因为每次交换是交换第一个字符和剩余字符，在进行下一次交换前，要把最开始的第一个字符交换回来
+        temp = *pBegin;
+        *pBegin = *pCh;
+        *pCh = temp;
+    }
+}
+```
+
