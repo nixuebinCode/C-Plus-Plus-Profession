@@ -405,7 +405,7 @@ Directory& tempDir() 					// this replaces the tempDir object; it
 
 ***
 
-# 2. Constructors, Destructors, and sAssignment Operators
+# 2. Constructors, Destructors, and Assignment Operators
 ## Item 5: Know what functions C++ silently writes and calls
 
 If you don't declare them yourself, compilers will declare their own versions of a copy constructor, a copy assignment operator, and a destructor.

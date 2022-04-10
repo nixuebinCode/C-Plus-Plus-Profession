@@ -1445,7 +1445,7 @@ ListNode* mergeRecursive(ListNode* pHead1, ListNode* pHead2){
 }
 ```
 
-## 面试题26：
+## 面试题26：树的子结构
 
 ### 题目
 
@@ -2338,6 +2338,108 @@ void Permutation(char* pStr, char* pBegin){
         *pBegin = *pCh;
         *pCh = temp;
     }
+}
+```
+
+## 面试题39：数组中出现次数超过一半的数字
+
+### 题目
+
+数组中有一个数字出现的次数超过数组长度的一半，请找出这个数字。例如，输入一个长度为9的数组 {1，2，3，2，2，2，5，4，2}。由于数字 2 在数组中出现了5次，超过数组长度的一半，因此输出 2。
+
+### 解题思路一
+
+考虑题目中数组的特性：有一个数字出现的次数超过数组长度的一半。如果把这个数组排序，那么**排序之后位于数组中间的数字一定就是那个出现次数超过数组长度一半的数字**。利用快速排序中 partition 算法的启发，我们先在数组中随机选择一个数字，然后以它为 pivot 对数组进行一次划分。如果这个选中的数字的下标刚好是 n/2，那么这个数字就是数组的**中位数**；如果它的下标大于 n/2，那么中位数应该位于它的左边，我们可以接着在它的左边部分的数组中查找；如果它的下标小于 n/2，那么中位数应该位于它的右边，我们可以接着在它的右边部分的数组中查找。
+
+### 代码实现
+
+```c++
+bool CheckMoreThanHalf(int *numbers, int length, int number);
+int partition(int* numbers, int low, int high);
+
+int MoreThanHalfNum(int* numbers, int length){
+    if(numbers == nullptr || length <= 0)
+        return 0;
+    
+    int middle = length / 2;
+    // 选取数组中的第一个数字对数组进行划分
+    int low = 0;
+    int high = length - 1;
+    int pos = partition(numbers, low, high);
+    while(pos != middle){
+        if(pos < middle){   
+            low = pos + 1;
+            pos = partition(numbers, low, high);
+        }
+        else{
+            high = pos - 1;
+            pos = partition(numbers, low, high);
+        }
+    }
+    int result = numbers[pos];
+
+    // 检查该数字是否出现了一半以上
+    if(!CheckMoreThanHalf(numbers, length, result))
+        result = 0;
+    return result;
+}
+
+int partition(int* numbers, int low, int high){
+    int pivot = numbers[low];
+    while(low < high){
+        while(low < high && numbers[high] >= pivot) high--;
+        numbers[low] = numbers[high];
+        while(low < high && numbers[low] <= pivot)  low++;
+        numbers[high] = numbers[low];
+    }
+    numbers[low] = pivot;
+    return low;
+}
+
+bool CheckMoreThanHalf(int *numbers, int length, int number){
+    int cnt = 0;
+    for(int i = 0; i < length; i++){
+        if(numbers[i] == number)
+            cnt++;
+    }
+    return (cnt > length / 2);
+}
+```
+
+### 解题思路二
+
+数组中有一个数字出现的次数超过数组长度的一半，也就是说这个数字出现的次数比其他所有数字出现的次数的和还要多。因此我们在遍历数组时保存两个值：当前遍历的数字，出现的次数。当我们遍历到下一个数字的时候：
+
+* 如果下一个数字和我们之前保存的数字相同，则次数+1
+* 如果下一个数字和我们之前保存的数字不同，则次数-1，如果减1后次数为0，那么我们就更新保存的数字，并把次数设为1。
+
+遍历到数组末尾，我们保存的数字就是要找的数字。
+
+### 代码实现
+
+```c++
+int MoreThanHalfNum_Sol2(int* numbers, int length){
+    if(numbers == nullptr || length <= 0)
+        return 0;
+    int number = numbers[0];
+    int cnt = 1;
+    for(int i = 1; i < length; i++){
+        if(numbers[i] == number)
+            cnt++;
+        else
+            cnt--;
+            if(cnt == 0){
+                number = numbers[i];
+                cnt = 1;
+            }
+    }
+    int result = number;
+
+    // 检查该数字是否出现了一半以上
+    if(!CheckMoreThanHalf(numbers, length, result))
+        result = 0;
+
+    return result;
 }
 ```
 
