@@ -2443,3 +2443,99 @@ int MoreThanHalfNum_Sol2(int* numbers, int length){
 }
 ```
 
+## 面试题40：最小的 K 个数
+
+### 题目
+
+输入 n 个整数，找出其中最小的 k 个数。例如，输入4、5、1、6、2、7、3、8 这 8 个数字，则最小的 4 个数字是1、2、3、4。
+
+### 解题思路一
+
+时间复杂度为 O(n)，只有当我们可以修改输入的数组时可用
+
+同面试题39，可以利用 partition 来解决这个问题，找出其中最小的 k 个数，我们只需找到第 k 个小的数，那么经过 partition 之后，在这个数左边的数字都比它小，即数组中左边的 k 个数字就是所求。
+
+### 代码实现
+
+```c++
+int partition(int *numbers, int low, int high);
+
+void GetLeastNumbers(int *numbers, int length, int *output, int k){
+    if(numbers == nullptr || k <= 0)
+        return;
+    int low = 0;
+    int high = length - 1;
+    int pos = partition(numbers, low, high);
+    while(pos != k){
+        if(pos < k){
+            low = pos + 1;
+            pos = partition(numbers, low, high);
+        }
+        else{
+            high = pos - 1;
+            pos = partition(numbers, low, high); 
+        }
+    }
+    for(int i = 0; i <= pos; i++)
+        output[i] = numbers[i];
+}
+
+int partition(int *numbers, int low, int high){
+    int pivot = numbers[low];
+    while(low < high){
+        while(low < high && numbers[high] >= pivot)
+            high--;
+        numbers[low] = numbers[high];
+        while(low < high && numbers[low] <= pivot)
+            low++;
+        numbers[high] = numbers[low];
+    }
+    numbers[low] = pivot;
+    return low;
+}
+```
+
+### 解题思路二
+
+时间复杂度为 O(nlogk)，特别适合处理海量数据，对于海量的数据，由于内存的大小是有限制的，可能不能一次性把海量的数据读入内存，这个时候就可以从硬盘中每次读入一个数字，判断该数字是不是需要放入容器 leastNumbers 即可。
+
+我们可以先创建一个大小为 k 的数据容器来存储最小的 k 个数字，接下来每次从输入的 n 个整数中读入一个数：
+
+* 如果容器中已有的数字少于 k 个，则直接把此次读入的数放入容器之中。
+* 如果容器中已有 k 个数字了，我们要在 k 个数字中找出最大数，然后比较此次读入的数据和最大数，如果比最大数大，抛弃这个数；如果比最大数小，则用这个数替换容器中的最大数。
+
+因此我们需要设计一种数据结构来实现该容器，该数据结构需要三件事情：
+
+* 找出最大值
+* 删除最大数
+* 插入一个节点
+
+为了减少时间复杂度，我们可以采用红黑树，其查找、插入、删除操作都能保证在 O(logk) 内完成，而一共有 n 个数，因此总的时间复杂度为  O(nlogk)。
+
+STL 中的 set 和 multiset 都是基于红黑树实现的，因此我们可以直接使用。
+
+### 代码实现
+
+```c++
+typedef multiset<int, greater<int>> intSet; // 指明 multiset 按从大到小排序
+typedef multiset<int, greater<int>>::iterator setIterator;
+
+void GetLeastNumbers(const vector<int>& data, intSet& leastNumbers, int k){
+    leastNumbers.clear();
+    if(k <= 0 || data.size() < k)
+        return;
+    vector<int>::const_iterator iter = data.begin();
+    for(; iter != data.end(); iter++){
+        if(leastNumbers.size() < k)
+            leastNumbers.insert(*iter);
+        else{
+            setIterator iterGreatest = leastNumbers.begin();
+            if(*iter < *iterGreatest){
+                leastNumbers.erase(iterGreatest);
+                leastNumbers.insert(*iter);
+            }
+        }
+    }
+}
+```
+
