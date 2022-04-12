@@ -4661,5 +4661,33 @@ VBird <==出现设置值了
 
 ### 10.2.3 环境变量的功能
 
+#### 用 env 观察环境变量
 
+```shell
+范例一：列出目前的 shell 环境下的所有环境变量与其内容。
+[dmtsai@study ~]$ env
+HOSTNAME=study.centos.vbird <== 这部主机的主机名称
+TERM=xterm <== 这个终端机使用的环境是什么类型
+SHELL=/bin/bash <== 目前这个环境下，使用的 Shell 是哪一个程序？
+HISTSIZE=1000 <== “记录命令的条数”在 CentOS 默认可记录 1000 条
+OLDPWD=/home/dmtsai <== 上一个工作目录的所在
+USER=dmtsai <== 使用者的名称
+MAIL=/var/spool/mail/dmtsai <== 这个使用者所取用的 mailbox 位置
+PATH=/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/home/dmtsai/.local/bin:/home/dmtsai/bin
+<== 执行文件查找的路径，目录与目录中间以冒号（：）隔开
+PWD=/home/dmtsai <== 目前使用者所在的工作目录 （利用 pwd 取出）
+LANG=zh_TW.UTF-8 <=== 这个与语系有关，下面会再介绍
+HOME=/home/dmtsai <== 这个使用者的家目录
+LOGNAME=dmtsai <== 登录者用来登录的帐号名称
+```
 
+* RANDOM
+
+  Linux会有随机数生成器，就是 /dev/random 这个文件。我们可以通过这个随机数文件相关的变量 （$RANDOM）来随机取得随机数。在 BASH 的环境下，其值位于 0~32767，如果想要获得 0~9 的数值，则这样做：
+
+  ```shell
+  [dmtsai@study ~]$ declare -i number=$RANDOM*10/32768 ; echo $number
+  <== 此时会随机取出 0~9 之间的数值
+  ```
+
+#### 用 set 观察所有变量（含环境变量与自定义变量）
