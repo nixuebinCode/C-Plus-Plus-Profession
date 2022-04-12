@@ -570,3 +570,184 @@ T = Widget const*
 param = Widget const* const&
 ```
 
+## Item 5: Prefer `auto` to explicit type declarations
+
+### Avoidance of uninitialized variables
+
+`auto` variables have their type deduced from their initializer, so they must be initialized. That means you can wave goodbye to a host of uninitialized variable problems:
+
+```c++
+int x1; 		// potentially uninitialized
+auto x2; 		// error! initializer required
+auto x3 = 0; 	// fine, x's value is well-defined
+```
+
+### Avoidance of verbose variable declarations, and the ability to directly hold closures
+Because auto uses type deduction, it can represent types known only to compilers:
+
+```c++
+auto derefUPLess = // comparison func. for Widgets pointed to by std::unique_ptrs
+	[](const std::unique_ptr<Widget>& p1, 
+		const std::unique_ptr<Widget>& p2)
+	{ return *p1 < *p2; };
+```
+
+In C++14, parameters to lambda expressions may involve `auto`:
+
+```c++
+auto derefLess = // C++14 comparison function for values pointed to by anything pointer-like
+	[](const auto& p1, 
+   		const auto& p2) 
+	{ return *p1 < *p2; };
+```
+
+Without `auto`, to declare the `derefLess`, you might use the `std::function`. `std::function` is a template in the C++11 Standard Library that generalizes the idea of a function pointer. `std::function` objects can refer to any callable object：
+
+```c++
+std::function<bool(const std::unique_ptr<Widget>&, const std::unique_ptr<Widget>&)> func;
+```
+
+Because lambda expressions yield callable objects, closures can be stored in `std::function` objects. So without `auto` , you can declare `derefLess` like this:
+
+```c++
+std::function<bool (const std::unique_ptr<Widget>& p1, 
+					const std::unique_ptr<Widget>& p2)> 
+   	derefLess = [](const std::unique_ptr<Widget>& p1, 
+					const std::unique_ptr<Widget>& p2)
+				{ return *p1 < *p2; };
+```
+
+Note that using `std::function` is not the same as using `auto`：
+
+* An `auto`-declared variable holding a closure has the same type as the closure, and as such it uses only as much memory as the closure requires.
+* The type of a `std::function` declared variable holding a closure is an instantiation of the `std::function` template, and that has a fixed size for any given signature.
+
+The result is that the `std::function` approach is generally bigger and slower than the `auto` approach, and it may yield out-of-memory exceptions, too.
+
+### Avoidance of problems related to “type shortcuts”
+
+```c++
+std::vector<int> v;
+…
+unsigned sz = v.size();
+```
+
+The official return type of `v.size()` is `std::vector<int>::size_type`. And On 32-bit Windows, for example, both `unsigned` and `std::vector<int>::size_type` are the same size, but on 64-bit Windows, `unsigned` is 32 bits, while `std::vector<int>::size_type` is 64 bits. This means that code that works under 32-bit Windows may behave incorrectly under 64-bit Windows.
+
+```c++
+auto sz = v.size(); // sz's type is std::vector<int>::size_type
+```
+
+Similarly see this example:
+
+```c++
+std::unordered_map<std::string, int> m;
+…
+for (const std::pair<std::string, int>& p : m)
+{
+	… // do something with p
+}
+```
+
+Remember that the key part of a `std::unordered_map` is `const`, so the type of `std::pair` in the hash table isn’t `std::pair<std::string, int>`, it’s `std::pair<const std::string, int>`. As a result, compilers will strive to find a way to convert `std::pair<const std::string, int>` objects to
+`std::pair<std::string, int>` objects. They’ll succeed by creating a temporary object of the type that `p` wants to bind to by copying each object in `m`, then binding the reference `p` to that **temporary object**. At the end of each loop iteration, the temporary object will be destroyed.
+
+```c++
+for (const auto& p : m)
+{
+	… // as before
+}	
+```
+
+### Refactorings are facilitated by the use of `auto`
+
+Furthermore, `auto` types automatically change if the type of their initializing expression changes. For example, if a function is declared to return an `int`, but you later decide that a `long` would be better, the calling code automatically updates itself the next time you compile if the results of calling the function are stored in `auto` variables.
+
+## Item 6: Use the explicitly typed initializer idiom when `auto` deduces undesired types
+Suppose I have a function that takes a `Widget` and returns a `std::vector<bool>`, where each `bool` indicates whether the `Widget` offers a particular feature:
+
+```c++
+std::vector<bool> features(const Widget& w);
+```
+
+Further suppose that bit 5 indicates whether the `Widget` has high priority. We can thus write code like this:
+
+```c++
+Widget w;
+bool highPriority = features(w)[5]; // is w high priority?
+processWidget(w, highPriority); // process w in accord with its priority
+```
+
+The code above works fine. But if we use `auto` instead:
+
+```c++
+auto highPriority = features(w)[5]; // is w high priority?
+processWidget(w, highPriority); // undefined behavior!
+```
+
+The call to `processWidget` now has undefined behavior. The type of `highPriority` is no longer `bool`.
+
+Though `std::vector<bool>` conceptually holds `bool`s, `operator[]` for `std::vector<bool>` doesn’t return a reference to an element of the container. Instead, it returns an object of type `std::vector<bool>::reference` (a class nested inside `std::vector<bool>`).
+
+`std::vector<bool>::reference` exists because `std::vector<bool>` is specified to represent its `bool`s in packed form, one bit per `bool`. `operator[]` for `std::vector<T>` is supposed to return a `T&`, but C++ forbids references to bits. Not being able to return a `bool&`, `operator[]` for `std::vector<bool>` returns an object that acts like a `bool&`. 
+
+With this information in mind, look again at this part of the original code:
+
+```c++
+bool highPriority = features(w)[5]; // declare highPriority's type explicitly
+```
+
+Here, `operator[]` returns a `std::vector<bool>::reference` object, which is then implicitly converted to the `bool` that is needed to initialize `highPriority`
+
+
+
+`std::vector<bool>::reference` is an example of a **proxy class**: a class that exists for the purpose of emulating and augmenting the behavior of some other type. Standard Library’s smart pointer types are proxy classes that graft resource management onto raw pointers.
+
+Some proxy classes are designed to be apparent to clients. That’s the case for `std::shared_ptr` and `std::unique_ptr`, for example. Other proxy classes are designed to act more or less invisibly. `std::vector<bool>::reference` is an example of such “invisible” proxies.
+
+As a general rule, **“invisible” proxy classes don’t play well with `auto`.** You therefore want to avoid code of this form:
+
+```c++
+auto someVar = expression of "invisible" proxy class type;
+```
+
+### How to find a  “invisible” proxy class
+
+libraries using “invisible” proxy classes often document that they do so.
+
+Where documentation comes up short, header files fill the gap. Function signatures usually reflect their existence:
+
+```c++
+namespace std { 			// from C++ Standards
+template <class Allocator>
+class vector<bool, Allocator> {
+public:
+	…
+	class reference { … };
+	reference operator[](size_type n);
+	…
+};
+}
+```
+
+The unconventional return type for `operator[]` in this case is a tip-off that a proxy class is in use.
+
+### The explicitly typed initializer idiom
+
+The explicitly typed initializer idiom involves declaring a variable with `auto`, but casting the initialization expression to the type you want `auto` to deduce:
+
+```c++
+auto highPriority = static_cast<bool>(features(w)[5]);
+```
+
+Here, `features(w)[5]` continues to return a `std::vector<bool>::reference` object, just as it always has, but the cast changes the type of the expression to `bool`, which `auto` then deduces as the type for `highPriority`.
+
+Applications of the idiom aren’t limited to initializers yielding proxy class types. It can also be useful to emphasize that you are deliberately creating a variable of a type that is different from that generated by the initializing expression:
+
+```c++
+double calcEpsilon(); // return tolerance value
+float ep = calcEpsilon(); // impliclitly convert double → float
+auto ep = static_cast<float>(calcEpsilon());
+```
+
+A declaration using the explicitly typed initializer idiom announces “I’m deliberately reducing the precision of the value returned by the function.”
