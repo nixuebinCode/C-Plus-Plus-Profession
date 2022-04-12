@@ -2539,3 +2539,85 @@ void GetLeastNumbers(const vector<int>& data, intSet& leastNumbers, int k){
 }
 ```
 
+## 面试题41：数据流中的中位数
+
+### 题目
+
+如何得到一个数据流中的中位数？如果从数据流中读出奇数个数值，那么中位数就是所有数值排序之后位于中间的数值。如果从数据流中读出偶数个数值，那么中位数就是所有数值排序之后中间两个数的平均值。
+
+### 解题思路
+
+遇到从数据流中不断读入数值这种题，首先考虑的是我们需要一种容器来保存数据流读出的数据。重点是考虑用哪种数据结构来实现这种容器，并针对题目中的操作能获得最低的时间复杂度：插入和查找中位数。
+
+* 没有排序的数组，插入一个数据的时间复杂度是 O(1) ，查找中位数我们可以利用 Partition 算法，在 O(n)
+
+* 排过序的数组，即每插入一个元素，保持数组有序，插入数据的时间复杂度为 O(n) ， 查找中位数的时间复杂度是 O(1)
+
+* 排序的链表，插入数据的时间复杂度为 O(n) ， 可以定义两个指针，指向链表的中间节点，那么查找中位数的时间复杂度是 O(1)
+
+* 二叉搜索树，插入新数据的时间复杂度为 O(logn)，为了得到中位数，可以在二叉搜索树中添加一个表示子树节点数目的字段，利用这个字段，可以在 O(logn) 时间里找到中位数
+
+* 显然二叉搜索树存在不平衡的情况，因此考虑使用平衡二叉树或者红黑树，但是面试中先要实现带特定结构的AVL树或者红黑树（在每个节点添加一个表示子树节点数目的字段），显然是比较困难的
+
+* 考虑容器内数据是奇数和偶数的两种情况，我们用指针P1和P2指向数据的中间节点：
+
+   ![image-20220412160330568](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20220412160330568.png)
+
+  可以发现指针P1，P2将数据分成两个部分，左边部分的数据比右边部分的数据小，如果我们能快速获得左边数据的最大值，以及右边数据的最小值，那么就可以得到中位数。很自然地想到左边用大根堆来存储数据，右边用小根堆来存取数据。我们可以利用 vector 以及 algorithm头文件里地push_heap() 和 pop_heap() 方法来实现堆。
+
+### 代码实现
+
+```c++
+template<typename T>
+class DynamicArray{
+public:
+    // 从数据流中读取一个数字，并插入到我们的数据结构中
+    void Insert(T value){   
+        if(((maxHeap.size() + minHeap.size()) & 1) == 0){ // 当前插入的数字是第奇数个（已经插入了偶数个），插入大根堆
+            // 如果待插入的数字比小根堆中最小值大
+            if(!minHeap.empty() && value > minHeap[0]){
+                // 先将该数字插入到小根堆中
+                minHeap.push_back(value);
+                push_heap(minHeap.begin(), minHeap.end(), greater<T>());
+                // 弹出小根堆中的最小值插入大根堆中
+                value = minHeap[0];     // 小根堆中的最小值
+                pop_heap(minHeap.begin(), minHeap.end(), greater<T>()); // pop_heap 会将堆顶元素（即为数组第一个位置）和数组最后一个位置对																			// 调
+                minHeap.pop_back();     // 删除交换后的堆顶元素
+            }
+            // 将数字插入大根堆中
+            maxHeap.push_back(value);
+            push_heap(maxHeap.begin(), maxHeap.end(), less<T>());
+        }
+        else{   // 把当前数字插入小根堆
+            if(!maxHeap.empty() && value < maxHeap[0]){
+                maxHeap.push_back(value);
+                push_heap(maxHeap.begin(), maxHeap.end(), less<T>());
+                value = maxHeap[0];
+                pop_heap(maxHeap.begin(), maxHeap.end(), less<T>());
+                maxHeap.pop_back();
+            }
+            minHeap.push_back(value);
+            push_heap(minHeap.begin(), minHeap.end(), greater<T>());
+        }
+    }
+
+    T GetMedian(){
+        if(minHeap.size() == 0 && maxHeap.size() == 0)
+            throw exception();
+        // 因为我们是先插入大根堆，再插入小根堆，如此循环
+        // 因此当容器内数字是奇数个时，中位数应该在大根堆里
+        if(((maxHeap.size() + minHeap.size()) & 1) == 1){
+            return maxHeap[0];
+        }
+        else{
+            return (maxHeap[0] + minHeap[0]) / 2;
+        }
+    }
+
+
+private:
+    vector<T> maxHeap;  // 大根堆，存取数组中较小的值，用来快速获得其中的最大值
+    vector<T> minHeap;  // 小根堆，存取数组中较大的值，用来快速获得其中的最小值
+};
+```
+
