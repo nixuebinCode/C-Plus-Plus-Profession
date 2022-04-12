@@ -2561,7 +2561,7 @@ void GetLeastNumbers(const vector<int>& data, intSet& leastNumbers, int k){
 
 * 考虑容器内数据是奇数和偶数的两种情况，我们用指针P1和P2指向数据的中间节点：
 
-   ![image-20220412160330568](C:\Users\Administrator\AppData\Roaming\Typora\typora-user-images\image-20220412160330568.png)
+    ![image-20220412160330568](images\image-20220412160330568.png)
 
   可以发现指针P1，P2将数据分成两个部分，左边部分的数据比右边部分的数据小，如果我们能快速获得左边数据的最大值，以及右边数据的最小值，那么就可以得到中位数。很自然地想到左边用大根堆来存储数据，右边用小根堆来存取数据。我们可以利用 vector 以及 algorithm头文件里地push_heap() 和 pop_heap() 方法来实现堆。
 

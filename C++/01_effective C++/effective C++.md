@@ -5064,4 +5064,5 @@ warning: D::f() hides virtual B::f()
 
 This compiler is trying to tell you that the `f` declared in `B` has not been redeclared in `D`; instead, it's been hidden entirely.
 
-So in C++, take compiler warnings seriously, and strive to compile warning-free at the maximum warning level supported by your compilers.
+So in C++, take compiler warnings seriously, and strive to compile **warning-free** at the maximum warning level supported by your compilers.
+
