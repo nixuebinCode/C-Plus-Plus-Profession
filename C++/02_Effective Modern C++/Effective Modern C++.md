@@ -570,6 +570,8 @@ T = Widget const*
 param = Widget const* const&
 ```
 
+# CHAPTER 2 `auto`
+
 ## Item 5: Prefer `auto` to explicit type declarations
 
 ### Avoidance of uninitialized variables
@@ -751,3 +753,453 @@ auto ep = static_cast<float>(calcEpsilon());
 ```
 
 A declaration using the explicitly typed initializer idiom announces “I’m deliberately reducing the precision of the value returned by the function.”
+
+# CHAPTER 3 Moving to Modern C++
+
+## Item 7: Distinguish between () and {} when creating objects
+
+As a general rule, initialization values may be specified with parentheses, an equals sign, or braces:
+
+```c++
+int x(0); 	// initializer is in parentheses
+int y = 0; 	// initializer follows "="
+int z{ 0 }; // initializer is in braces
+int z = { 0 }; // initializer uses "=" and braces; the same as the braces-only version
+```
+
+for userdefined types, it’s important to distinguish initialization from assignment, because different function calls are involved:
+
+```c++
+Widget w1; 			// call default constructor
+Widget w2 = w1; 	// not an assignment; calls copy ctor
+w1 = w2; 			// an assignment; calls copy operator=
+```
+
+### uniform initialization
+
+A single initialization syntax that can, at least in concept, be used anywhere and express everything. It’s based on braces, and for that reason I prefer the term *braced initialization*.
+
+Using braces, specifying the initial contents of a container:
+
+```c++
+std::vector<int> v{ 1, 3, 5 }; // v's initial content is 1, 3, 5
+```
+
+Braces can also be used to specify default initialization values for non-static data members, This capability—new to C++11—is shared with the “=” initialization syntax, but not with parentheses:
+
+```c++
+class Widget {
+…
+private:
+	int x{ 0 }; // fine, x's default value is 0
+	int y = 0; // also fine
+	int z(0); // error!
+};
+```
+
+On the other hand, uncopyable objects (e.g., `std::atomics`—see Item 40) may be initialized using braces or parentheses, but not using “=”:
+
+```c++
+std::atomic<int> ai1{ 0 }; // fine
+std::atomic<int> ai2(0); // fine
+std::atomic<int> ai3 = 0; // error!
+```
+
+#### prohibit implicit narrowing conversions among built-in types
+
+If the value of an expression in a braced initializer isn’t guaranteed to be expressible by the type of the object being initialized, the code won’t compile:
+
+```c++
+double x, y, z;
+…
+int sum1{ x + y + z }; 	// error! sum of doubles may
+						// not be expressible as int
+```
+
+Initialization using parentheses and “=” doesn’t check for narrowing conversions
+
+```c++
+int sum2(x + y + z); 	// okay (value of expression
+						// truncated to an int)
+int sum3 = x + y + z; 	// ditto
+```
+
+#### immunity to C++’s most vexing parse
+
+If you try to call a `Widget` constructor with zero arguments, you may declare a function instead of an object:
+
+```c++
+Widget w2(); 	// most vexing parse! declares a function
+				// named w2 that returns a Widget!
+```
+
+Functions can’t be declared using braces for the parameter list, so defaultconstructing an object using braces doesn’t have this problem:
+
+```c++
+Widget w3{}; // calls Widget ctor with no args
+```
+
+### braced initializers, std::initializer_lists, and constructor overloading
+
+In constructor calls, parentheses and braces have the same meaning as long as `std::initializer_list` parameters are not involved:
+
+```c++
+class Widget {
+public:
+	Widget(int i, bool b); 		// ctors not declaring
+	Widget(int i, double d); 	// std::initializer_list params
+	…
+};
+Widget w1(10, true); 			// calls first ctor
+Widget w2{10, true}; 			// also calls first ctor
+Widget w3(10, 5.0); 			// calls second ctor
+Widget w4{10, 5.0}; 			// also calls second ctor
+```
+
+If, however, one or more constructors declare a parameter of type `std::initializer_list`, calls using the braced initialization syntax **strongly** prefer the overloads taking `std::initializer_lists`.
+
+```c++
+class Widget {
+public:
+	Widget(int i, bool b); 							// as before
+	Widget(int i, double d); 						// as before
+    Widget(std::initializer_list<long double> il); 	// added
+    
+    operator float() const; 						// convert to float
+};
+
+Widget w1(10, true); 								// uses parens and, as before,
+													// calls first ctor
+Widget w2{10, true}; 								// uses braces, but now calls
+													// std::initializer_list ctor
+													// (10 and true convert to long double)
+Widget w3(10, 5.0); 								// uses parens and, as before,
+													// calls second ctor
+Widget w4{10, 5.0}; 								// uses braces, but now calls
+													// std::initializer_list ctor
+													// (10 and 5.0 convert to long double)
+Widget w5(w4); 										// uses parens, calls copy ctor
+Widget w6{w4}; 										// uses braces, calls std::initializer_list ctor
+													// (w4 converts to float, and float
+													// converts to long double)
+```
+
+Compilers’ determination to match braced initializers with constructors taking `std::initializer_lists` is so strong, it prevails even if the `std::initializer_list` constructor can’t be called：
+
+```c++
+class Widget {
+public:
+	Widget(int i, bool b); 		// as before
+	Widget(int i, double d); 	// as before
+	Widget(std::initializer_list<bool> il); // element type is now bool
+};
+
+Widget w{10, 5.0}; // error! requires narrowing conversions
+```
+
+Here, compilers will ignore the first two constructors and try to call the constructor taking a `std::initializer_list<bool>`. Calling that constructor would require narrowing conversions, which are prohibited inside braced initializers, so the call is invalid, and the code is rejected.
+
+Only if there’s no way to convert the types of the arguments in a braced initializer to the type in a `std::initializer_list` do compilers fall back on normal overload resolution.
+
+```c++
+class Widget {
+public:
+	Widget(int i, bool b); // as before
+	Widget(int i, double d); // as before
+	// std::initializer_list element type is now std::string
+    // There is no way to convert ints and bools to std::strings
+	Widget(std::initializer_list<std::string> il);
+};
+
+Widget w1(10, true); 	// uses parens, still calls first ctor
+Widget w2{10, true}; 	// uses braces, now calls first ctor
+Widget w3(10, 5.0); 	// uses parens, still calls second ctor
+Widget w4{10, 5.0}; 	// uses braces, now calls second ctor
+```
+
+### Empty brace
+
+Suppose you use an empty set of braces to construct an object that supports default construction and also supports `std::initializer_list` construction. What do your empty braces mean? 
+
+If they mean “no arguments,” you get default construction, but if they mean “empty `std::initializer_list`,” you get construction from a `std::initializer_list` with no elements.
+
+The rule is that you get default construction. **Empty braces mean no arguments, not an `empty std::initializer_list`:**
+
+```c++
+class Widget {
+public:
+	Widget(); 								// default ctor
+	Widget(std::initializer_list<int> il); 	// std::initializer_list ctor
+
+};
+Widget w1; 									// calls default ctor
+Widget w2{}; 								// also calls default ctor
+Widget w3(); 								// most vexing parse! declares a function!
+```
+
+If you want to call a `std::initializer_list` constructor with an empty `std::initializer_list`, you do it by making the empty braces a constructor argument：
+
+```c++
+Widget w4({}); // calls std::initializer_list ctor with empty list
+Widget w5{{}}; // ditto Item
+```
+
+### Parentheses and braces for `std::vector<numeric type>`
+
+An example of where the choice between parentheses and braces can make a significant difference is creating a `std::vector<numeric type>` with two
+arguments.
+
+`std::vector` has a non-`std::initializer_list` constructor that allows you to specify the initial size of the container and a value each of the initial elements should have, but it also has a constructor taking a `std::initializer_list` that permits you to specify the initial values in the container.
+
+```c++
+std::vector<int> v1(10, 20); 		// use non-std::initializer_list
+									// ctor: create 10-element
+									// std::vector, all elements have
+									// value of 20
+std::vector<int> v2{10, 20}; 		// use std::initializer_list ctor:
+									// create 2-element std::vector,
+									// element values are 10 and 20
+```
+
+### Parentheses and braces for object creation inside templates
+
+Suppose you’d like to create an object of an arbitrary type from an arbitrary number of arguments:
+
+```c++
+template<typename T, 			// type of object to create
+			typename... Ts> 	// types of arguments to use
+void doSomeWork(Ts&&... params)
+{
+	T localObject(std::forward<Ts>(params)...); // using parens
+	T localObject{std::forward<Ts>(params)...}; // using braces
+	…
+}
+
+std::vector<int> v;
+…
+doSomeWork<std::vector<int>>(10, 20);
+```
+
+If `doSomeWork` uses parentheses when creating `localObject`, the result is a `std::vector` with 10 elements. If `doSomeWork` uses braces, the result is a `std::vector` with 2 elements. Which is correct? The author of doSomeWork can’t know. Only the caller can.
+
+This is precisely the problem faced by the Standard Library functions `std::make_unique` and `std::make_shared`. These functions resolve the problem by internally using parentheses and by documenting this decision as part of their interfaces.
+
+## Item 8: Prefer nullptr to 0 and NULL
+
+Neither `0` nor `NULL` has a pointer type. 
+
+In C++98, the primary implication of this was that overloading on pointer and integral types could lead to surprises. Passing `0` or `NULL` to such overloads never called a pointer overload:
+
+```c++
+void f(int); 	// three overloads of f
+void f(bool);
+void f(void*);
+f(0); 			// calls f(int), not f(void*)
+f(NULL); 		// might not compile, but typically calls
+				// f(int). Never calls f(void*)
+f(nullptr); 	// calls f(void*) overload
+```
+
+`nullptr`’s advantage is that it doesn’t have an integral type. To be honest, it doesn’t have a pointer type, either, but you can think of it as **a pointer of all types.** Calling the overloaded function `f` with `nullptr` calls the `void*` overload, because `nullptr` can’t be viewed as anything integral.
+
+## Item 9: Prefer alias declarations to typedefs
+
+`typedef`  and alias declarations:
+
+```c++
+typedef
+	std::unique_ptr<std::unordered_map<std::string, std::string>>
+	UPtrMapSS;
+using UPtrMapSS =
+	std::unique_ptr<std::unordered_map<std::string, std::string>>;
+```
+
+* **alias declaration is easier to swallow when dealing with types involving function pointers**
+
+  ```c++
+  // FP is a synonym for a pointer to a function taking an int and
+  // a const std::string& and returning nothing
+  typedef void (*FP) (int, const std::string&);	// typedef
+  using FP = void (*)(int, const std::string&);	// alias declaration
+  ```
+
+* **alias declarations may be templatized (in which case they’re called *alias templates*), while typedefs cannot**
+
+  Consider defining a synonym for a linked list that uses a custom allocator, `MyAlloc`.
+
+  ```c++
+  template<typename T> 							
+  using MyAllocList = std::list<T, MyAlloc<T>>; 	
+  
+  template<typename T>
+  struct MyAllocList { 
+  	typedef std::list<T, MyAlloc<T>> type;
+  };
+  
+  MyAllocList<Widget> lw; 		// client code
+  MyAllocList<Widget>::type lw; 	// client code
+  ```
+
+  It gets worse, If you want to use the `typedef` inside a template with a template parameter, you have to precede the `typedef` name with `typename`:
+
+  ```c++
+  template<typename T>
+  class Widget {
+  private:
+  	typename MyAllocList<T>::type list;
+  	…
+  };
+  
+  template<typename T>
+  class Widget {
+  private:
+  	MyAllocList<T> list; // no "typename", no "::type"
+  };
+  ```
+
+## Item 10: Prefer scoped enums to unscoped enums.
+
+As a general rule, declaring a name inside curly braces limits the visibility of that name to the scope defined by the braces. Not so for the enumerators declared in C++98-style enums:
+
+```c++
+enum Color { black, white, red }; 	// black, white, red are
+									// in same scope as Color
+auto white = false; 				// error! white already
+									// declared in this scope
+```
+
+The fact that these enumerator names leak into the scope containing their `enum` definition gives rise to the official term for this kind of `enum`: **unscoped**.
+
+Their new C++11 counterparts, **scoped** `enums`, don’t leak names in this way:
+
+```c++
+enum class Color { black, white, red }; 	// black, white, red
+											// are scoped to Color
+auto white = false; 						// fine, no other
+											// "white" in scope
+Color c = white;							// error! no enumerator named
+											// "white" is in this scope
+Color c = Color::white; 					// fine
+auto c = Color::white;						// also fine (and in accord with Item 5's advice)
+```
+
+### Scoped enums are much more stongly typed
+
+Scoped `enum`s have a second compelling advantage: their enumerators are much more strongly typed. Enumerators for unscoped enums implicitly convert to integral types:
+
+```c++
+std::vector<std::size_t> 			// func. returning prime factors of x
+primeFactors(std::size_t x);
+
+enum Color { black, white, red }; 	// unscoped enum
+Color c = red;
+if (c < 14.5) { 					// compare Color to double (!)
+	auto factors = primeFactors(c);	// compute prime factors of a Color (!)
+	…
+}
+
+enum class Color { black, white, red }; 	// enum is now scoped
+Color c = Color::red; 						// as before, but with scope qualifier
+if (c < 14.5) { 							// error! can't compare Color and double
+    auto factors = primeFactors(c); 		// error! can't pass Color to function expecting std::size_t
+	…
+}
+
+// If you honestly want to perform a conversion from Color to a different type, use the cast
+if (static_cast<double>(c) < 14.5) { 		// odd code, but it's valid
+	auto factors = primeFactors(static_cast<std::size_t>(c)); // suspect, but it compiles
+	…
+}
+```
+
+### Scoped `enum`s may be forward-declared
+
+```c++
+enum Color; // error!
+enum class Color; // fine
+```
+
+The inability to forward-declare `enum`s has drawbacks. The most notable is probably the increase in compilation dependencies:
+
+Every `enum` in C++ has an integral underlying type that is determined by compilers. For an unscoped `enum` like `Color`, 
+
+```c++
+enum Color { black, white, red };
+```
+
+compilers might choose `char` as the underlying type, because there are only three values to represent. However, some enums have a range of values that is much larger:
+
+```c++
+enum Status { good = 0,
+	failed = 1,
+	incomplete = 100,
+	corrupt = 200,
+	indeterminate = 0xFFFFFFFF
+};
+```
+
+Here the values to be represented range from `0` to `0xFFFFFFFF`. Compilers will have to select an integral type larger than `char` for the representation of `Status` values. 
+
+To make efficient use of memory, compilers often want to choose the smallest underlying type for an `enum` that’s sufficient to represent its range of enumerator values. **To make that possible, C++98 supports only enum definitions (where all enumerators are listed); enum declarations are not allowed.**
+
+The underlying type for a scoped `enum` is always known, and for unscoped `enum`s, you can specify it.
+
+By default, the underlying type for scoped `enum`s is int:
+
+```c++
+enum class Status; // underlying type is int
+```
+
+If the default doesn’t suit you, you can override it:
+
+```c++
+enum class Status: std::uint32_t; 	// underlying type for
+									// Status is std::uint32_t
+									// (from <cstdint>)
+```
+
+To specify the underlying type for an unscoped `enum`, you do the same thing as for a scoped `enum`, and the result may be forward-declared:
+
+```c++
+enum Color: std::uint8_t; 	// fwd decl for unscoped enum;
+							// underlying type is
+							// std::uint8_t
+```
+
+### One situation where unscoped enums may be useful
+
+That’s when referring to fields within C++11’s `std::tuples`. Suppose we have a tuple holding values for the name, email address, and reputation value for a user at a social networking website:
+
+```c++
+using UserInfo = // type alias; see Item 9
+	std::tuple<std::string, // name
+				std::string, // email
+				std::size_t> ; // reputation
+```
+
+```c++
+UserInfo uInfo; // object of tuple type
+…
+auto val = std::get<1>(uInfo); // get value of field 1, that is email address
+```
+
+Should you really be expected to remember that field 1 corresponds to the user’s email address? I think not. Using an unscoped enum to associate names with field numbers avoids the need to:
+
+```c++
+enum UserInfoFields { uiName, uiEmail, uiReputation };
+UserInfo uInfo; // as before
+…
+auto val = std::get<uiEmail>(uInfo); // ah, get value of email field
+```
+
+What makes this work is the implicit conversion from `UserInfoFields` to `std::size_t`, which is the type that `std::get` requires.
+
+The corresponding code with scoped `enum`s is substantially more verbose:
+
+```c++
+enum class UserInfoFields { uiName, uiEmail, uiReputation };
+UserInfo uInfo; // as before
+…
+auto val = std::get<static_cast<std::size_t>(UserInfoFields::uiEmail)>(uInfo); // ah, get value of email field
+```
+
