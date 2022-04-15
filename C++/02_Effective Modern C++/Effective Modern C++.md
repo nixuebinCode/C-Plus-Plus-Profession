@@ -1,4 +1,4 @@
-# CHAPTER 1 Deducing Types
+# 1. Deducing Types
 ## Item 1: Understand template type deduction
 
 Think of a function template as looking like this:
@@ -570,7 +570,7 @@ T = Widget const*
 param = Widget const* const&
 ```
 
-# CHAPTER 2 `auto`
+# 2. `auto`
 
 ## Item 5: Prefer `auto` to explicit type declarations
 
@@ -754,7 +754,7 @@ auto ep = static_cast<float>(calcEpsilon());
 
 A declaration using the explicitly typed initializer idiom announces “I’m deliberately reducing the precision of the value returned by the function.”
 
-# CHAPTER 3 Moving to Modern C++
+# 3. Moving to Modern C++
 
 ## Item 7: Distinguish between () and {} when creating objects
 
@@ -1057,7 +1057,7 @@ using UPtrMapSS =
   };
   ```
 
-## Item 10: Prefer scoped enums to unscoped enums.
+## Item 10: Prefer scoped `enum`s to unscoped `enum`s
 
 As a general rule, declaring a name inside curly braces limits the visibility of that name to the scope defined by the braces. Not so for the enumerators declared in C++98-style enums:
 
@@ -1201,5 +1201,259 @@ enum class UserInfoFields { uiName, uiEmail, uiReputation };
 UserInfo uInfo; // as before
 …
 auto val = std::get<static_cast<std::size_t>(UserInfoFields::uiEmail)>(uInfo); // ah, get value of email field
+```
+
+## Item 11: Prefer `deleted` functions to `private` undefined ones
+For the copy constructor and the copy assignment operator, the C++98 approach to preventing use of these functions is to declare them `private` and not define them. For example, To render `istream` and `ostream` classes uncopyable, `basic_ios` is specified in C++98 as follows:
+
+```c++
+template <class charT, class traits = char_traits<charT> >
+class basic_ios : public ios_base {
+public:
+	…
+private:
+	basic_ios(const basic_ios& ); // not defined
+	basic_ios& operator=(const basic_ios&); // not defined
+};
+```
+
+Declaring these functions `private` prevents clients from calling them. Deliberately failing to define them means that if code that still has access to them (i.e., member functions or `friend`s of the class) uses them, linking will fail due to missing function definitions.
+
+In C++11, there’s a better way to achieve essentially the same end: use “= `delete`” to declare them as as *deleted functions*.
+
+```c++
+template <class charT, class traits = char_traits<charT> >
+class basic_ios : public ios_base {
+public:
+	…
+	basic_ios(const basic_ios& ) = delete;
+	basic_ios& operator=(const basic_ios&) = delete;
+	…
+};
+```
+
+Deleted functions may not be used in any way, so even code that’s in member and `friend` functions will fail to compile if it tries to copy `basic_ios` objects.
+
+### `deleted` functions are declared `public`, not `private`
+
+When client code tries to use a member function, C++ checks accessibility before deleted status. When client code tries to use a deleted `private` function, some compilers complain only about the function being `private`. Thus making the deleted functions `public` will generally result in **better error messages**.
+
+### Any function may be deleted
+
+Suppose we have a non-member function that takes an integer and returns whether it’s a lucky number:
+
+```c++
+bool isLucky(int number);
+```
+
+In C++, pretty much any type that can be viewed as vaguely numerical will implicitly convert to int, but some calls that would compile might not make sense:
+
+```c++
+if (isLucky('a')) … 	// is 'a' a lucky number?
+if (isLucky(true)) … 	// is "true"?
+if (isLucky(3.5)) … 	// should we truncate to 3
+						// before checking for luckiness?
+```
+
+If lucky numbers must really be integers, we’d like to prevent calls such as these from compiling by **creating deleted overloads for the types we want to filter out**:
+
+```c++
+bool isLucky(int number); // original function
+bool isLucky(char) = delete; // reject chars
+bool isLucky(bool) = delete; // reject bools
+bool isLucky(double) = delete; // reject doubles and floats
+```
+
+Although deleted functions can’t be used, they are part of your program. As such, they are taken into account during overload resolution:
+
+```c++
+if (isLucky('a')) … // error! call to deleted function
+if (isLucky(true)) … // error!
+if (isLucky(3.5f)) … // error!
+```
+
+### Prevent use of template instantiations that should be disabled
+
+Suppose you need a template that works with built-in pointers:
+
+```c++
+template<typename T>
+void processPointer(T* ptr);
+```
+
+In the case of the `processPointer` template, let’s assume the proper handling is to reject calls using `void*` pointers and `char*` pointers. That is, it should not be possible to call `processPointer` with `void*` or `char*` pointers.
+
+```c++
+template<>
+void processPointer<void>(void*) = delete;
+
+template<>
+void processPointer<char>(char*) = delete;
+
+template<>
+void processPointer<const void>(const void*) = delete;
+
+template<>
+void processPointer<const char>(const char*) = delete;
+```
+
+If `processPointer` were a member function template inside `Widget`, for example, and you wanted to disable calls for `void*` pointers, this would be the C++98 approach, though it would not compile:
+
+```c++
+class Widget {
+public:
+	…
+	template<typename T>
+	void processPointer(T* ptr)
+	{ … }
+private:
+	template<> // error!
+	void processPointer<void>(void*);
+};
+```
+
+The problem is that **template specializations must be written at namespace scope**, not class scope. This issue doesn’t arise for deleted functions, because they can be deleted outside the class (hence at namespace scope):
+
+```c++
+class Widget {
+public:
+	…
+	template<typename T>
+	void processPointer(T* ptr)
+	{ … }
+};
+
+template<>
+void Widget::processPointer<void>(void*) = delete;	// still public but deletede
+```
+
+## Item 12: Declare overriding functions `override`
+
+Among the most fundamental ideas in OOP is that virtual function implementations in derived classes override the implementations of their base class counterparts. For overriding to occur, several requirements must be met:
+
+* The base class function must be virtual
+
+* The base and derived function names must be identical (except in the case of destructors)
+
+* The parameter types of the base and derived functions must be identical
+
+* The constness of the base and derived functions must be identical
+
+* The return types and exception specifications of the base and derived functions must be **compatible**
+
+* The functions’ *reference qualifiers* must be identical
+
+All these requirements for overriding mean that small mistakes can make a big difference. For example, the following code is completely legal and, at first sight, looks reasonable, but it contains no virtual function overrides:
+
+```c++
+class Base {
+public:
+	virtual void mf1() const;
+	virtual void mf2(int x);
+	virtual void mf3() &;
+	void mf4() const;
+};
+class Derived: public Base {
+public:
+	virtual void mf1();
+	virtual void mf2(unsigned int x);
+	virtual void mf3() &&;
+	void mf4() const;
+};
+```
+
+Because declaring derived class overrides is important to get right, but easy to get wrong, C++11 gives you a way to make explicit that a derived class function is supposed to override a base class version: *declare it `override`*.
+
+```c++
+class Derived: public Base {
+public:
+	virtual void mf1() override;
+	virtual void mf2(unsigned int x) override;
+	virtual void mf3() && override;
+	virtual void mf4() const override;
+};
+```
+
+This won’t compile, of course, because when written this way, compilers will kvetch about all the overriding-related problems.
+
+### Contextual keywords
+
+C++11 introduces two contextual keywords, `override` and `final` These keywords have the characteristic that they are reserved, but only in certain contexts. In the case of `override`, it has a reserved meaning only when it occurs at the end of a member function declaration:
+
+```c++
+class Warning { // potential legacy class from C++98
+public:
+	…
+	void override(); // legal in both C++98 and C++11 (with the same meaning)
+};
+```
+
+### Member function reference qualifiers
+Reference qualifiers make it possible to limit use of a member function to lvalues only or to rvalues only:
+
+  ```c++
+  class Widget {
+  public:
+  	…
+  	void doWork() &; 	// this version of doWork applies only when *this is an lvalue
+  	void doWork() &&; 	// this version of doWork applies only when *this is an rvalue
+  };
+  ```
+Reference qualifiers simply make it possible to draw the distinction for the object on which a member function is invoked, i.e., `*this`. It’s precisely
+analogous to the `const` at the end of a member function declaration, which indicates that the object on which the member function is invoked (i.e., `*this`) is `const`.
+
+Suppose our `Widget` class has a `std::vector` data member, and we offer an accessor function that gives clients direct access to it:
+
+```c++
+class Widget {
+public:
+    using DataType = std::vector<double>;
+	DataType& data() { return values; }
+	…
+private:
+	DataType values;
+};
+```
+
+Consider what happens in this client code:
+
+```c++
+Widget w;
+auto vals1 = w.data(); // copy w.values into vals1
+```
+
+The return type of `Widget::data` is an lvalue reference, and because lvalue references are defined to be lvalues, we’re initializing `vals1` from an lvalue. `vals1` is thus copy constructed from `w.values`.
+
+```c++
+// a factory function that creates Widgets
+Widget makeWidget();
+auto vals2 = makeWidget().data(); // copy values inside the Widget into vals2
+```
+
+Again, `Widgets::data` returns an lvalue reference, and, again, the lvalue reference is an lvalue, so, again, our new object (`vals2`) is copy constructed from values inside the `Widget`. This time, though, the `Widget` is the temporary object returned from `makeWidget` (i.e., an rvalue), so copying the `std::vector` inside it is a waste of time.
+
+What’s needed is a way to specify that when `data` is invoked on an rvalue `Widget`, the result should also be an rvalue:
+
+```c++
+class Widget {
+public:
+	using DataType = std::vector<double>;
+	DataType& data() & 					// for lvalue Widgets,
+		{ return values; } 				// return lvalue
+	DataType data() && 					// for rvalue Widgets,
+		{ return std::move(values); } 	// return rvalue
+	…
+private:
+	DataType values;
+};
+```
+
+The lvalue reference overload returns an lvalue reference (i.e., an lvalue), and the rvalue reference overload returns a temporary object (i.e., an rvalue)
+
+```c++
+auto vals1 = w.data(); 					// calls lvalue overload for
+										// Widget::data, copy-constructs vals1
+auto vals2 = makeWidget().data(); 		// calls rvalue overload for
+										// Widget::data, move-constructs vals2
 ```
 
