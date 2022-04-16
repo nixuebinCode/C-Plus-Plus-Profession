@@ -1457,3 +1457,108 @@ auto vals2 = makeWidget().data(); 		// calls rvalue overload for
 										// Widget::data, move-constructs vals2
 ```
 
+## Item 13: Prefer const_iterators to iterators
+
+`const_iterator`s point to values that may not be modified. **You should use `const_iterator`s any time you need an iterator, yet have no need to modify what the iterator points to.**
+
+The container member functions `cbegin` and `cend` produce `const_iterator`s.
+
+Suppose you want to search a `std::vector<int>` for the first occurrence of 1983, then insert the value 1998 at that location. `iterator`s aren’t really the proper choice here, because this code never modifies what an `iterator` points to.
+
+```c++
+std::vector<int> values; // as before
+…
+auto it = std::find(values.cbegin(),values.cend(), 1983); // use cbegin and cend
+values.insert(it, 1998);
+```
+
+### maximally generic library code
+
+Such code takes into account that some containers and container-like data structures offer `begin` and `end` as non-member functions, rather than members. This is the case for built-in arrays, for example:
+
+```c++
+template<typename C, typename V>
+void findAndInsert(C& container, // in container, find
+					const V& targetVal, // first occurrence
+					const V& insertVal) // of targetVal, then
+{ 										// insert insertVal
+	using std::cbegin; 					// there
+	using std::cend;
+	auto it = std::find(cbegin(container), // non-member cbegin
+						cend(container), // non-member cend
+						targetVal);
+	container.insert(it, insertVal);
+}
+```
+
+This works fine in C++14, but, sadly, not in C++11. C++11 added the non-member functions `begin` and `end`, but it failed to add `cbegin`, `cend`, `rbegin`, `rend`, `crbegin`, and `crend`.
+
+If you’re using C++11, you want to write maximally generic code, you can throw your own implementations together with ease. For example, here’s an implementation of non-member `cbegin`:
+
+```c++
+template <class C>
+auto cbegin(const C& container)->decltype(std::begin(container))
+{
+    return std::begin(container); // see explanation below
+}
+```
+
+Note that non-member `cbegin` doesn’t call member `cbegin`. This `cbegin` template accepts any type of argument representing a container-like data structure, `C`, and it accesses this argument through its **reference-to-const parameter**, `container`. Invoking the nonmember `begin` function (provided by C++11) on a const container yields a `const_iterator`, and that iterator is what this template returns.
+
+## Item 14: Declare functions noexcept if they won’t emit exceptions
+In C++11, unconditional `noexcept` is for functions that guarantee they won’t emit exceptions. Callers can query a function’s `noexcept` status, and the results of such a query can affect the exception safety or efficiency of the calling code. Failure to declare a function `noexcept` when you know that it won’t emit an exception is simply poor interface specification.
+
+Compilers typically offer no help in identifying inconsistencies between function implementations and their exception specifications
+
+```c++
+void setup(); 	// functions defined elsewhere
+void cleanup();
+void doWork() noexcept
+{
+	setup(); // set up work to be done
+	… // do the actual work
+	cleanup(); // perform cleanup actions
+}
+```
+
+Here, `doWork` is declared `noexcept`, even though it calls the non-`noexcept` functions `setup` and `cleanup`. Because there are legitimate reasons for `noexcept` functions to rely on code lacking the `noexcept` guarantee, C++ permits such code, and compilers generally don’t issue warnings about it.
+
+### The move operations and `noexcept` 
+
+Suppose you have a C++98 code base making use of a `std::vector<Widget>`:
+
+```c++
+std::vector<Widget> vw;
+Widget w;
+vw.push_back(w); // add w to vw
+```
+
+When a new element is added to a `std::vector`, it’s possible that the `std::vector` lacks space for it. When that happens, the `std::vector` allocates a new, larger, chunk of memory to hold its elements, and it transfers the elements from the existing chunk of memory to the new one. In C++11, a natural optimization would be to replace the copying of `std::vector` elements with moves. Unfortunately, if n elements have been moved from the old memory and an exception is thrown moving element n+1, the `push_back` operation can’t run to completion. But the original `std::vector` has been modified: n of its elements have been moved from.
+
+This is a serious problem, therefore, C++11 implementations can’t silently replace copy operations inside push_back with moves unless it’s known that the move operations won’t emit exceptions.
+
+`std::vector::push_back` takes advantage of this “move if you can, but copy if you must” strategy. It replaces calls to copy operations in C++98 with calls to move operations in C++11 only if the move operations are known to not emit exceptions -- that is the operation is declared `noexcept`
+
+### `swap` functions and `noexcept` 
+
+Whether `swap`s in the Standard Library are `noexcept` is sometimes dependent on whether user-defined `swap`s are `noexcept`：
+
+```c++
+template <class T, size_t N>
+void swap(T (&a)[N], T (&b)[N]) noexcept(noexcept(swap(*a, *b)));
+
+template <class T1, class T2>
+struct pair {
+	…
+	void swap(pair& p) noexcept(noexcept(swap(first, p.first)) && noexcept(swap(second, p.second)));
+	…
+};
+```
+
+These functions are conditionally `noexcept`: whether they are `noexcept` depends on whether the expressions inside the `noexcept` clauses are `noexcept`: Given two arrays of `Widget`, for example, swapping them is `noexcept` only if swapping individual elements in the arrays is `noexcept`, i.e., if `swap` for `Widget` is `noexcept`.
+
+The fact that swapping higher-level data structures can generally be `noexcept` only if swapping their lower-level constituents is `noexcept` should motivate you to offer `noexcept` `swap` functions whenever you can.
+
+### `operator delete`, `operator delete[]`, destructors and `noexcept`
+By default, all memory deallocation functions and all destructors—both user-defined and compilergenerated—are implicitly `noexcept`. There’s thus no need to declare them `noexcept`. 
+
