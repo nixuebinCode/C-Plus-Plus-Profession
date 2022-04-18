@@ -2827,6 +2827,30 @@ int digitAtIndex(int n){
 ### 代码实现
 
 ```c++
+bool compare(string m, string n);
 
+void PrintMinNumber(int* numbers, int length){
+    if(numbers == nullptr || length <= 0)
+        return;
+    // 解决大数问题，将数组中的每个整数转换为字符串
+    vector<string> svec;
+    for(int i = 0; i < length; i++){
+        string numStr = to_string(numbers[i]);
+        svec.push_back(numStr);
+    }
+    // 按照给定的规则，对svec进行从小到大排序
+    sort(svec.begin(), svec.end(), compare);
+    // 依次输出svec里的内容，即得到最小的数字
+    for(auto item : svec){
+        cout << item;
+    }
+    cout << endl;
+}
+
+bool compare(string m, string n){
+    string mn = m + n;
+    string nm = n + m;
+    return mn < nm;
+}
 ```
 
