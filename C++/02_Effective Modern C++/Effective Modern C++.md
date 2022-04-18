@@ -1562,3 +1562,323 @@ The fact that swapping higher-level data structures can generally be `noexcept` 
 ### `operator delete`, `operator delete[]`, destructors and `noexcept`
 By default, all memory deallocation functions and all destructors—both user-defined and compilergenerated—are implicitly `noexcept`. There’s thus no need to declare them `noexcept`. 
 
+## Item 15: Use constexpr whenever possible
+
+`constexpr` indicates a value that’s not only `constant`, it’s known during compilation
+
+### `constexpr` objects
+
+`constexpr` objects are `const` and have values that are known at compile time. 
+
+Values known during compilation are privileged：
+
+* They may be placed in read-only memory
+
+* Integral values that are `constant` and known during compilation can be used in contexts where C++ requires an integral `constant` expression, such as specification of array sizes, integral template arguments, enumerator values, alignment specifiers.
+
+  ```c++
+  int sz;							// non-constexpr variable
+  …
+  constexpr auto arraySize1 = sz; // error! sz's value not known at compilation
+  std::array<int, sz> data1; 		// error! same problem
+  constexpr auto arraySize2 = 10; // fine, 10 is a compile-time constant
+  std::array<int, arraySize2> data2; // fine, arraySize2 is constexpr
+  ```
+
+  Note that `const` doesn’t offer the same guarantee as `constexpr`, because `const` objects need not be initialized with values known during compilation:
+
+  ```c++
+  int sz; 							// as before
+  …
+  const auto arraySize = sz; 			// fine, arraySize is
+  									// const copy of sz
+  std::array<int, arraySize> data; 	// error! arraySize's value
+  									// not known at compilation
+  ```
+
+### `constexpr` functions
+
+Such functions produce compile-time constants when they are called with compile-time constants. If they’re called with values not known until runtime, they produce runtime values.
+
+* `constexpr` functions can be used in contexts that demand compile-time constants. If the values of the arguments you pass to a `constexpr` function in such a context are known during compilation, the result will be computed during compilation. If any of the arguments’ values is not known during compilation, your code will be rejected.
+* When a `constexpr` function is called with one or more values that are not known during compilation, it acts like a normal function, computing its result at runtime. This means you don’t need two functions to perform the same operation, one for compile-time constants and one for all other values. The `constexpr` function does it all.
+
+```c++
+constexpr 							// pow's a constexpr func
+int pow(int base, int exp) noexcept // that never throws
+{
+	… // impl is below
+}
+constexpr auto numConds = 5; // # of conditions
+std::array<int, pow(3, numConds)> results; // results has 3^numConds elements
+```
+
+the `constexpr` in front of pow doesn’t say that `pow` returns a `const` value, it says that if `base` and `exp` are compile-time constants, `pow`’s result may be used as a compile-time constant. If `base` and/or `exp` are not compile-time constants, `pow`’s result will be computed at runtime. That means that `pow` can not only be called to do things like compile-time-compute the size of a `std::array`, it can also be called in runtime contexts such as this:
+
+```c++
+auto base = readFromDB("base"); 	// get these values
+auto exp = readFromDB("exponent"); 	// at runtime
+auto baseToExp = pow(base, exp); 	// call pow function at runtime
+```
+
+#### Restrictions on constexpr functions
+
+In C++11, `constexpr` functions may contain no more than a single executable statement: a `return`. But you can use the conditional “`?:`” operator in place of `if-else` statements, recursion indtead of loops:
+
+```c++
+constexpr int pow(int base, int exp) noexcept
+{
+	return (exp == 0 ? 1 : base * pow(base, exp - 1));
+}
+```
+
+In C++14, the restrictions on `constexpr` functions are substantially looser:
+
+```c++
+constexpr int pow(int base, int exp) noexcept // C++14
+{
+	auto result = 1;
+	for (int i = 0; i < exp; ++i) result *= base;
+	return result;
+}
+```
+
+#### `constexpr` functions are limited to taking and returning literal types
+
+literal types are types that can have values determined during compilation:
+
+* In C++11, all built-in types except `void` are literal types
+* User-defined types may be literal, if their constructors and other member functions are `constexpr`
+
+```c++
+class Point {
+public:
+	constexpr Point(double xVal = 0, double yVal = 0) noexcept
+	: x(xVal), y(yVal)
+	{}
+    
+	constexpr double xValue() const noexcept { return x; }
+	constexpr double yValue() const noexcept { return y; }
+	void setX(double newX) noexcept { x = newX; }
+	void setY(double newY) noexcept { y = newY; }
+private:
+	double x, y;
+};
+```
+
+if the arguments passed to `Point` are known during compilation, the value of the data members of the constructed `Point` can also be known during compilation. `Point`s so initialized could thus be `constexpr`:
+
+```c++
+constexpr Point p1(9.4, 27.7); // fine, "runs" constexpr ctor during compilation
+constexpr Point p2(28.8, 5.3); // also fine
+```
+
+Similarly, the getters `xValue` and `yValue` can be `constexpr`, because if they’re invoked on a `Point` object with a value known during compilation (e.g., a `constexpr Point` object), the values of the data members `x` and `y` can be known during compilation：
+
+```c++
+constexpr
+Point midpoint(const Point& p1, const Point& p2) noexcept
+{
+	return { (p1.xValue() + p2.xValue()) / 2, 		// call constexpr
+				(p1.yValue() + p2.yValue()) / 2 }; 	// member funcs
+}
+constexpr auto mid = midpoint(p1, p2);
+```
+
+In C++11, two restrictions prevent `Point`’s member functions `setX` and `setY` from being declared `constexpr`.
+
+* `constexpr` member functions are implicitly `const`. They cannot modify the object they operate on
+* They cannot have `void` return types, and `void` isn’t a literal type in C++11
+
+Both these restrictions are lifted in C++14, so in C++14, even `Point`’s setters can be `constexpr`
+
+## Item 16: Make const member functions thread safe
+
+Suppose we have a class representing polynomials, and it has a member function, `roots` computing the roots of the polynomial.
+
+```c++
+class Polynomial {
+public:
+	using RootsType = std::vector<double>;
+RootsType roots() const
+{
+	if (!rootsAreValid) { 	// if cache not valid
+		… 					// compute roots,
+							// store them in rootVals
+		rootsAreValid = true;
+	}
+	return rootVals;
+}
+private:
+	mutable bool rootsAreValid{ false };
+	mutable RootsType rootVals{};
+};
+```
+
+Conceptually, `roots` doesn’t change the `Polynomial` object on which it operates, but, as part of its caching activity, it may need to modify `rootVals` and `rootsAreValid`. That’s a classic use case for `mutable`, and that’s why it’s part of the declarations for these data members.
+
+Imagine now that two threads simultaneously call `roots` on a `Polynomial` object:
+
+```c++
+Polynomial p;
+…
+/*----- Thread 1 ----- */
+auto rootsOfP = p.roots();
+
+/*------- Thread 2 ------- */
+auto valsGivingZero = p.roots();
+```
+
+`roots` is a `const` member function, and that means it represents a read operation. Having multiple threads perform a read operation without synchronization is safe. But in this case, it’s not, because inside `roots`, one or both of these threads might try to modify the data members `rootsAreValid` and `rootVals`. That means that this code could have different threads reading and writing the same memory without synchronization.
+
+In other words, `roots` is not thread safe.
+
+### Employ a `mutex`
+
+```c++
+class Polynomial {
+public:
+	using RootsType = std::vector<double>;
+	RootsType roots() const
+	{
+		std::lock_guard<std::mutex> g(m); // lock mutex
+		if (!rootsAreValid) { 	// if cache not valid
+			… 					// compute/store roots
+			rootsAreValid = true;
+		}
+		return rootVals;
+	} // unlock mutex
+private:
+	mutable std::mutex m;
+	mutable bool rootsAreValid{ false };
+	mutable RootsType rootVals{};
+};
+```
+
+It’s worth noting that because `std::mutex` is a move-only type (i.e., a type that can be moved, but not copied), a side effect of adding `m` to `Polynomial` is that `Polynomial` loses the ability to be copied. It can still be moved, however.
+
+### `std::atomic` counter
+
+In some situations, a mutex is overkill. if all you’re doing is counting how many times a member function is called, a `std::atomic` counter will often be a less expensive way to go. 
+
+```c++
+class Point { // 2D point
+public:
+	…
+	double distanceFromOrigin() const noexcept
+	{ 
+		++callCount; // atomic increment
+		return std::sqrt((x * x) + (y * y));
+	}
+private:
+	mutable std::atomic<unsigned> callCount{ 0 };
+	double x, y;
+};
+```
+
+Like `std::mutex`es, `std::atomic`s are move-only types, so the existence of `callCount` in `Point` means that `Point` is also move-only.
+
+## Item 17: Understand special member function generation
+Generated special member functions are implicitly public and `inline`, and they’re nonvirtual unless the function is a destructor in a derived class inheriting from a base class with a virtual destructor. In that case, the compiler-generated destructor for the derived class is also virtual.
+
+C++98 has four special member functions that  C++ is willing to generate on its own: the default constructor, the destructor, the copy constructor, and the copy assignment operator.
+
+As of C++11, the special member functions club has two more inductees: **the move constructor** and **the move assignment operator**. Their signatures are:
+
+```c++
+class Widget {
+public:
+	…
+	Widget(Widget&& rhs); 				// move constructor
+	Widget& operator=(Widget&& rhs); 	// move assignment operator
+…
+};
+```
+
+The move operations are generated only if they’re needed, and if they are generated, they perform “memberwise moves” on the non-static data members of the class and its base class parts. “Memberwise moves” are, in reality, more like memberwise move requests, because types that aren’t move-enabled will be “moved” via their copy operations. The heart of each memberwise “move” is application of `std::move` to the object to be moved from. 
+
+### Conditions under which move operations are generated
+
+Move operations are generated for classes (when needed) only if these three things are true:
+
+* **No copy operations are declared in the class**
+
+  Move operations won’t be generated for any class that explicitly declares a copy operation. Declaring a copy operation indicates that the normal approach to copying an object (memberwise copy) isn’t appropriate for the class, and thus  memberwise move probably isn’t appropriate for the move operations.
+
+  Similarly, declaring a move operation in a class causes compilers to disable the copy operations. 
+
+* **No move operations are declared in the class**
+
+  The two copy operations are independent: If you declare a copy constructor, but no copy assignment operator, then write code that requires copy assignment, compilers will generate the copy assignment operator for you. And vice versa.
+
+  The two move operations are not independent. If you declare either, that prevents compilers from generating the other.
+
+* **No destructor is declared in the class**
+
+  Perhaps you’ve heard of a guideline known as the Rule of Three. The Rule of Three states that if you declare any of a copy constructor, copy assignment operator, or destructor, you should declare all three. Combined with the observation that declaration of a copy operation precludes the implicit generation of the move operations, C++11 does not generate move operations for a class with a user-declared destructor.
+
+### “= default” used in polymorphic base classes
+
+Polymorphic base classes normally have virtual destructors. Unless a class inherits a destructor that’s already virtual, the only way to make a destructor virtual is to **explicitly declare** it that way. Often, the default implementation would be correct, and “`= default`” is a good way to express that.
+
+However, a user-declared destructor suppresses generation of the move operations, so if movability is to be supported, “`= default`” often finds a second application. Declaring the move operations disables the copy operations, so if copyability is also desired, one more round of “`= default`” does the job:
+
+```c++
+class Base {
+public:
+	virtual ~Base() = default; // make dtor virtual
+    
+    Base(Base&&) = default; // support moving
+	Base& operator=(Base&&) = default;
+    
+	Base(const Base&) = default; // support copying
+	Base& operator=(const Base&) = default;
+    …
+};
+```
+
+### The C++11 rules governing the special member functions
+
+* **Default constructor**
+
+  Same rules as C++98. Generated only if the class contains no user-declared constructors.
+
+* **Destructor**
+
+  Essentially same rules as C++98; sole difference is that destructors are noexcept by default. As in C++98, virtual only if a base class destructor is virtual.
+
+* **Copy constructor**
+
+  Generated only if the class lacks a userdeclared copy constructor. 
+
+  Deleted if the class declares a move operation.
+
+  Generation of this function in a class with a user-declared copy assignment operator or destructor is deprecated.
+
+* **Copy assignment operator**
+
+  Generated only if the class lacks a user-declared copy assignment operator. 
+
+  Deleted if the class declares a move operation. 
+
+  Generation of this function in a class with a user-declared copy constructor or destructor is deprecated.
+
+* **Move constructor** and **move assignment operator**
+
+  Generated only if the class contains no userdeclared copy operations, move operations, or destructor.
+
+Note that there’s nothing in the rules about the existence of a member function template preventing compilers from generating the special member functions. That means that if `Widget` looks like this,
+
+```c++
+class Widget {
+	…
+	template<typename T> 		// construct Widget
+	Widget(const T& rhs); 		// from anything
+    
+	template<typename T> 				// assign Widget
+	Widget& operator=(const T& rhs); 	// from anything
+	…
+};
+```
+
+compilers will still generate copy and move operations for `Widget`, even though these templates could be instantiated to produce the signatures for the copy constructor and copy assignment operator. (That would be the case when `T` is `Widget`.)
