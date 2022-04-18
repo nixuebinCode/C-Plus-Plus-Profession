@@ -4691,3 +4691,99 @@ LOGNAME=dmtsai <== 登录者用来登录的帐号名称
   ```
 
 #### 用 set 观察所有变量（含环境变量与自定义变量）
+
+除了环境变量，bash 还有一些与 bash 操作界面有关的变量，以及用户自己定义的变量存在。
+
+set 除了环境变量之外，还会将其他在 bash 内的变量通通显示出来。
+
+```shell
+[dmtsai@study ~]$ set
+BASH=/bin/bash &lt;== bash 的主程序放置路径
+BASH_VERSINFO=（[0]="4" [1]="2" [2]="46" [3]="1" [4]="release" [5]="x86_64-redhat-linux-gnu"）
+BASH_VERSION='4.2.46（1）-release' 									<== 这两行是 bash 的版本
+COLUMNS=90 															 <== 在目前的终端机环境下，使用的字段有几个字符长度
+HISTFILE=/home/dmtsai/.bash_history 								 <== 历史命令记录的放置文件，隐藏文件
+HISTFILESIZE=1000													 <== 存起来（与上个变量有关）的文件之指令的最大条数
+HISTSIZE=1000 														 <== 目前环境下，内存中记录的历史命令最大条数
+IFS=$' \t\n' 														 <== 默认的分隔符号
+LINES=20 															 <== 目前的终端机下的最大行数
+MACHTYPE=x86_64-redhat-linux-gnu 									 <== 安装的机器类型
+OSTYPE=linux-gnu 													 <== 操作系统的类型
+PS1='[\u@\h \W]\$ ' 												 <== PS1 就厉害了。这个是命令提示字符，也就是我们常见的
+																		[root@www ~]# 或 [dmtsai ~]$ 的设置值，可以修改
+PS2='>' 															 <== 如果你使用转义符 （\） 第二行以后的提示字符
+$ 																	 <== 目前这个 shell 所使用的 PID
+? 																	 <== 刚刚执行完指令的回传值。
+...
+```
+
+* **PS1：提示字符的设置**
+
+  上面 PS1 内显示的是一些特殊符号，这些特殊符号可以显示不同的信息：
+
+  * \d ：可显示出“星期 月 日”的日期格式，如："Mon Feb 2"
+  * \H ：完整的主机名称。举例来说，“study.centos.vbird”
+  * \h ：仅取主机名称在第一个小数点之前的名字，如“study”，后面省略
+  * \t ：显示时间，为 24 小时格式的“HH:MM:SS”
+  * \T ：显示时间，为 12 小时格式的“HH:MM:SS”
+  * \A ：显示时间，为 24 小时格式的“HH:MM”
+  * \@ ：显示时间，为 12 小时格式的“am/pm”样式
+  * \u ：目前使用者的帐号名称，如“dmtsai”
+  * \v ：BASH 的版本信息
+  * \w ：完整的工作目录名称，由根目录写起的目录名称。但根目录会以 ~ 替换
+  * \W ：利用 basename 函数取得工作目录名称，所以仅会列出最后一个目录名
+  * \# ：下达的第几个指令
+  * \$ ：提示字符，如果是 root 时，提示字符为 # ，否则就是 $
+
+  因此对于 CentOs 默认的 PS1 内容【[\u@\h \W]\\$】，你能看到的命令提示符为【[dmtsai@study ~]\$】
+
+* **$：（关于本 shell 的 PID）**
+
+  美元符号本身也是个变量。
+
+  想要知道我们的 shell 的 PID，就可以用：【echo $$】，出现的数字就是你的 PID 号码。
+
+* **?：（关于上个执行命令的返回值）**
+
+  当我们执行某些命令时，这些命令都会返回一个执行后的代码。一般来说，如果成功的执行该命令，则会返回一个 0 值。
+
+  ```shell
+  [dmtsai@study ~]$ echo $SHELL
+  /bin/bash <==可顺利显示 没有错误
+  [dmtsai@study ~]$ echo $?
+  0 <==因为没问题，所以返回值为 0
+  [dmtsai@study ~]$ 12name=VBird
+  bash: 12name=VBird: command not found... <==发生错误了！bash回报有问题
+  [dmtsai@study ~]$ echo $?
+  127 <==因为有问题，返回错误代码（非为0）
+  ```
+
+#### export：自定义变量转成环境变量
+
+所谓的环境变量与自定义变量的差异在于【该变量是否会被子进程所继续引用】
+
+如果你想让自定义变量继续在子进程中使用，可以执行：
+
+```shell
+[dmtsai@study ~]$ export 变量名称
+```
+
+如果仅执行 export 而没有接变量时，那么此时将会把所有的环境变量显示出来
+
+```shell
+[dmtsai@study ~]$ export
+declare -x HISTSIZE="1000"
+declare -x HOME="/home/dmtsai"
+declare -x HOSTNAME="study.centos.vbird"
+declare -x LANG="zh_TW.UTF-8"
+declare -x LC_ALL="en_US.utf8"
+```
+
+### 10.2.4 影响显示结果的语系变量（locale）
+
+可以由 locale 命令来查询我们的 Linux 到底支持了多少的语系
+
+```shell
+
+```
+
