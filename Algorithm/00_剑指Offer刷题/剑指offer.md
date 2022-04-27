@@ -3240,3 +3240,164 @@ private:
 };
 ```
 
+## 面试题51：数组中的逆序对
+
+### 题目
+
+在数组中的两个数字，如果前面一个数字大于后面的数字，则这两个数字组成一个逆序对。输入一个数组，求出这个数组中的逆序对的总数。例如，在数组{7, 5, 6, 4} 中， 一共存在5 个逆序对，分别是(7, 6) 、(7, 5) 、(7, 4) 、(6, 4) 和 (5, 4) 。
+
+### 解题思路
+
+计算一个数组的逆序对的个数时，可以把这个数组分成两个子数组 A 和 B，则原数组中逆序对的个数就等于以下三个相加：
+
+* 子数组 A 中逆序对的个数
+* 子数组 B 中逆序对的个数
+* 横跨子数组 A 和 B 的逆序对的个数，即逆序对中的两个数字一个来自 A，一个来自 B
+
+我们结合划分的思想，把数组并不断地划分为 2 个子数组，直至子数组中的元素个数为 1，此时每个子数组中逆序对的个数就为 0。
+
+接下来考虑如何计算横跨两个子数组的逆序对的个数。比如现在有两个子数组{9，9，0，5}和{2，5，8，3}。结合归并排序的思想，我们先将两个子数组内部排序：A：{0，5，9，9}和B：{2，3，5，8}。因为计算横跨两个子数组的逆序对的个数时，打乱两个子数组内部的顺序不影响最终的计算结果。现在将 A 和 B 进行归并排序，我们设置两个指针 i 和 j ，分别指向 A 和 B 的起始位置，每次选择 i 和 j 所指较小的元素：
+
+* 第一次我们选择的是 A 中的 0
+* 第二次我们选择的是 B 中的 2，说明此时 A 中的剩余元素均大于 2，即它们都可以与 2 构成逆序，因此逆序对的个数应当加上 A 中剩余元素的个数，即 +3
+* 第三次我们选择的是 B 中的 3，同理逆序对的个数应当加上 A 中剩余元素的个数，即 +3
+* 第四次我们选择的是 A 中的5
+* 第五次我们选择的是 B 中的 5，同理逆序对的个数应当加上 A 中剩余元素的个数，即 +2
+* 第六次我们选择的是 B 中的 8，同理逆序对的个数应当加上 A 中剩余元素的个数，即 +2
+* 最后我们把 A 中剩余元素加入归并的数组中去
+
+我们以数组 {7，5，6，4} 为例，做如下拆分与归并：
+
+ ![image-20220427143901715](images\image-20220427143901715.png)
+
+1. 先将数组 {7，5，6，4} 拆分成只包含一个元素的数组，这些数组内部的逆序对个数为0
+2. 将相邻的数组进行归并排序，计算跨数组的逆序对的个数，并得到一个有序的归并后的数组
+3. 则归并后的数组 {5，7} 内部的逆序对的个数就等于两个子数组内部逆序对的个数(0)与跨数组的逆序对的个数之和
+4. 同理可得到数组 {4，6} 内部的逆序对的个数
+5. 最后将数组 {5，7} 与 {4，6} 归并，同理求出原数组中逆序对的个数
+
+### 代码实现
+
+```c++
+int GetNumOfIverseCore(int*, int*, int, int);
+
+int GetNumOfIversePairs(int* data, int length){
+    if(data == nullptr || length < 0)
+        return 0;
+    
+    int* copy = new int[length];
+    for(int i = 0; i <length; i++){
+        copy[i] = data[i];
+    }
+
+    int count = GetNumOfIverseCore(data, copy, 0, length - 1);
+
+    delete[] copy;
+    return count;
+}
+
+int GetNumOfIverseCore(int* data, int* merge, int start, int end){
+    if(start == end){   // 递归出口：数组中只有一个元素时，逆序对的个数为0，返回0
+        return 0;
+    }
+    int numOfIversePairs = 0;
+    int mid = start + (end - start) / 2;
+    // 先令逆序对的个数等于左右两个子数组组内的逆序对个数之和
+    numOfIversePairs = GetNumOfIverseCore(data, merge, start, mid)
+                        + GetNumOfIverseCore(data, merge, mid + 1, end);
+    // 利用归并排序计算横跨左右两个子数组的逆序对的个数
+    int i = start;      // 指向左边数组的起始位置
+    int j = mid + 1;    // 指向右边数组的起始位置
+    int pos = start;    // 我们将归并排序后的数组存放到数组copy中，pos指向copy数组对应的存放起始位置
+    while(i <= mid && j <= end){
+        if(data[i] <= data[j]){     // 注意这里必须是小于等于，因为逆序对规定左边的数必须大于右边的，如{5，5}不是逆序对
+            merge[pos++] = data[i++];
+        }
+        else{
+            // 左边数组剩余的元素个数
+            int leftCnt = mid - i + 1;
+            numOfIversePairs += leftCnt;
+            merge[pos++] = data[j++];
+        }
+    }
+    // 将两个数组中剩余元素加入到辅助数组
+    while(i <= mid)     // 这里 i 可能超过 mid，因此必须用 <=，不能用 !=
+        merge[pos++] = data[i++];
+    while(j <= end)
+        merge[pos++] = data[j++];
+    // 将排好序的数组元素拷贝回原数组
+    for(int k = start; k <= end; k++)
+        data[k] = merge[k];
+    
+    return numOfIversePairs;
+}
+```
+
+## 面试题52：两个链表的第一个公共节点
+
+### 题目
+
+输入两个链表，找出它们的第一个公共节点。链表节点定义如下：
+
+```c++
+struct ListNode
+{
+    int m_nKey;
+    ListNode* m_pNext;
+}
+```
+
+### 解题思路
+
+由于给的链表是单链表，每个节点只有一个 m_pNext，因此从第一个公共节点开始，之后两个链表的节点都是重合的，不可能再出现分叉。
+
+ ![image-20220427095623425](images\image-20220427095623425.png)
+
+所以如果两个链表有公共节点，那么公共节点出现在链表的尾部。如果我们从两个链表的尾部开始往前比较，那么最后一个相同的节点就是我们要找的节点。
+
+接下来考虑如何从后往前遍历两个单向链表：使用两个栈，分别把两个链表的节点放入两个栈里，接下来比较两个栈顶的节点是否相同。假设链表的长度分别为 m 和 n，那么空间复杂度为 O(m+n)，时间复杂度也是 O(m+n)。
+
+之所以需要用到栈， 是因为我们想同时遍历到达两个栈的尾节点。当两个链表的长度不相同时，如果我们从头开始遍历，那么到达尾节点的时间就不一致。因此我们可以首先遍历两个链表得到它们的长度， 就能知道哪个链表比较长，以及长的链表比短的链表多几个节点。**在第二次遍历的时候，在较长的链表上先走若干步， 接着同时在两个链表上遍历，找到的第一个相同的节点就是它们的第一个公共节点。**
+
+### 代码实现
+
+```c++
+ListNode* FindFirstCommonNode(ListNode* pHead1, ListNode* pHead2){
+    if(pHead1 == nullptr || pHead2 == nullptr)
+        return nullptr;
+    // 计算两个链表的长度
+    int length1 = 0, length2 = 0;
+    ListNode* pNode1 = pHead1;
+    ListNode* pNode2 = pHead2;
+    while(pNode1 != nullptr){
+        length1++;
+        pNode1 = pNode1->m_pNext;
+    }
+    while(pNode2 != nullptr){
+        length2++;
+        pNode2 = pNode2->m_pNext;
+    }
+    // 让较长的链表的指针先走若干步
+    pNode1 = pHead1;
+    pNode2 = pHead2;
+    if(length1 > length2){
+        int diff = length1 - length2;
+        while(diff--){
+            pNode1 = pNode1->m_pNext;
+        }
+    }
+    if(length1 < length2){
+        int diff = length2 - length1;
+        while(diff--){
+            pNode2 = pNode2->m_pNext;
+        }
+    }
+    // 两个链表的指针同时往前走，知道达到第一个公告节点
+    while(pNode1 != nullptr && pNode2 != nullptr && pNode1 != pNode2){
+        pNode1 = pNode1->m_pNext;
+        pNode2 = pNode2->m_pNext;
+    }
+    return pNode1;
+}
+```
+
