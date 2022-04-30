@@ -3401,3 +3401,166 @@ ListNode* FindFirstCommonNode(ListNode* pHead1, ListNode* pHead2){
 }
 ```
 
+## 面试题53-1：数字在排序数组中出现的次数
+
+### 题目
+
+统计一个数字在排序数组中出现的次数。例如，输入排序数组{I, 2, 3, 3, 3, 3, 4, 5} 和数字3, 由于3 在这个数组中出现了4 次，因此输出4 。
+
+### 解题思路
+
+通常的思路是首先我们在数组中找到数字 3 ，由于数组是排序的数组，我们可以利用二分法查找数字 3 ，由于 3 的出现一定是连续的，我们可以从找到的 3 出发，向左向右扫描数组，统计 3 出现的次数。由于 3 可能出现在数组的每一个位置，因此向左向右扫描的时间复杂度为 O(n)，所以这种方法与从头扫描数组的时间复杂度一样。
+
+接下来思考能否利用二分法找到第一个出现的数字 3，和最后一个出现的数字 3 ：
+
+在二分查找过程中，如果中间的数字等于 3，我们首先判断这个 3 是否是第一个 3。如果它不是第一个 3，那么我们在中间位置的左边继续查找第一个 3，直至找到第一个 3 为止。
+
+基于同样的思路，我们可以找到最后一个 3，进而求得 3 出现的次数。
+
+### 代码实现
+
+```c++
+int binarySearchFirstK(int* numbers, int low, int high, int k);
+int binarySearchLastK(int* numbers, int length, int low, int high, int k);
+
+int NumberOfK(int* numbers, int length, int k){
+    if(numbers == nullptr)
+        return 0;
+    int firstK = binarySearchFirstK(numbers, 0, length - 1, k);
+    int lastK = binarySearchLastK(numbers, length, 0, length - 1, k);
+    if(firstK == -1 || lastK == -1)
+        return 0;
+    else
+        return lastK - firstK + 1;
+}
+
+int binarySearchFirstK(int* numbers, int low, int high, int k){
+    while(low <= high){
+        int mid = (low + high) / 2;
+        if(k < numbers[mid]){
+            high = mid - 1;
+        }
+        else if(k > numbers[mid]){
+            low = mid + 1;
+        }
+        else{
+            if((mid - 1) >= 0 && numbers[mid - 1] == k){    // 注意要确保mid - 1不会越界
+                high = mid - 1;
+            }
+            else{
+                return mid;
+            }
+        }
+    }
+    return -1;
+}
+
+int binarySearchLastK(int* numbers, int length, int low, int high, int k){
+    while(low <= high){
+        int mid = (low + high) / 2;
+        if(k < numbers[mid]){
+            high = mid - 1;
+        }
+        else if(k > numbers[mid]){
+            low = mid + 1;
+        }
+        else{
+            if((mid + 1) < length && numbers[mid + 1] == k){    // 注意要确保mid + 1不会越界
+                low = mid + 1;
+            }
+            else{
+                return mid;
+            }
+        }
+    }
+    return -1;
+}
+```
+
+## 面试题53-2：O~ n-1 中缺失的数字
+
+### 题目
+
+一个长度为 n-1 的递增排序数组中的所有数字都是唯一的，并且每个数字都在范围 0~n-1 之内。在范围 0~n-1 内的 n 个数字中有且只有一个数字不在该数组中，请找出这个数字。
+
+### 解题思路
+
+我们可以先用公式 n(n - 1)/2 求出数字 0 ~ n - 1 的所有数字之和，记为S1 。接着求出数组中所有数字的和， 记为S2 。那个不在数组中的数字就是S1- S2 的差。这种解法需要 O(n) 的时间求数组中所有数字的和。
+
+一般如果题目中告诉了数组是排好序的，通常可以考虑利用二分查找来进行搜索。因为 0 ~ n - 1 这些数字在数组中是排序的，因此数组中开始的一些数字与它们的下标相同。也就是说， 0 在下标为 0 的位置， 1 在下标为 1 的位置，以此类推。如果不在数组中的那个数字记为 m 那么所有比 m 小的数字的下标都与它们的值相同。
+
+由于 m 不在数组中，那么 m+ 1 处在下标为 m 的位置， m + 2 处在下标为 m+ 1 的位置，以此类推。我们发现 **m 正好是数组中第一个数值和下标不相等的下标**，因此这个问题转换成在排序数组中找出第一个值和下标不相等的元素。
+
+我们利用二分法来查找这个元素，如果中间元素的值等于下标，那么说明目标元素在其右边；如果中间元素的值不等于下标，那么我们接着判断它是不是第一个值不等于下标的元素，如果不是，那么说明目标元素在其左边。
+
+### 代码实现
+
+```c++
+int GeLMissingNumber(const int* numbers, int length){
+    if(numbers == nullptr || length <= 0)
+        return -1;
+    int low = 0;
+    int high = length - 1;
+    while(low <= high){
+        int mid = (low + high) / 2;
+        if(mid == numbers[mid]){
+            low = mid + 1;
+        }
+        else{
+            if((mid - 1) >= 0 && (mid - 1) != numbers[mid - 1]){
+                high = mid - 1;
+            }
+            else{
+                return mid;
+            }
+        }
+    }
+    if(low == length)           // 当缺失的数字是最后一个时，例如 { 0, 1, 2, 3, 4 } ，最后一步 low = 4，high = 4，mid = 4
+        return length;          // 由于 mid == numbers[mid] ，会导致 low + 1，此时low = length，并且 low > high，应当返回length
+
+    return -1;
+}
+```
+
+## 面试题53-3：数组中数值和下标相等的元素
+
+### 题目
+
+假设一个单调递增的数组里的每个元素都是整数并且是唯一的。请编程实现一个函数，找出数组中**任意**一个数值等于其下标的元素。例如，在数组 {-3, -1, 1, 3, 5 }    中，数字 3 和它的下标相等。
+
+### 解题思路
+
+由于题中给的数组是递增的，因此我们仍然可以利用二分法来解决此类问题。假设二分法某一步骤得到的值 m 不能于其下标 i：
+
+* **m > i 时**
+
+  对于下标为 i + k 的数字 n（k > 0），因为数组中均为整数，且是递增的，则必有 n >= m + k。又因为 m > i ，所以 m + k > i + k。进而 n >= m + k > i + k。也就是说位于 m 右边的数字都比其下标要大，那么我们只需要往左边找即可。
+
+* **m < i 时**
+
+  对于下标为 i - k 的数字 n（k > 0），因为数组中均为整数，且是递增的，则必有 n <= m - k。又因为 m < i ，所以 m - k < i - k。进而 n <= m - k < i - k。也就是说位于 m 左边的数字都比其下标要小，那么我们只需要往右边找即可。
+
+### 代码实现
+
+```c++
+int GetNumberSameAsIndex(const int* numbers, int length){
+    if(numbers == nullptr || length <= 0)
+        return -1;
+    int low = 0;
+    int high = length - 1;
+    while(low <= high){
+        int mid = (low + high) >> 1;
+        if(numbers[mid] > mid){
+            high = mid - 1;
+        }
+        else if(numbers[mid] < mid){
+            low = mid + 1;
+        }
+        else{
+            return mid;
+        }
+    }
+
+    return -1;
+}
+```
