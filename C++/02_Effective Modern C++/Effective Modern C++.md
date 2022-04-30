@@ -3312,3 +3312,736 @@ private:
 ```
 
 ## Item 28: Understand reference collapsing
+
+For this template,
+
+```c++
+template<typename T>
+void func(T&& param);
+```
+
+The deduced template parameter `T` will encode whether the argument passed to param was an lvalue or an rvalue. The encoding mechanism is simple:
+
+* When an lvalue is passed as an argument, `T` is deduced to be an lvalue reference. 
+
+* When an rvalue is passed, `T` is deduced to be a non-reference.
+
+Hence:
+
+```c++
+Widget widgetFactory();			// function returning rvalue
+Widget w; 						// a variable (an lvalue)
+func(w); 						// call func with lvalue; T deduced to be Widget&
+func(widgetFactory()); 			// call func with rvalue; T deduced to be Widget
+```
+
+### reference collapsing
+
+Before we can look more closely at `std::forward` and universal references, we must note that **references to references are illegal** in C++. 
+
+Consider what happens when an lvalue is passed to a function template taking a universal reference:
+
+```c++
+template<typename T>
+void func(T&& param); 	// as before
+func(w); 				// invoke func with lvalue;
+						// T deduced as Widget&
+```
+
+If we take the type deduced for `T` (i.e., `Widget&`) and use it to instantiate the template, we get this:
+
+```c++
+void func(Widget& && param);
+```
+
+A reference to a reference! From Item 24 we know that because the universal reference `param` is being initialized with an lvalue,
+`param`’s type is supposed to be an lvalue reference.
+
+The compiler get from the result by *reference collapsing*. You are forbidden from declaring references to references, but compilers may produce them in particular contexts, template instantiation being among them.When compilers generate references to references, reference collapsing dictates what happens next.
+
+There are two kinds of references (lvalue and rvalue), so there are four possible reference-reference combinations (lvalue to lvalue, lvalue to rvalue, rvalue to lvalue, and rvalue to rvalue). The reference-reference combinationscollapse to a single reference
+according to this rule:
+
+**If either reference is an lvalue reference, the result is an lvalue reference. Otherwise (i.e., if both are rvalue references) the result is an rvalue reference.**
+
+In our example above, we get an rvalue reference to an lvalue reference (`Widget& &&`) , and the reference-collapsing rule tells us that the result is an lvalue reference.
+
+Reference collapsing occurs in four contexts:
+
+* **template instantiation**
+
+* **`auto` type generation**
+
+  The details are essentially the same as for templates, because type deduction for `auto` variables is essentially the same as type deduction for templates.
+
+  Consider again this example from earlier in the Item:
+
+  ```c++
+  Widget widgetFactory(); // function returning rvalue
+  Widget w; 				// a variable (an lvalue)
+  auto&& w1 = w;			// initializes w1 with an lvalue, thus deducing the type Widget& for auto
+  						// after reference collapsing, w1 is an lvalue reference
+  auto&& w2 = widgetFactory();	// initializes w2 with an rvalue, causing the non-reference type Widget to 									// be deduced for auto. 
+  								// There are no references to references here, so we’re done; w2 is an 										// rvalue reference.
+  ```
+
+* **creation and use of `typedefs` and alias declarations**
+
+  ```c++
+  template<typename T>
+  class Widget {
+  public:
+  	typedef T&& RvalueRefToT;
+  	…
+  };
+  ```
+
+* **uses of `decltype`**
+
+### `std::forward`
+
+As explained in Item 25, `std::forward` is applied to universal reference parameters, so a common use case looks like this:
+
+```c++
+template<typename T>
+void f(T&& fParam)
+{
+	… // do some work
+	someFunc(std::forward<T>(fParam)); // forward fParam to someFunc
+}
+```
+
+`std::forward`’s job is to cast `fParam` (**an lvalue**) to an rvalue if and only if T encodes that the argument passed to f was an rvalue. 
+
+Here’s how `std::forward` can be implemented to do that:
+
+```c++
+template<typename T> // in namespace std
+T&& forward(typename remove_reference<T>::type& param)
+{
+	return static_cast<T&&>(param);
+}
+```
+
+#### Suppose that the argument passed to `f` is an lvalue of type `Widget`. 
+
+`T` will be deduced as `Widget&`, and the call to `std::forward` will instantiate as `std::forward<Widget&>`. Plugging `Widget&` into the `std::forward` implementation yields this:
+
+```c++
+widget& && forward(typename remove_reference<widget&>::type& param)
+{
+    return static_cast<widget& &&>(param);
+}
+```
+
+The type trait `std::remove_reference<Widget&>::type` yields `Widget` , so `std::forward` becomes:
+
+```c++
+widget& && forward(widget& param)
+{
+    return static_cast<widget& &&>(param);
+}
+```
+
+Reference collapsing is also applied to the return type and the cast, and the result is the final version of `std::forward` for the call:
+
+```c++
+widget& forward(widget& param)
+{
+    return static_cast<widget&>(param);
+}
+```
+
+As you can see, when an lvalue argument is passed to the function template `f`, `std::forward` is instantiated to take and return an lvalue reference. The cast inside `std::forward` does nothing, because `param`’s type is already `Widget&`. An lvalue argument passed to `std::forward` will thus return an lvalue reference.
+
+#### Suppose that the argument passed to `f` is an rvalue of type `Widget`.
+
+The deduced type for `f`’s type parameter `T` will simply be `Widget`. The call inside `f` to `std::forward` will thus be to `std::forward<Widget>`. Substituting `Widget` for `T` in `the std::forward` implementation gives this:
+
+```c++
+widget&& forward(typename remove_reference<widget>::type& param)
+{
+	return static_cast<widget&&>(param);
+}
+```
+
+Applying `std::remove_reference` to the non-reference type `Widget` yields the same type it started with (`Widget`), so `std::forward` becomes this:
+
+```c++
+Widget&& forward(Widget& param)
+{ 
+    return static_cast<Widget&&>(param); 
+}
+```
+
+There are no references to references here, so there’s no reference collapsing, and this is the final instantiated version of `std::forward` for the call.
+
+In this case, `std::forward` will turn `f`’s parameter `fParam` (an lvalue) into an rvalue. The end result is that an rvalue argument passed to `f` will be forwarded to `someFunc` as an rvalue, which is precisely what is supposed to happen.
+
+### universal reference
+
+With reference collapsing in mind, a universal reference isn’t a new kind of reference, it’s actually an rvalue reference in a context where two conditions are satisfied:
+
+* **Type deduction distinguishes lvalues from rvalues**
+
+  Lvalues of type `T` are deduced to have type `T&`, while rvalues of type `T` yield `T` as their deduced type.
+
+* **Reference collapsing occurs**
+
+## Item 29: Assume that move operations are not present, not cheap, and not used
+All containers in the standard C++11 library support moving, but it would be a mistake to assume that moving all containers is cheap. For some containers, there’s no truly cheap way to move their contents. For others, the truly cheap move operations come with caveats the container elements can’t satisfy.
+
+### `std::array`
+
+Consider `std::array`, `std::array` is essentially a built-in array with an STL interface. 
+
+The other standard containers, each of which stores its contents on the heap. Objects of such container types hold only a pointer to the heap memory storing the contents of the container.
+
+The existence of this pointer makes it possible to move the contents of an entire container in constant time: just copy the pointer to the container’s contents from the source container to the target, and set the source’s pointer to null:
+
+```c++
+std::vector<Widget> vw1;
+// put data into vw1
+…
+// move vw1 into vw2. Runs in
+// constant time. Only ptrs
+// in vw1 and vw2 are modified
+auto vw2 = std::move(vw1);
+```
+
+`std::array` objects lack such a pointer, because the data for a `std::array`’s contents are stored directly in the `std::array` object:
+
+```c++
+std::array<Widget, 10000> aw1;
+// put data into aw1
+…
+// move aw1 into aw2. Runs in
+// linear time. All elements in
+// aw1 are moved into aw2
+auto aw2 = std::move(aw1);
+```
+
+Note that the elements in `aw1` are **moved** into `aw2`. Assuming that `Widget` is a type where moving is faster than copying, moving a `std::array` of `Widget` will be faster than copying the same `std::array`. So `std::array` certainly offers move support.
+
+### `std::string`
+
+On the other hand, `std::string` offers constant-time moves and linear-time copies. That makes it sound like moving is faster than copying, but that may not be the case.
+
+Many string implementations employ the small string optimization (SSO). With the SSO, “small” strings (e.g., those with a capacity of no more than 15 characters) are stored in a buffer within the `std::string` object; no heap-allocated storage is used.
+
+Moving small strings using an SSO-based implementation is no faster than copying.
+
+### some seemingly sure-fire move situations can end up making copies
+Some container operations in the Standard Library offer the strong exception safety guarantee. The underlying copy operations may be replaced with move operations only if the move operations are known to not throw.
+
+Even if a type offers move operations that are more efficient than the corresponding copy operations, and even if, at a particular point in the code, a move operation would generally be appropriate (e.g., if the source object is an rvalue), compilers might still be forced to invoke a copy operation because the corresponding move operation isn’t declared `noexcept`.
+
+### Summary
+
+There are thus several scenarios in which C++11’s move semantics do you no good:
+
+* **No move operations**
+
+* **Move not faster**
+
+  The object to be moved from has move operations that are no faster than its copy operations
+
+* **Move not usable**
+
+  The context in which the moving would take place requires a move operation that emits no exceptions, but that operation isn’t declared `noexcept`.
+
+* **Source object is lvalue**
+
+  With very few exceptions (see e.g., Item 25) only rvalues may be used as the source of a move operation
+
+## Item 30: Familiarize yourself with perfect forwarding failure cases
+
+*Perfect forwarding* means we don’t just forward objects, we also forward their salient characteristics: their types, whether they’re lvalues or rvalues, and whether they’re `const` or `volatile`.
+
+Let’s assume we have some function `f`, and we’d like to write a function (in truth, a function template) that forwards to it.
+
+```c++
+template<typename T>
+void fwd(T&& param) 			// accept any argument
+{
+	f(std::forward<T>(param)); // forward it to f
+}
+```
+
+A logical extension of this genericity is for forwarding functions to be not just templates, but variadic templates,
+thus accepting any number of arguments:
+
+```c++
+template<typename... Ts>
+void fwd(Ts&&... params) // accept any arguments
+{
+    f(std::forward<Ts>(params)...); // forward them to f
+}
+```
+
+Given our target function `f` and our forwarding function `fwd`, perfect forwarding fails if calling `f` with a particular argument does one thing, but calling `fwd` with the same argument does something different.
+
+The following kinds of arguments lead to this kind of failure.
+
+### Braced initializers
+
+Suppose `f` is declared like this:
+
+```c++
+void f(const std::vector<int>& v);
+```
+
+In that case, calling `f` with a braced initializer compiles,
+
+```c++
+f({ 1, 2, 3 }); // fine, "{1, 2, 3}" implicitly converted to std::vector<int>
+```
+
+but passing the same braced initializer to `fwd` doesn’t compile:
+
+```c++
+fwd({ 1, 2, 3 }); // error! doesn't compile
+```
+
+In a direct call to `f`, compilers see the arguments passed at the call site, and they see the types of the parameters declared by `f`. They compare the arguments at the call site to the parameter declarations to see if they’re compatible, and, if necessary, they perform implicit conversions to make the call succeed. In the example above, they generate a temporary `std::vector<int>` object from `{ 1, 2, 3 }` so that `f`’s parameter `v` has a `std::vector<int>` object to bind to.
+
+When calling `f` indirectly through the forwarding function template `fwd`, compilers no longer compare the arguments passed at `fwd`’s call site to the parameter declarations in `f`. Instead, they deduce the types of the arguments being passed to `fwd`, and they compare the deduced types to `f`’s parameter declarations. 
+
+In the “`fwd({ 1, 2, 3 })`” call above, compilers are forbidden from deducing a type for the expression `{ 1, 2, 3 }` in the call to `fwd`, because `fwd`’s parameter isn’t declared to be a `std::initializer_list`. Being prevented from deducing a type for `fwd`’s parameter, compilers must understandably reject the call.
+
+Interestingly, Item 2 explains that type deduction succeeds for auto variables initialized with a braced initializer. And this affords a simple workaround for cases where the type the forwarding function should deduce is a `std::initializer_list`
+
+```c++
+auto il = { 1, 2, 3 }; 			// il's type deduced to be std::initializer_list<int>
+fwd(il); 						// fine, perfect-forwards il to f
+```
+
+### `0` or `NULL` as null pointers
+
+When you try to pass `0` or `NULL` as a null pointer to a template, type deduction will deduce an integral type (typically `int`) instead of a pointer type for the argument you pass.
+
+The fix is easy: pass `nullptr` instead of `0` or `NULL`.
+
+### Declaration-only integral static const data members
+
+As a general rule, there’s no need to define integral static const data members in classes; declarations alone suffice. That’s because compilers perform **const propagation** on such members’ values:
+
+```c++
+class Widget {
+public:
+	static const std::size_t MinVals = 28; // MinVals' declaration
+	…
+};
+… // no defn. for MinVals
+std::vector<int> widgetData;
+widgetData.reserve(Widget::MinVals); // use of MinVals
+```
+
+Here, we’re using `Widget::MinVals` to specify `widgetData`’s initial capacity, even though `MinVals` lacks a definition. Compilers work around the missing definition by plopping the value 28 into all places where MinVals is mentioned. The fact that no storage has been set aside for `MinVals`’ value is unproblematic.
+
+But if `MinVals`’ address were to be taken (e.g., if somebody created a pointer to `MinVals`), then `MinVals` would require storage (so that the pointer had something to point to), and the code above, though it would compile, would fail at link-time until a definition for `MinVals` was provided.
+
+With that in mind, imagine that `f` is declared like this:
+
+```c++
+void f(std::size_t val);
+```
+
+Calling `f` with `MinVals` is fine, because compilers will just replace `MinVals` with its value:
+
+```c++
+f(Widget::MinVals); // fine, treated as "f(28)"
+```
+
+But things may not go so smoothly if we try to call `f` through `fwd`:
+
+```c++
+fwd(Widget::MinVals); // error! shouldn't link
+```
+
+This code will compile, but it shouldn’t link. 
+
+Although nothing in the source code takes `MinVals`’ address, `fwd`’s parameter is a universal reference, and references, in the code generated by compilers, are usually treated like pointers. That being the case, passing `MinVals` by reference is effectively the same as passing it by pointer, and as such, there has to be some memory for the pointer to point to.
+
+Passing integral static const data members by reference, then, generally requires that they be defined, and that requirement can cause code using perfect forwarding to fail where the equivalent code without perfect forwarding succeeds.
+
+To fix the problem, simply provide a definition for the integral static const data member. For `MinVals`, that’d look like this:
+
+```c++
+const std::size_t Widget::MinVals; // in Widget's .cpp file
+```
+
+Note that the definition doesn’t repeat the initializer (`28`, in the case of `MinVals`).
+
+### Overloaded function names and template names
+
+Suppose our function `f` (the one we keep wanting to forward arguments to via `fwd`) can have its behavior customized by passing it a function that does some of its work:
+
+```c++
+void f(int (*pf)(int)); // pf = "processing function"
+void f(int pf(int)); 	// declares same f as above
+```
+
+Now suppose we have an overloaded function, `processVal`:
+
+```c++
+int processVal(int value);
+int processVal(int value, int priority);
+```
+
+We can pass `processVal` to `f`,
+
+```c++
+f(processVal); // fine
+```
+
+`f` demands a pointer to a function as its argument, but `processVal` isn’t a function pointer or even a function, it’s the name of two different functions. However, compilers know which `processVal` they need: the one matching `f`’s parameter type. They thus choose the `processVal` taking one `int`, and they pass that function’s address to `f`.
+
+`fwd`, however, being a function template, doesn’t have any information about what type `f` needs, and that makes it impossible for compilers to determine which overload should be passed:
+
+```c++
+fwd(processVal); // error! which processVal?
+```
+
+The same problem arises if we try to use a function template instead of an overloaded function name. A function template doesn’t represent one function, it represents many functions:
+
+```c++
+template<typename T>
+T workOnVal(T param) // template for processing values
+{ … }
+
+fwd(workOnVal); // error! which workOnVal instantiation?
+```
+
+The way to get a perfect-forwarding function like `fwd` to accept an overloaded function name or a template name is to **manually specify the overload or instantiation you want to have forwarded**.
+
+```c++
+using ProcessFuncType = int (*)(int); 			// make typedef;
+ProcessFuncType processValPtr = processVal; 	// specify needed signature for processVal
+fwd(processValPtr); 							// fine
+fwd(static_cast<ProcessFuncType>(workOnVal)); 	// also fine
+```
+
+### Bitfields
+
+The final failure case for perfect forwarding is when a bitfield is used as a function argument.
+
+Observe that an IPv4 header can be modeled as follows:
+
+```c++
+struct IPv4Header {
+	std::uint32_t version:4,
+	IHL:4,
+	DSCP:6,
+	ECN:2,
+	totalLength:16;
+	…
+};
+```
+
+If our function `f` is declared to take a `std::size_t` parameter:
+
+```c++
+void f(std::size_t sz); // function to call
+IPv4Header h;
+…
+f(h.totalLength); 		// fine
+```
+
+Trying to forward `h.totalLength` to `f` via `fwd`, however, is a different story:
+
+```c++
+fwd(h.totalLength); // error!
+```
+
+The problem is that fwd’s parameter is a reference, and `h.totalLength` is a non-`const` bitfield. And C++ Standard requires that “A non-`const` reference shall not be bound to a bit-field.”
+
+The key to passing a bitfield into a perfect-forwarding function is to take advantage of the fact that **the forwarded-to function will always receive a copy of the bitfield’s value**. You can thus make a copy yourself and call the forwarding function with the copy. In the case of our example with `IPv4Header`, this code would do the trick:
+
+```c++
+// copy bitfield value; see Item 6 for info on init. form
+auto length = static_cast<std::uint16_t>(h.totalLength);
+fwd(length); // forward the copy
+```
+
+# 6. Lambda Expressions
+
+A brief refresher for lambda expressions:
+
+* A lambda expression is just that: an expression. It’s part of the source code:
+
+  ```c++
+  std::find_if(container.begin(), container.end(),
+  				[](int val) { return 0 < val && val < 10; });
+  ```
+
+* A *closure* is the runtime object created by a lambda. Depending on the capture mode, closures hold copies of or references to the captured data. In the call to  `std::find_if` above, the closure is the object that’s passed at runtime as the third argument to `std::find_if`.
+
+* A closure class is a class from which a closure is instantiated. Each lambda causes compilers to generate a unique closure class. The statements inside a lambda become executable instructions in the member functions of its closure class.
+
+Informally, it’s perfectly acceptable to blur the lines between lambdas, closures, and closure classes. But in the Items that follow, it’s often important to distinguish what **exists during compilation (lambdas and closure classes)**, what **exists at runtime (closures)**, and how they relate to one another.
+
+## Item 31: Avoid default capture modes
+
+### Default by-reference capture
+A by-reference capture causes a closure to contain a reference to a local variable or to a parameter that’s available in the scope where the lambda is defined. If the lifetime of a closure created from that lambda exceeds the lifetime of the local variable or parameter, the reference in the closure will dangle.
+
+Suppose we have a container of filtering functions, each of which takes an int and returns a bool indicating whether a passed-in value satisfies the filter:
+
+```c++
+using FilterContainer = std::vector<std::function<bool(int)>>;
+FilterContainer filters; 	// filtering funcs
+
+void addDivisorFilter()
+{
+	auto calc1 = computeSomeValue1();
+	auto calc2 = computeSomeValue2();
+	auto divisor = computeDivisor(calc1, calc2);
+	filters.emplace_back( 						// danger! ref to divisor will dangle!
+		[&](int value) { return value % divisor == 0; }
+	);
+}
+```
+
+The lambda refers to the local variable `divisor`, but that variable ceases to exist when `addDivisorFilter` returns. The function that’s added to filters is essentially dead on arrival. Using that filter yields undefined behavior from virtually the moment it’s created.
+
+The same problem would exist if `divisor`’s by-reference capture were explicit
+
+```c++
+filters.emplace_back(
+	[&divisor](int value) // danger! ref to divisor will still dangle!
+	{ return value % divisor == 0; }
+);
+```
+
+But with an explicit capture, it’s easier to see that the viability of the lambda is dependent on `divisor`’s lifetime. Also, writing out the name, “`divisor`,” reminds us to ensure that `divisor` lives at least as long as the lambda’s closures. That’s a more specific memory jog than the general “make sure nothing dangles” admonition that “`[&]`” conveys.
+
+### Default by-value capture
+
+#### Default by-value capture is susceptible to dangling pointers (especially this)
+
+If you **capture a pointer by value**, you copy the pointer into the closures arising from the lambda, but you don’t prevent code outside the lambda from deleteing the pointer and causing your copies to dangle.
+
+Suppose one of the things `Widget`s can do is add entries to the container of filters:
+
+```c++
+class Widget {
+public:
+	… // ctors, etc.
+	void addFilter() const; 	// add an entry to filters
+private:
+	int divisor; 				// used in Widget's filter
+};
+
+void Widget::addFilter() const
+{
+	filters.emplace_back(
+		[=](int value) { return value % divisor == 0; }
+	);
+}
+```
+
+Captures apply only to **non-static local variables (including parameters)** visible in the scope where the lambda is created. In the body of `Widget::addFilter`, `divisor` is not a local variable, it’s a data member of the `Widget` class. It can’t be captured.
+
+If an attempt is made to explicitly capture `divisor` (either by value or by reference—it doesn’t matter), the capture won’t compile, because `divisor` isn’t a local variable or a parameter:
+
+```c++
+void Widget::addFilter() const
+{
+	filters.emplace_back(
+		[divisor](int value) 			// error! no local divisor to capture
+		{ return value % divisor == 0; }
+	);
+}
+```
+
+Every non-`static` member function has a `this` pointer, and you use that pointer every time you mention a data member of the class. Inside any `Widget` member function, for example, compilers internally replace uses of `divisor` with `this->divisor`.
+
+In the version of `Widget::addFilter` with a default by-value capture, **what’s being captured is the `Widget`’s `this` pointer, not `divisor`**. Compilers treat the code as if it had been written as follows:
+
+```c++
+void Widget::addFilter() const
+{
+	auto currentObjectPtr = this;
+	filters.emplace_back(
+		[currentObjectPtr](int value)
+		{ return value % currentObjectPtr->divisor == 0; }
+	);
+}
+```
+
+Thus the viability of the closures arising from this lambda is tied to the lifetime of the `Widget` whose `this` pointer they contain a copy of.
+
+In particular, consider this code:
+
+```c++
+using FilterContainer = std::vector<std::function<bool(int)>>;
+FilterContainer filters;
+void doSomeWork()
+{
+	auto pw = std::make_unique<Widget>();
+	pw->addFilter(); // add filter that uses Widget::divisor
+	…
+}
+// destroy Widget; filters now holds dangling pointer!
+```
+
+When a call is made to `doSomeWork`, a filter is created that depends on the `Widget` object produced by `std::make_unique`, i.e., a filter that contains a copy of a pointer to that `Widget`—the `Widget`’s `this` pointer. This filter is added to filters, but when `doSomeWork` finishes, the `Widget` is destroyed by the `std::unique_ptr`. From that point on, filters contains an entry with a dangling pointer.
+
+This particular problem can be solved by making a local copy of the data member you want to capture and then capturing the copy:
+
+```c++
+void Widget::addFilter() const
+{
+	auto divisorCopy = divisor; // copy data member
+	filters.emplace_back(
+		[divisorCopy](int value) // capture the copy
+		{ return value % divisorCopy == 0; } // use the copy
+	);
+}
+```
+
+A default capture mode is what made it possible to accidentally capture `this` when you thought you were capturing `divisor` in the first place.
+
+#### Default by-value capture misleadingly suggests that lambdas are self-contained
+
+lambdas may be dependent not just on local variables and parameters (which may be captured), but also on objects with static storage duration.
+
+Objects with static storage duration are defined at global or namespace scope or are declared `static` inside classes, functions, or files. These objects can be used inside lambdas, but they can’t be captured. Yet specification of a default by-value capture mode can lend the impression that they are.
+
+Consider this revised version of the `addDivisorFilter` function we saw earlier:
+
+```c++
+void addDivisorFilter()
+{
+	static auto calc1 = computeSomeValue1(); // now static
+	static auto calc2 = computeSomeValue2(); // now static
+	static auto divisor = computeDivisor(calc1, calc2);	// now static
+
+	filters.emplace_back(
+		[=](int value) 						// captures nothing!
+		{ return value % divisor == 0; } 	// refers to above static
+	);
+    
+	++divisor; // modify divisor
+}
+```
+
+Seeing “`[=]`”, you may think the lambda makes a copy of all the objects it uses and is therefore self-contained. 
+
+But it’s not self-contained. This lambda doesn’t use any non-static local variables, so nothing is captured. When, at the end of each invocation of `addDivisorFilter`, `divisor` is incremented, any lambdas that have been added to filters via this function will exhibit new behavior (corresponding to the new value of `divisor`).
+
+## Item 32: Use init capture to move objects into closures
+
+Sometimes neither by-value capture nor by-reference capture is what you want. If you have a **move-only object** (e.g., a `std::unique_ptr` or a `std::future`) that you want to get into a closure, C++11 offers no way to do it. If you have **an object that’s expensive to copy but cheap to move** (e.g., most containers in the Standard Library), and you’d like to get that object into a closure, you’d much rather move it than copy it. Again, however, C++11 gives you no way to accomplish that.
+
+C++14 offers direct support for moving objects into closures. In C++14, the Standardization Committee introduced a new capture mechanism that’s so flexible, capture-by-move is only one of the tricks it can perform. The new capability is called *init capture*. Another name for it is *generalized lambda capture*.
+
+Using an init capture makes it possible for you to specify
+
+* the name of a data member in the closure class generated from the lambda and
+* an expression initializing that data member
+
+Here’s how you can use init capture to move a `std::unique_ptr` into a closure:
+
+```c++
+class Widget { // some useful type
+public:
+	…
+	bool isValidated() const;
+	bool isProcessed() const;
+	bool isArchived() const;
+private:
+…
+};
+
+auto pw = std::make_unique<Widget>();
+auto func = [pw = std::move(pw)] // init data member in closure
+			{ return pw->isValidated()
+						&& pw->isArchived(); };
+```
+
+In the init capture, "`pw = std::move(pw)`", to the left of the “=” is the name of the data member in the closure class you’re specifying, and to the right is the initializing expression. The scope on the left is that of the closure class. The scope on the right is the same as where the lambda is being defined.
+
+In the example above, the name `pw` on the left of the “=” refers to a data member in the closure class, while the name `pw` on the right refers to the object declared above the lambda, i.e., the variable initialized by the call to `std::make_unique`.
+
+As usual, code in the body of the lambda is in the scope of the closure class, so uses of `pw` there refer to the closure class data member.
+
+### Accomplish move capture in a language lacking support for move capture
+#### Create a class in C++11 that supports move-initialization of its data members
+
+Remember that a lambda expression is simply a way to cause a class to be generated and an object of that type to be created. The example C++14 code we just saw, for example, can be written in C++11 like this:
+
+```c++
+class IsValAndArch { 	// "is validated and archived"
+public:
+	using DataType = std::unique_ptr<Widget>;
+	explicit IsValAndArch(DataType&& ptr)s
+		: pw(std::move(ptr)) {}
+	bool operator()() const
+		{ return pw->isValidated() && pw->isArchived(); }
+private:
+	DataType pw;
+};
+auto func = IsValAndArch(std::make_unique<Widget>());
+```
+
+#### Use bind objects
+
+Move capture can be emulated in C++11 by
+
+* moving the object to be captured into a function object produced by `std::bind`
+* giving the lambda a reference to the “captured” object
+
+Suppose you’d like to create a local `std::vector`, put an appropriate set of values into it, then move it into a closure. In C++14, this is easy:
+
+```c++
+std::vector<double> data;
+auto func = [data = std::move(data)] // C++14 init capture
+			{ /* uses of data */ };
+```
+
+The C++11 equivalent is as follows:
+
+```c++
+std::vector<double> data;
+auto func = std::bind(
+				[](const std::vector<double>& data)
+				{ /* uses of data */ },
+				std::move(data)
+);
+```
+
+Like lambda expressions, `std::bind` produces function objects. I call function objects returned by `std::bind` *bind objects*. The first argument to `std::bind` is a callable object. Subsequent arguments represent values to be passed to that object.
+
+A bind object contains copies of all the arguments passed to `std::bind`. For each lvalue argument, the corresponding object in the bind object is copy constructed. For each rvalue, it’s move constructed. In this example, the second argument is an rvalue, so `data` is move constructed into the bind
+object.
+
+When a bind object is “called” (i.e., its function call operator is invoked) the arguments it stores are passed to the callable object originally passed to `std::bind`. In this example, that means that when `func` (the bind object) is called, the move-constructed copy of data inside `func` is passed as an argument to the lambda that was passed to `std::bind`. 
+
+The lambda that was passed to `std::bind` has a parameter, `data`. This parameter is an lvalue reference to the copy of `data` in the bind object. Uses of `data` inside the lambda will thus operate on the move-constructed copy of `data` inside the bind object.
+
+Giving the statements above, these fundamental points should be clear:
+
+* It’s not possible to move-construct an object into a C++11 closure, but it is possible to move-construct an object into a C++11 bind object.
+* Emulating move-capture in C++11 consists of move-constructing an object into a bind object, then passing the move-constructed object to the lambda by reference.
+
+As a second example of using `std::bind` to emulate move capture, here’s the C++14 code we saw earlier to create a `std::unique_ptr` in a closure:
+
+```c++
+auto func = [pw = std::make_unique<Widget>()]
+			{ return pw->isValidated() 
+						&& pw->isArchived(); };
+```
+
+And here’s the C++11 emulation:
+
+```c++
+auto func = std::bind(
+    			[](const std::unique_ptr<Widget>& pw)
+    			{ return pw->isValidated()
+                			&& pw->isArchived();},
+    			std::make_unique<Widget>()
+)
+```
+
