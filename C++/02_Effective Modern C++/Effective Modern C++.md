@@ -4045,3 +4045,194 @@ auto func = std::bind(
 )
 ```
 
+## Item 33: Use `decltype` on `auto&&` parameters to `std::forward` them
+
+One of the most exciting features of C++14 is generic lambdas—lambdas that use `auto` in their parameter specifications. The implementation of this feature is straightforward: `operator()` in the lambda’s closure class is a template:
+
+```c++
+auto f = [](auto x){ return func(normalize(x)); };
+```
+
+the closure class’s function call operator looks like this:
+
+```c++
+class SomeCompilerGeneratedClassName {
+public:
+	template<typename T>
+	auto operator()(T x) const
+	{ 
+    	return func(normalize(x)); 
+    }
+	… // other closure class functionality
+};
+```
+
+In this example, the only thing the lambda does with its parameter `x` is forward it to `normalize`. This lambda isn’t written properly, because it always passes an lvalue (the parameter `x`) to `normalize`, even if the argument that was passed to the lambda was an rvalue.
+
+The correct way to write the lambda is to have it perfect-forward `x` to `normalize`:
+
+* `x` has to become a universal reference. 
+* `x` has to be passed to `normalize` via `std::forward`
+
+In concept, these are trivial modifications:
+
+```c++
+auto f = [](auto&& x)
+		{ return func(normalize(std::forward<???>(x))); };
+```
+
+However the question is that what type to pass to `std::forward`. 
+
+Normally, when you employ perfect forwarding, you’re in a template function taking a type parameter `T`, so you just write `std::forward<T>`. In the generic lambda, though, there’s no type parameter `T` available to you.
+
+We can use decltype to determine whether the argument passed was an lvalue or an rvalue. If an lvalue was passed in, `decltype(x)` will produce a type that’s an lvalue reference. If an rvalue was passed, `decltype(x)` will produce an rvalue reference type：
+
+```c++
+auto f =
+	[](auto&& param)
+	{
+		return func(normalize(std::forward<decltype(param)>(param)));
+	};
+```
+
+## Item 34: Prefer lambdas to `std::bind`
+
+### lambdas are more readable
+
+Suppose, for example, we have a function to set up an audible alarm:
+
+```c++
+using Time = std::chrono::steady_clock::time_point;
+enum class Sound { Beep, Siren, Whistle };
+using Duration = std::chrono::steady_clock::duration;
+
+// at time t, make sound s for duration d
+void setAlarm(Time t, Sound s, Duration d);
+```
+
+Further suppose that at some point in the program, we’ve determined we’ll want an alarm that will go off an hour after it’s set and that will stay on for 30 seconds. The alarm sound, however, remains undecided.
+
+We can write a lambda that revises `setAlarm`’s interface so that only a `sound` needs to be specified:
+
+```c++
+auto setSoundL =
+	[](Sound s)
+	{
+		using namespace std::chrono;
+		using namespace std::literals;
+		setAlarm(steady_clock::now() + 1h, 	// alarm to go off
+					s,						// in an hour for
+					30s); 					// 30 seconds
+};
+```
+
+Our first attempt to write the corresponding `std::bind` call is below.
+
+```c++
+using namespace std::chrono; 		// as above
+using namespace std::literals;
+using namespace std::placeholders; 	// needed for use of "_1"
+auto setSoundB = 					// "B" for "bind"
+	std::bind(setAlarm,
+				steady_clock::now() + 1h, // incorrect! see below
+				_1,
+				30s);
+```
+
+The code isn’t quite right. In the lambda, it’s clear that the expression “`steady_clock::now() + 1h`” is an argument to `setAlarm`. It will be evaluated when `setAlarm` is called.
+
+In the `std::bind` call, however, “`steady_clock::now() + 1h`” is passed as an argument to `std::bind`, not to `setAlarm`. That means that the expression will be evaluated when `std::bind` is called, and the time resulting from that expression will be stored inside the resulting bind object. As a consequence, the alarm will be set to go off an hour after the call to `std::bind`, not an hour after the call to `setAlarm`!
+
+Fixing the problem requires telling `std::bind` to defer evaluation of the expression until `setAlarm` is called, and the way to do that is to **nest a second call to `std::bind` inside the first one**:
+
+```c++
+auto setSoundB =
+	std::bind(setAlarm,
+				std::bind(std::plus<>(), steady_clock::now(), 1h),	// In C++14, the template type
+																	// argument for the standard 
+              														// operator templates can generally be 
+              														// omitted
+				_1,
+				30s);
+```
+
+### lambdas may be more efficient than using `std::bind`
+
+Suppose there’s an overload taking a fourth parameter specifying the `alarm` volume:
+
+```c++
+enum class Volume { Normal, Loud, LoudPlusPlus };
+void setAlarm(Time t, Sound s, Duration d, Volume v);
+```
+
+The lambda continues to work as before, because overload resolution chooses the three-argument version of `setAlarm`.
+
+The `std::bind` call, on the other hand, now fails to compile:
+
+```c++
+auto setSoundB = 				// error! which
+		std::bind(setAlarm, 	// setAlarm?
+					std::bind(std::plus<>(), steady_clock::now(), 1h),
+					_1,
+					30s);
+```
+
+The problem is that compilers have no way to determine which of the two `setAlarm` functions they should pass to `std::bind`. All they have is a function name, and the name alone is ambiguous.
+
+To get the `std::bind` call to compile, `setAlarm` must be cast to the proper function pointer type:
+
+```c++
+using SetAlarm3ParamType = void(*)(Time t, Sound s, Duration d);
+
+auto setSoundB = // now
+	std::bind(static_cast<SetAlarm3ParamType>(setAlarm), // okay
+				std::bind(std::plus<>(), steady_clock::now(), 1h),
+				_1,
+				30s);
+```
+
+### In C++11, `std::bind` may be useful in two constrained situations
+* **Move capture**
+
+  C++11 lambdas don’t offer move capture, but it can be emulated through a combination of a lambda and `std::bind`.
+
+* **Polymorphic function objects**
+
+  Because **the function call operator on a bind object uses perfect forwarding**, it can accept arguments of any type. This can be useful when
+  you want to bind an object with a templatized function call operator. 
+
+  For example, given this class,
+
+  ```c++
+  class PolyWidget {
+  public:
+  	template<typename T>
+  	void operator()(const T& param);
+  	…
+  };
+  ```
+
+  `std::bind` can bind a `PolyWidget` as follows:
+
+  ```c++
+  PolyWidget pw;
+  auto boundPW = std::bind(pw, _1);
+  ```
+
+  `boundPW` can then be called with different types of arguments:
+
+  ```c++
+  boundPW(1930); 		// pass int to PolyWidget::operator()
+  boundPW(nullptr); 	// pass nullptr to PolyWidget::operator()
+  boundPW("Rosebud"); // pass string literal to PolyWidget::operator()
+  ```
+
+  There is no way to do this with a C++11 lambda. In C++14, however, it’s easily achieved via a lambda with an auto parameter:
+
+  ```c++
+  PolyWidger pw;
+  auto boundPW = [pw](const auto& param){ pw(param); };
+  ```
+
+  
+
