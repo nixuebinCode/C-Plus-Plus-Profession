@@ -3564,3 +3564,147 @@ int GetNumberSameAsIndex(const int* numbers, int length){
     return -1;
 }
 ```
+
+## 面试题54 : 二叉搜索树的第K 大节点
+
+### 题目
+
+给定一棵二叉搜索树，请找出其中第 K 大的节点。例如， 在图中的二叉搜索树里，按节点数值大小顺序， 第三大节点的值是4 。
+
+ ![image-20220503095152882](D:/study/C-Plus-Plus-Profession_bk/Algorithm/00_剑指Offer刷题/images/image-20220503095152882.png)
+
+### 解题思路
+
+中序遍历一棵二叉搜索树，得到的是一个递增的序列，我们就可以知道其中第 k 大的节点的值是多少。
+
+### 代码实现
+
+```c++
+const BinaryTreeNode* KthNodeCore(const BinaryTreeNode* pNode, int& k);
+
+const BinaryTreeNode* KthNode(const BinaryTreeNode* pRoot, int k){
+    if(pRoot == nullptr || k == 0){
+        return nullptr;
+    }
+    return KthNodeCore(pRoot, k);
+}
+
+const BinaryTreeNode* KthNodeCore(const BinaryTreeNode* pNode, int& k){
+    const BinaryTreeNode* target = nullptr;
+
+    if(pNode->m_pLeft != nullptr)
+        target = KthNodeCore(pNode->m_pLeft, k);	// 注意这里不能直接写 KthNodeCore(pNode->m_pLeft, k); 要加上 target = 
+
+
+    if(target == nullptr && --k == 0){
+        target = pNode;
+    }
+    
+    if(target == nullptr && pNode->m_pRight != nullptr)	// 如果 target 不为空，说明已经遍历到目标节点，无需再往右子树查找
+        target = KthNodeCore(pNode->m_pRight, k);
+
+    return target;
+
+}
+```
+
+## 面试题55-1 : 二叉树的深度
+
+### 题目
+
+输入一棵二叉树的根节点，求该树的深度。从根节点到叶节点依次经过的节点（含根、叶节点）形成树的一条路径，最长路径的长度为树的深度。二叉树的节点定义如下：
+
+```c++
+struct BinaryTreeNode
+{
+    int m_ nValue;
+    BinaryTreeNode* m_pLeft;
+    BinaryTreeNode* m_pRight;
+};
+```
+
+根据题目中给的二叉树的深度的定义，我们可以参考面试题 34 中遍历树中每一条路径的方法，统计出从根节点出发的最长路径的长度，即得到输的深度。
+
+我们还可以从另一个角度来理解树的深度。如果一棵树只有一个节点，那么它的深度为 1 。如果根节点只有左子树而没有右子树，那么树的深度应该是其左子树的深度加 1；同样，如果根节点只有右子树而没有左子树，那么树的深度应该是其右子树的深度加1。如果既有右子树又有左子树，那么该树的深度就是其左、右子树深度的较大值再加1 。因此可以利用递归来实现这一思路。
+
+### 代码实现
+
+```c++
+int TreeDepth(const BinaryTreeNode* pRoot){
+    if(pRoot == nullptr)
+        return 0;
+    int nLeft = TreeDepth(pRoot->m_pLeft);
+    int nRight = TreeDepth(pRoot->m_pRight);
+    return (nLeft > nRight) ? nLeft + 1 : nRight + 1;
+}
+```
+
+## 面试题55-2 : 平衡二叉树
+
+### 题目
+
+输入一棵二叉树的根节点，判断该树是不是平衡二叉树。如果某二叉树中任意节点的左、右子树的深度相差不超过 1 ，那么它就是一棵平衡二叉树。
+
+### 解题思路一
+
+结合上题中求二叉树深度的方法，我们可以很容易想到一种思路：在遍历树的每个节点的时候，调用函数 TreeDepth 得到它的左、右子树的深度。如果每个节点的左、右子树的深度相差都不超过 1，那么它就是一棵平衡二叉树。
+
+### 代码实现
+
+```c++
+int TreeDepth(const BinaryTreeNode* pRoot){
+    if(pRoot == nullptr)
+        return 0;
+    int nLeft = TreeDepth(pRoot->m_pLeft);
+    int nRight = TreeDepth(pRoot->m_pRight);
+    return (nLeft > nRight) ? nLeft + 1 : nRight + 1;
+}
+
+bool IsBalanced_Solution1(const BinaryTreeNode* pRoot){
+    if(pRoot == nullptr)
+        return true;
+    int nLeft = TreeDepth(pRoot->m_pLeft);
+    int nRight = TreeDepth(pRoot->m_pRight);
+    int diff = nLeft - nRight;
+    if(diff > 1 || diff < -1)
+        return false;
+    else
+        return IsBalanced_Solution1(pRoot->m_pLeft) &&
+                IsBalanced_Solution1(pRoot->m_pRight);
+}
+```
+
+### 解题思路二
+
+思路一的方法存在重复遍历节点的问题，我们来思考每个节点只遍历一次的解法。如果我们用**后序遍历**的方式遍历二叉树的每个节点，那么在遍历到一个节点之前我们就已经遍历了它的左、右子树。只要在遍历每个节点的时候记录它的深度，我们就可以一边遍历一边判断每个节点是不是平衡的。
+
+### 代码实现
+
+```c++
+bool IsBalanced(const BinaryTreeNode* pNode, int& depth);
+
+bool IsBalanced(const BinaryTreeNode* pRoot){
+    int depth = 0;
+    return IsBalanced(pRoot, depth);
+}
+
+bool IsBalanced(const BinaryTreeNode* pNode, int& depth){
+    if(pNode == nullptr){
+        depth = 0;
+        return true;
+    }
+
+    int left, right;
+    if(IsBalanced(pNode->m_pLeft, left)
+        && IsBalanced(pNode->m_pRight, right))
+    {                                                   // 左子树和右子树均满足平衡二叉树，并返回各自的高度
+        int diff = left - right;
+        if(diff >= -1 && diff <= 1){                    // 该节点也满足平衡二叉树
+            depth = 1 + (left > right ? left : right);  // 计算当前树的高度
+            return true;
+        }
+    }
+    return false;
+}
+```
+
