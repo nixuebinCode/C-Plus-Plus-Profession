@@ -3708,3 +3708,88 @@ bool IsBalanced(const BinaryTreeNode* pNode, int& depth){
 }
 ```
 
+## 面试题56-1: 数组中只出现一次的两个数字
+
+### 题目
+
+一个整型数组里除两个数字之外，其他数字都出现了两次。请写程序找出这两个只出现一次的数字。要求时间复杂度是 O(n)，空间复杂度是 O(1)。例如，输入数组 {2，4，3，6，3，2，5，5}，因为只有 4 和 6 这两个数字只出现了一次，其他数字都出现了两次，所以输出 4 和 6。
+
+### 解题思路
+
+首先考虑假如这个数组中只有一个数字出现了一次，其他数字均出现了两次，如何找出这个只出现一次的数字？可以利用**异或运算**的一个性质：任何一个数字异或它自己都是 0。也就是说，我们只需要从头到尾异或数组中的每个数字，那么最终的结果刚好是那个只出现一次的数字。
+
+之后再回到原问题，即出现一次的数字有两个，假设为 m 和 n。如果我们能够把数组分成两个子数组 A 和 B，使得 m 和 n 分别出现在 A 和 B 中，那么我们就可以利用前面的思路来找到这两个数字。接下来考虑如何拆分：
+
+同样我们把数组中的数字从头到尾进行异或运算，最终得到的结果是 m 和 n 异或的结果，因为 m 与 n 不相等，因此结果肯定不为 0。我们在结果数字中找到第一个为 1 的位的位置，记为第 x 位。易知 m 和 n 的二进制表示中第 x 位肯定不一样，因此我们按照数字的二进制表示中第 x 位是否为 1 来划分数组。因为相同的数字第 x 位也必定相同，因此出现两次的数字会被划分到同一个子数组中。
+
+### 代码实现
+
+```c++
+void FindNumsAppearOnce(int* numbers, int length, int* num1, int* num2){
+    if(numbers == nullptr || length < 2)
+        return;
+    // 将数组从头到尾进行异或操作
+    int xorResult = 0;
+    for(int i = 0; i < length; i++){
+        xorResult ^= numbers[i];
+    }
+    // 从右往左找到异或结果二进制表示中第一个 1
+    unsigned int flag = 1;
+    while(!(xorResult & flag)){
+        flag = flag << 1;
+    }
+    // 将数组拆分
+    *num1 = 0;
+    *num2 = 0;
+    for(int i = 0; i < length; i++){
+        if(numbers[i] & flag){
+            *num1 = (*num1) ^ numbers[i];
+        }
+        else{
+            *num2 = (*num2) ^ numbers[i];
+        }
+    }
+}
+```
+
+## 面试题56-2：数组中唯一只出现一次的数字
+
+### 题目
+
+在一个数组中除一个数字只出现一次之外，其他数字都出现了三次。请找出那个只出现一次的数字。
+
+### 解题思路
+
+由于这里其他数字出现了三次，我们不能再继续使用异或运算，但是我们可以沿用位运算的思路。因为除了目标数字之外的其他数字均出现了三次，它们的二进制表示中的每一位加起来都应该能够被 3 整除。因此我们可以把数组中的所有数字的二进制表示的每一位相加起来：如果某一位得到的结果是 0 ，则说明只出现一次的数字对应的位的数字为 0；如果某一位得到的结果是 1 ，则说明只出现一次的数字对应的位的数字为 1。
+
+### 代码实现
+
+```c++
+int FindNumberAppearingOnce(int* numbers, int length){
+    if(numbers == nullptr || length < 1)
+        return -1;
+    int ResultBit[32] = {0};
+    for(int i = 0; i < 32; i++){
+        int bitSum = 0;
+        for(int j = 0; j < length; j++){
+            int num = numbers[j];
+            num = num >> i;
+            int bit = num & 1;
+            bitSum += bit;
+        }
+        if(bitSum % 3 == 0){
+            ResultBit[31 - i] = 0;     
+        }
+        else{
+            ResultBit[31 - i] = 1;
+        }
+    }
+    int result = 0;
+    for(int i = 0; i < 32; i++){
+        result = result << 1;
+        result += ResultBit[i];
+    }
+    return result;
+}
+```
+
