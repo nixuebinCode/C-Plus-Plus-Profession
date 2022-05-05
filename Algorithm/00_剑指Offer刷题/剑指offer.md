@@ -3793,3 +3793,89 @@ int FindNumberAppearingOnce(int* numbers, int length){
 }
 ```
 
+## 面试题57-1：和为 s 的两个数字
+
+### 题目
+
+输入一个递增排序的数组和一个数字 s，在数组中查找两个数，使得它们的和正好是 s。如果有多对数字的和等于 s，则输出任意一对即可。例如，输入数组     {1，2，4，7，11，15}  和数字 15。由于 4+11=15，因此输出 4 和 11。
+
+### 解题思路
+
+由于是递增排序的数组，我们依然考虑能否利用二分查找的思路来解决问题。开始时我们用两个指针分别指向数组的第一个元素和最后一个元素，计算这两个元素的和，如果它们的和等于 s，那么我们就找到了目标数字；如果它们的和小于 s，我们希望两个数字的和更大一点，则应该让指向第一个元素的指针往右移动；如果它们的和大于 s，我们希望两个数字的和更小一点，则应该让指向最后一个元素的指针往左移动。
+
+### 代码实现
+
+```c++
+bool FindNumbersWithSum(int data[], int length, int sum, 
+                        int* num1, int* num2)
+{
+    if(data == nullptr || length < 2){
+        return false;
+    }
+    *num1 = 0;
+    *num2 = 0;
+    int p1 = 0;
+    int p2 = length - 1;
+    while(p1 < p2){
+        int sumOfNum = data[p1] + data[p2];
+        if(sumOfNum == sum){
+            *num1 = data[p1];
+            *num2 = data[p2];
+            return true;
+        }
+        else if(sumOfNum > sum){
+            p2--;
+        }
+        else{
+            p1++;
+        }
+    }
+    return false;
+}
+```
+
+## 面试题57-2：和为 s 的连续正数序列
+
+### 题目
+
+输入一个整数 s，打印出所有和为 s 的连续整数序列（至少含有两个数）。例如，输入 15，由于 1+2+3+4+5=4+5+6+7+8=15，所以打印出 3 个来纳许序列 1\~5、4 \~ 6 和 7 ~ 8。
+
+### 解题思路
+
+有了上一题的思路，我们可以设序列中的最小的数字为 small，最大的数字为 big。根据求和公式我们可以计算出该序列的和，如果结果小于 s，我们增大 big；如果大于 s，我们增大 smll。
+
+首先把 small 初始化为1，big 初始化为 2。因为这个序列至少包含两个数字，big 的最大值应该为 (s+1) / 2。
+
+### 代码实现
+
+```c++
+void PrintContinuousSequence(int small, int big);
+
+void FindContinuousSequence(int sum){
+    int small = 1;
+    int big = 2;
+    while(small < big && big <= (sum+1) / 2){
+        int sumOfSequence = (small + big) * (big - small + 1) / 2;
+        if(sumOfSequence == sum){
+            PrintContinuousSequence(small, big);
+            small++;
+        }
+        else if(sumOfSequence < sum){
+            big++;
+        }
+        else{
+            small++;
+        }
+    }
+}
+
+void PrintContinuousSequence(int small, int big){
+    for(int i = small; i <= big; i++){
+        if(i == big)
+            cout << i << endl;
+        else
+            cout << i << '+';
+    }
+}
+```
+
