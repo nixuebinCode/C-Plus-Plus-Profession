@@ -4097,7 +4097,7 @@ auto f =
 
 ## Item 34: Prefer lambdas to `std::bind`
 
-### lambdas are more readable
+### Lambdas are more readable
 
 Suppose, for example, we have a function to set up an audible alarm:
 
@@ -4156,7 +4156,7 @@ auto setSoundB =
 				30s);
 ```
 
-### lambdas may be more efficient than using `std::bind`
+### Lambdas may be more efficient than using `std::bind`
 
 Suppose there’s an overload taking a fourth parameter specifying the `alarm` volume:
 
@@ -4191,7 +4191,16 @@ auto setSoundB = // now
 				30s);
 ```
 
+But this brings up another difference between lambdas and `std::bind`:
+
+* Inside the function call operator for `setSoundL` (i.e., the function call operator of the lambda’s closure class), the call to `setAlarm` is a normal function invocation that **can be inlined by compilers**.
+
+* The call to `std::bind`, however, passes a function pointer to `setAlarm`, and that means that inside the function call operator for `setSoundB` (i.e., the function call operator for the bind object), the call to `setAlarm` takes place through a function pointer. Compilers are less likely to inline function calls through function pointers. 
+
+It’s thus possible that using lambdas generates faster code than using `std::bind`.
+
 ### In C++11, `std::bind` may be useful in two constrained situations
+
 * **Move capture**
 
   C++11 lambdas don’t offer move capture, but it can be emulated through a combination of a lambda and `std::bind`.
@@ -4234,5 +4243,87 @@ auto setSoundB = // now
   auto boundPW = [pw](const auto& param){ pw(param); };
   ```
 
-  
+
+# 8. The Concurrency API
+
+## Item 41: Consider pass by value for copyable parameters that are cheap to move and always copied 
+
+Suppose a member function `addName` might copy its parameter into a private container. For efficiency, such a function should copy lvalue arguments, but move rvalue arguments. We can implement this member function in the following 3 ways:
+
+### Overloading
+
+```c++
+class Widget {
+public:
+	void addName(const std::string& newName) 	// take lvalue; copy it
+	{ names.push_back(newName); }
+	void addName(std::string&& newName) 		// take rvalue;  move it;
+    { names.push_back(std::move(newName)); }
+private:
+	std::vector<std::string> names;
+};
+```
+
+This works, but it requires writing two functions that do essentially the same thing. Furthermore, there will be two functions in the object code.
+
+### Using a universal reference
+
+An alternative approach is to make `addName` a function template taking a universal reference:
+
+```c++
+class Widget{
+public:
+    template<typename T>
+    void addName(T&& newName){
+        names.push_back(std::forward<T>(newName));
+    }
+    ...
+};
+```
+
+This reduces the source code you have to deal with, but as a template, it may yield several functions in object code, because it not only instantiates differently for lvalues and rvalues, it also instantiates differently for `std::string` and types that are convertible to `std::string`.
+
+### Passing by value
+
+ For parameters like `newName` in functions like `addName`, pass by value may be an entirely reasonable strategy:
+
+```c++
+class Widget {
+public:
+	void addName(std::string newName) // take lvalue or rvalue; move it
+	{ names.push_back(std::move(newName)); }
+	…
+};
+```
+
+Note the application of `std::move` to the parameter `newName`. Typically, `std::move` is used with rvalue references, but in this case, we know that
+
+* `newName` is a completely independent object from whatever the caller passed in, so changing `newName` won’t affect callers
+* this is the final use of `newName`, so moving from it won’t have any impact on the rest of the function
+
+In C++98, no matter what callers passed in, the parameter `newName` would be created by copy construction. In C++11, however, `addName` will be copy constructed only for lvalues. For rvalues, it will be move constructed. Lvalues are thus copied, and rvalues are moved, just like we want.
+
+### Summary
+
+Now consider the cost, in terms of copy and move operations, of adding a `name` to a `Widget` for the two calling scenarios and each of the three `addName` implementations:
+
+* **Overloading**
+
+  Regardless of whether an lvalue or an rvalue is passed, the caller’s argument is bound to a reference called `newName`. In the lvalue overload, `newName` is copied into `Widget::names`. In the rvalue overload, it’s moved. 
+
+  Cost summary: one copy for lvalues, one move for rvalues.
+
+* **Using a universal reference**
+
+  As with overloading, the caller’s argument is bound to the reference `newName`. This is a no-cost operation. Due to the use of `std::forward`, lvalue `std::string` arguments are copied into `Widget::names`, while rvalue `std::string` arguments are moved.
+
+  Cost summary: one copy for lvalues, one move for rvalues.
+
+* **Passing by value**
+
+  Regardless of whether an lvalue or an rvalue is passed, the parameter `newName` must be constructed. If an lvalue is passed, this costs a copy construction. If an rvalue is passed, it costs a move construction. In the body of the function, `newName` is unconditionally moved into `Widget::names`.
+
+  Cost summary: one copy plus one move for lvalues, and two moves for rvalues. Compared to the by-reference approaches, that’s one extra move for both lvalues and rvalues.
+
+Usually, the most practical approach is that you use overloading or universal references instead of pass by value unless it’s been demonstrated that pass by value yields acceptably efficient code for the parameter type you need.
 
