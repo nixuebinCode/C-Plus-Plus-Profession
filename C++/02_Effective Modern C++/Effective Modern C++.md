@@ -4327,3 +4327,174 @@ Now consider the cost, in terms of copy and move operations, of adding a `name` 
 
 Usually, the most practical approach is that you use overloading or universal references instead of pass by value unless it’s been demonstrated that pass by value yields acceptably efficient code for the parameter type you need.
 
+## Item 42: Consider emplacement instead of insertion
+
+If you have a container holding, say, `std::string`s, it seems logical that when you add a new element via an insertion function:
+
+```c++
+std::vector<std::string> vs; 	// container of std::string
+vs.push_back("xyzzy"); 			// add string literal
+```
+
+Here, the container holds `std::string`s, but what you’re actually trying to push_back—is a string literal. A string literal is not a `std::string`, and that means that the argument you’re passing to `push_back` is not of the type held by the container.
+
+push_back for `std::vector` is overloaded for lvalues and rvalues as follows:
+
+```c++
+template <class T, class Allocator = allocator<T>>
+class vector {
+public:
+	…
+	void push_back(const T& x); // insert lvalue
+	void push_back(T&& x); // insert rvalue
+	…
+};
+```
+
+In the call
+
+```c++
+vs.push_back("xyzzy");
+```
+
+Compilers see a mismatch between the type of the argument (`const char[6]`) and the type of the parameter taken by `push_back` (a reference to a `std::string`). They address the mismatch by generating code to create a temporary `std::string` object from the string literal, and they pass that temporary object to push_back. In other words, they treat the call as if it had been written like this:
+
+```c++
+vs.push_back(std::string("xyzzy")); // create temp. std::string and pass it to push_back
+```
+
+Here’s what happens at runtime in the call to `push_back`:
+
+* A temporary `std::string` object is created from the string literal "`xyzzy`". This object has no name; we’ll call it `temp`. Because it’s a temporary object, `temp` is an rvalue.
+* `temp` is passed to the rvalue overload for `push_back`, where it’s bound to the rvalue reference parameter `x`. A copy of `x` is then constructed in the memory for the `std::vector`. The constructor that’s used to copy `x` into the `std::vector` is the move constructor, because `x`, being an rvalue reference.
+* Immediately after `push_back` returns, `temp` is destroyed, thus calling the `std::string` destructor.
+
+Notice that if there were a way to take the string literal and pass it directly to the code in step 2 that constructs the `std::string` object inside the `std::vector`, we could avoid constructing and destroying `temp`. The function you want is `emplace_back`.
+
+### `emplace_back`
+
+`emplace_back` uses whatever arguments are passed to it to construct a `std::string` directly inside the `std::vector`.
+
+`emplace_back` uses perfect forwarding, so, as long as you don’t bump into one of perfect forwarding’s limitations, you can pass any number of arguments of any combination of types through `emplace_back`:
+
+```c++
+vs.emplace_back(50, 'x'); // insert std::string consisting of 50 'x' characters
+```
+
+Insertion functions take objects to be inserted, while emplacement functions take constructor arguments for objects to be inserted. This difference permits emplacement functions to avoid the creation and destruction of temporary objects that insertion functions can necessitate.
+
+### Why not use emplacement functions all the time
+
+Because an argument of the type held by the container can be passed to an emplacement function, emplacement can be used even when an insertion function would require no temporary. In that case, insertion and emplacement do essentially the same thing:
+
+```c++
+std::string queenOfDisco("Donna Summer");
+vs.push_back(queenOfDisco); 	// copy-construct queenOfDisco at end of vs
+vs.emplace_back(queenOfDisco); 	// ditto
+```
+
+Emplacement functions can thus do everything insertion functions can. They sometimes do it more efficiently. But with current implementations of the Standard Library, there are situations where the insertion functions run faster.
+
+If all the following are true, emplacement will almost certainly outperform insertion:
+
+* **The value being added is constructed into the container, not assigned**
+
+  Consider the situation that the new `std::string` goes into a location already occupied by an object:
+
+  ```c++
+  std::vector<std::string> vs; 		// as before
+  … 									// add elements to vs
+  vs.emplace(vs.begin(), "xyzzy"); 	// add "xyzzy" to beginning of vs
+  ```
+
+  For this code, most implementations will **move-assign** the value into place. But move assignment requires an object to move from, and that means that a temporary object will need to be created to be the source of the move. Because the primary advantage of emplacement over insertion is that temporary objects are neither created nor destroyed, when the value being added is put into the container via assignment, emplacement’s edge tends to disappear.
+
+* **The argument type(s) being passed differ from the type held by the container**
+
+  When an object of type T is to be added to a `container<T>`, there’s no reason to expect emplacement to run faster than insertion, because no temporary needs to be created to satisfy the insertion interface. 
+
+* **The container is unlikely to reject the new value as a duplicate**
+
+  The reason this matters is that in order to detect whether a value is already in the container, emplacement implementations typically create a node
+  with the new value so that they can compare the value of this node with existing container nodes. If the value to be added isn’t in the container, the node is linked in. However, if the value is already present, the emplacement is aborted and the node is destroyed, meaning that the cost of its construction and destruction was wasted.
+
+When deciding whether to use emplacement functions, two other issues are worth keeping in mind:
+
+* **Resource management**
+
+  Suppose you have a container of `std::shared_ptr<Widget>`s
+
+  ```c++
+  std::list<std::shared_ptr<Widget>> ptrs;
+  ```
+
+  and you want to add a `std::shared_ptr` that should be released via a custom deleter. When you want to specify a custom deleter, you can't use `std::make_shared`, instead you must use `new` directly to get the raw pointer to be managed by the `std::shared_ptr`.
+
+  ```c++
+  void killWidget(Widget* pWidget);
+  ptrs.push_back(std::shared_ptr<Widget>(new Widget, killWidget));
+  ptrs.push_back({new Widget, killWidget});	// the meaning would be the same
+  ```
+
+  A temporary `std::shared_ptr` would be constructed before calling `push_back`. `push_back`’s parameter is a reference to a `std::shared_ptr`, so there has to be a `std::shared_ptr` for this parameter to refer to.
+
+  Now consider what happens if `emplace_back` is called instead of `push_back`:
+
+  ```c++
+  void killWidget(Widget* pWidget);
+  ptrs.emplace_back(new Widget, killWidget);
+  ```
+
+  1. The raw pointer resulting from “`new Widget`” is perfect-forwarded to the point inside `emplace_back` where a list node is to be allocated. That allocation fails, and an out-of-memory exception is thrown.
+  2. As the exception propagates out of emplace_back, the raw pointer that was the only way to get at the Widget on the heap is lost. That `Widget` (and any resources it owns) is leaked.
+
+  Frankly, you shouldn’t be passing expressions like “`new Widget`” to `emplace_back` or `push_back` or most any other function, anyway, because, as Item 21 explains, this leads to the possibility of exception safety problems of the kind we just examined.
+
+  Closing the door requires **taking the pointer from “`new Widget`” and turning it over to a resource-managing object in a standalone statement**, then passing that object as an rvalue to the function you originally wanted to pass “`new Widget`” to:
+
+  ```c++
+  std::shared_ptr<Widget> spw(new Widget, killWidget); 	// create Widget and have spw manage it
+  ptrs.push_back(std::move(spw)); 						// add spw as rvalue
+  
+  std::shared_ptr<Widget> spw(new Widget, killWidget);
+  ptrs.emplace_back(std::move(spw));
+  ```
+
+* **`explicit` constructors**
+
+  Suppose you create a container of regular expression objects:
+
+  ```c++
+  std::vector<std::regex> regexes;
+  ```
+
+  The `std::regex` constructor taking a `const char*` pointer is `explicit`. That’s why when you write these lines don’t compile:
+
+  ```c++
+  std::regex r = nullptr; 		// error! won't compile
+  regexes.push_back(nullptr); 	// error! won't compile
+  ```
+
+  In both cases, we’re requesting an implicit conversion from a pointer to a `std::regex`, and the explicitness of that constructor prevents such conversions. But if you use emplace functions, your compilers will accept the code without complaint:
+
+  ```c++
+  regexes.emplace_back(nullptr);
+  ```
+
+  Here we’re not claiming to pass a `std::regex` object. Instead, we’re **passing a constructor argument** for a `std::regex` object. That’s not considered an implicit conversion request. Rather, it’s viewed as if you’d written this code:
+
+  ```c++
+  std::regex r(nullptr); // compiles
+  ```
+
+  Setting aside `push_back`, `emplace_back`, notice how these very similar initialization syntaxes yield different results:
+
+  ```c++
+  std::regex r1 = nullptr; // error! won't compile
+  std::regex r2(nullptr); // compiles
+  ```
+
+  The syntax used to initialize `r1` (employing the equals sign) corresponds to what is known as *copy initialization*. In contrast, the syntax used to initialize `r2` (with the parentheses, although braces may be used instead) yields what is called *direct initialization*. Copy initialization is not permitted
+  to use explicit constructors. Direct initialization is.
+
+  Back to `push_back` and `emplace_back` and, more generally, the insertion functions versus the emplacement functions. Emplacement functions use direct initialization, which means they may use explicit constructors. Insertion functions employ copy initialization, so they can’t.
