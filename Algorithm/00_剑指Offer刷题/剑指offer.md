@@ -3838,7 +3838,7 @@ bool FindNumbersWithSum(int data[], int length, int sum,
 
 ### 题目
 
-输入一个整数 s，打印出所有和为 s 的连续整数序列（至少含有两个数）。例如，输入 15，由于 1+2+3+4+5=4+5+6+7+8=15，所以打印出 3 个来纳许序列 1\~5、4 \~ 6 和 7 ~ 8。
+输入一个整数 s，打印出所有和为 s 的连续整数序列（至少含有两个数）。例如，输入 15，由于 1+2+3+4+5 = 4+5+6 = 7+8=15，所以打印出 3 个来连续序列 1\~5、4 \~ 6 和 7 ~ 8。
 
 ### 解题思路
 
@@ -3875,6 +3875,62 @@ void PrintContinuousSequence(int small, int big){
             cout << i << endl;
         else
             cout << i << '+';
+    }
+}
+```
+
+## 面试题58-1：翻转单词顺序
+
+### 题目
+
+输入一个英文句子，翻转句子中单词的顺序，但单词内字符的顺序不变。为简单起见，标点符号和普通字母一样处理。例如输入字符串 “I am a student.”，则输出 “student. a am I”。
+
+### 解题思路
+
+ 第一步翻转句子中所有的字符。比如翻转 "I am a student. " 中所有的字符得到' . tneduts a ma I" , 此时不但翻转了句子中单词的顺序，连单词内的字符顺序也被翻转了。第二步再翻转每个单词中字符的顺序，就得到了"s tudent. a am I" 。这正是符合题目要求的输出。
+
+这种思路的关键在于实现一个函数以翻转字符串中的一段。
+
+### 代码实现
+
+```c++
+void Reverse(char *pBegin, char *pEnd);
+
+char* ReverseSentence(char *pData){
+    if(pData == nullptr)
+        return nullptr;
+    char *pBegin = pData, *pEnd = pData;
+    while(*(pEnd + 1) != '\0')
+        pEnd++;
+    // 翻转整个句子
+    Reverse(pBegin, pEnd);
+
+    // 翻转每个单词
+    char *p = pBegin, *q = pBegin;
+    while(*(q + 1) != '\0'){
+        while(*(q + 1) != ' ' && *(q + 1) != '\0'){     // 注意此处要考虑最后一个单词，因此要加上 *(q + 1) != '\0
+            q++;
+        }
+        Reverse(p, q);
+        if(*(q + 1) != '\0'){
+            p = q + 2;
+            q = p;
+        }
+    }
+    
+    return pBegin;
+}
+
+// 翻转一个字符串，依次翻转第一个和最后一个字符
+void Reverse(char *pBegin, char *pEnd){
+    if(pBegin == nullptr || pEnd == nullptr)
+        return;
+    while(pBegin < pEnd){
+        char temp = *pBegin;
+        *pBegin = *pEnd;
+        *pEnd = temp;
+        pBegin++;
+        pEnd--;
     }
 }
 ```
