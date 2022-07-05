@@ -3935,3 +3935,55 @@ void Reverse(char *pBegin, char *pEnd){
 }
 ```
 
+## 面试题58-2：左旋转字符串
+
+### 题目
+
+字符串的左旋转操作是把字符串前面的若干个字符转移到字符串的尾部。请定义一个函数实现字符串左旋转操作的功能。比如，输入字符串 "abcdefg"  和数字 2, 该函数将返回左旋转两位得到的结果"cdefgab" 。
+
+### 解题思路
+
+在第一个问题中，如果输入的字符串之中只有两个单词，比如'hello world" , 那么翻转这个句子中的单词顺序就得到了"world hello" 。比较这两个字符串，我们是不是可以把 “world hello" 看成把原始字符串 "hello world " 的前面若干个字符转移到后面？
+
+当输入数字 2 时，我们可以把字符串的前 2 个字符看成一个单词，后面的字符看成一个单词。我们先分别翻转这两个部分，得到 ”bagfedc“。再翻转整个字符串，得到 ”cdefgab“，即把原始字符串左旋转两位的结果。
+
+### 代码实现
+
+```c++
+void Reverse(char *pBegin, char *pEnd);
+
+char* LeftRotateString(char *pStr, int n){
+    if(pStr == nullptr)
+        return nullptr;
+    int length = 0;
+    char *pCh = pStr;
+    while(*pCh != '\0'){
+        length++;
+        pCh++;
+    }
+    if(n > length)
+        return nullptr;
+    char *p = pStr;
+    char *q = p + (n - 1);
+    Reverse(p, q);
+    Reverse(q + 1, p + (length - 1));
+    Reverse(p, p + (length - 1));
+    
+    return pStr;
+}
+
+
+// 翻转一个字符串
+void Reverse(char *pBegin, char *pEnd){
+    if(pBegin == nullptr || pEnd == nullptr)
+        return;
+    while(pBegin < pEnd){
+        char temp = *pBegin;
+        *pBegin = *pEnd;
+        *pEnd = temp;
+        pBegin++;
+        pEnd--;
+    }
+}
+```
+

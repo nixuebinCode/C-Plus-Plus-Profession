@@ -1008,3 +1008,312 @@ struct Sales_dat{
 The first time `Sales_data.h` is included, the `#ifndef` test will succeed. The preprocessor will process the lines following `#ifndef` up to the `#endif`. As a result, the preprocessor variable `SALES_DATA_H` will be defined and the contents of `Sales_data.h` will be copied into our program. 
 
 If we include `Sales_data.h` later on in the same file, the `#ifndef` directive will be false. The lines between it and the `#endif` directive will be ignored.
+
+# 3. Strings, Vectors, and Arrays
+
+## 3.1. Namespace `using` Declarations
+
+`using` declaration covers another way to use names from a namespace without qualifying the name with a n`amespace_name::` prefix:
+
+```c++
+using namespace::name;
+```
+
+Once the `using` declaration has been made, we can access name directly:
+
+```c++
+#include <iostream>
+// using declaration; when we use the name cin, we get the one from the namespace
+std
+using std::cin;
+int main()
+{
+	int i;
+	cin >> i; 		// ok: cin is a synonym for std::cin
+	cout << i; 		// error: no using declaration; we must use the full name
+	std::cout << i; // ok: explicitly use cout from namepsace std
+	return 0;
+}
+```
+
+#### A Separate using Declaration Is Required for Each Name
+
+Each `using` declaration introduces a single namespace member.
+
+```c++
+#include <iostream>
+// using declarations for names from the standard library
+using std::cin;
+using std::cout; using std::endl;
+int main()
+{
+	cout << "Enter two numbers:" << endl;
+	int v1, v2;
+	cin >> v1 >> v2;
+	cout << "The sum of " << v1 << " and " << v2
+		<< " is " << v1 + v2 << endl;
+	return 0;
+}
+```
+
+#### Headers Should Not Include `using` Declarations
+
+The reason is that the contents of a header are copied into the including program’s text. If a header has a `using` declaration, then every program that includes that header gets that same `using` declaration. As a result, a program that didn’t intend to use the specified library name might encounter unexpected name conflicts.
+
+## 3.2. Library `string` Type
+
+### 3.2.1. Defining and Initializing strings
+
+ ![image-20220705102309524](C++ Primer PartⅠ.assets/image-20220705102309524.png)
+
+When we supply a `string` literal, the characters from that literal—up to but not including the null character at the end of the literal—are copied into the newly created `string`.
+
+```c++
+string s1;
+string s2 = s1;
+string s3 = "hiya";
+string s4(10, 'c');
+```
+
+#### Direct and Copy Forms of Initialization
+
+* When we initialize a variable using `=`, we are asking the compiler to <font color='blue'>copy initialize</font> the object by copying the initializer on the right-hand side into the object being created.
+* When we omit the `=`, we use <font color='blue'>direct initialization</font>.
+
+### 3.2.2. Operations on `string`s
+
+ ![image-20220705102835584](C++ Primer PartⅠ.assets/image-20220705102835584.png)
+
+#### Reading and Writing `string`s
+
+```c++
+int main(){
+    string s;
+    cin >> s;
+    cout << s << endl;
+    return 0;
+}
+```
+
+The `string` input operator reads and discards any leading whitespace (e.g., spaces, newlines, tabs). It then reads characters until the next whitespace character is encountered. So, if the input to this program is ` Hello World!` (note leading and trailing spaces), then the output will be `Hello` with no extra spaces.
+
+#### ⭐Using `getline` to Read an Entire Line
+
+The `getline` function takes an input stream and a `string`. This function reads the given stream up to and including the first newline and stores what it read—not including the newline—in its `string` argument.
+
+After `getline` sees a newline, even if it is the first character in the input, it stops reading and returns. If the first character in the input is a newline, then the resulting `string` is the empty `string`.
+
+Like the input operator, `getline` returns its `istream` argument. As a result, we can use `getline` as a condition just as we can use the input operator as a condition：
+
+```c++
+string line;
+while(getline(cin, line)){
+    cout << line << endl;
+}
+```
+
+> The newline that causes `getline` to return is discarded; the newline is not stored in the `string`.
+
+#### ⭐The `string::size_type` Type
+
+The `size` member returns the length of a string. It might be logical to expect that `size` returns an `int` or, an `unsigned`. Instead, `size` returns a `string::size_type` value.
+
+The `string` class—and most other library types—defines several companion types. These companion types make it possible to <font color='red'>use the library types in a machine-independent manner.</font> 
+
+Although we don’t know the precise type of `string::size_type`, we do know that it is an `unsigned` type big enough to hold the size of any `string`.
+
+Because `size` returns an unsigned type, it is essential to remember that expressions that mix signed and unsigned data can have surprising results. <font color='red'>For example, if `n` is an `int` that holds a negative value, then `s.size() < n` will almost surely evaluate as `true`. It yields `true` because the negative value in `n` will convert to a large unsigned value.</font>
+
+#### Adding Literals and `string`s
+
+We can use one type where another type is expected if there is a conversion from the given type to the expected type. The `string` library lets us convert both character literals and character string literals to `string`s.
+
+ ```c++
+ string s1 = "hello", s2 = "world";
+ string s3 = s1 + ", " + s2 + '\n';
+ ```
+
+<font color='red'>When we mix `string`s and string or character literals, at least one operand to each operator must be of `string` type</font>:
+
+```c++
+string s4 = s1 + ", "; 				// ok: adding a string and a literal
+string s5 = "hello" + ", "; 		// error: no string operand
+string s6 = s1 + ", " + "world"; 	// ok: each + has a string operand
+string s7 = "hello" + ", " + s2; 	// error: can't add string literals
+```
+
+The initialization of `s6` may appear surprising, This initialization groups as:
+
+```c++
+string s6 = (s1 + ", ") + "world"; 
+```
+
+The subexpression `s1 + ", "` returns a `string`, which forms the left-hand operand of the second `+` operator.
+
+#### 3.2.3. Dealing with the Characters in a `string`
+
+One part of processing characters is knowing and/or changing the characteristics of a character.This part of the job is handled by a set of library functions. These functions are defined in the `cctype` header.
+
+  ![image-20220705105637243](C++ Primer PartⅠ.assets/image-20220705105637243.png)
+
+#### Processing Every Character? Use Range-Based `for`
+
+The range `for` statement iterates through the elements in a given sequence and performs some operation on each value in that sequence. The syntactic form is:
+
+```c++
+string str("some string");
+for(auto c : str)
+    cout << c << endl;
+```
+
+#### ⭐Using a Range `for` to Change the Characters in a `string`
+
+If we want to change the value of the characters in a `string`, <font color='red'>we must define the loop variable as a reference type</font>.
+
+```c++
+string s("Hello World!!!");
+for(auto &c : s)
+    c = toUpper(c);
+```
+
+#### Processing Only Some Characters?
+
+There are two ways to access individual characters in a `string`: We can use a <font color='blue'>subscript </font>or an <font color='blue'>iterator</font>.
+
+The subscript operator (the `[ ]` operator) takes a <font color='red'>`string::size_type` </font>value that denotes the position of the character we want to access. The
+operator returns a <font color='red'>reference </font>to the character at the given position.
+
+The index in the subscript we supply can be any expression that yields an integral value. However, if our index has a signed type, its value will be converted to the unsigned type that `string::size_type` represents
+
+#### Using a Subscript for Random Access
+
+Let’s assume we have a number between 0 and 15 and we want to generate the hexadecimal representation of that number. We can do so using a `string` that is initialized to hold the 16 hexadecimal “digits”:
+
+```c++
+const string hexdigits = "0123456789ABCDEF";
+cout << "Enter a series of numbers between 0 and 15"
+		<< " separated by spaces. Hit ENTER when finished: "
+		<< endl;
+string::size_type n;
+string result;
+while(cin >> n){
+    if(n < hexdigits.size())
+    	result += hexdigits[n];
+}
+cout << "Your hex number is: " << result;
+```
+
+## 3.3. Library `vector` Type
+
+A `vector` is a collection of objects, all of which have the same type.
+
+We can define `vector`s to hold objects of most any type. Because references are not objects, we cannot have a vector of references. However, we can have `vector`s of most other (nonreference) built-in types and most class types. In particular, we can have `vector`s whose elements are themselves `vector`s.
+
+#### 3.3.1. Defining and Initializing `vector`s
+
+ ![image-20220705111508401](C++ Primer PartⅠ.assets/image-20220705111508401.png)
+
+When we copy a `vector`, each element in the new `vector` is a copy of the corresponding element in the original `vector`. <font color='red'>The two `vector`s must be the same type</font>:
+
+```c++
+vector<int> ivec; 				// initially empty
+// give ivec some values
+vector<int> ivec2(ivec); 		// copy elements of ivec into ivec2
+vector<int> ivec3 = ivec; 		// copy elements of ivec into ivec3
+vector<string> svec(ivec2); 	// error: svec holds strings, not ints
+```
+
+#### List Initializing a `vector`
+
+So far, we have three examples where the form of initialization matters:
+
+* When we use the copy initialization form (i.e., when we use `=`) , we can supply only a single initializer
+
+* When we supply an in-class initializer, we must either use copy initialization or use curly braces.
+
+* We can supply a list of element values only by using list initialization in which the initializers are enclosed in curly braces. We cannot supply a list of initializers using parentheses.
+
+  ```c++
+  vector<string> v1{"a", "an", "the"}; // list initialization
+  vector<string> v2("a", "an", "the"); // error
+  ```
+
+#### ⭐Value Initialization
+
+We can usually omit the value and supply only a size. In this case the library creates a <font color='blue'>value-initialized</font> element initializer for us.
+
+If the `vector` holds elements of a built-in type, such as int, then the element initializer has a value of `0`. If the elements are of a class type, such as `string`, then the element initializer is itself default initialized:
+
+```c++
+vector<int> ivec(10); 		// ten elements, each initialized to 0
+vector<string> svec(10); 	// ten elements, each an empty string
+```
+
+There are two restrictions on this form of initialization: 
+
+* Some classes require that we always supply an explicit initializer. If our `vector` holds objects of a type that we cannot default initialize, then we must
+  supply an initial element value; it is not possible to create `vector`s of such types by supplying only a size.
+
+* When we supply an element count without also supplying an initial value, we must use the direct form of initialization:
+
+  ```c++
+  vector<int> vi = 10; // error: must use direct initialization to supply a size
+  ```
+
+#### List Initializer or Element Count?
+
+```c++
+vector<int> v1(10); 		// v1 has ten elements with value 0
+vector<int> v2{10}; 		// v2 has one element with value 10
+vector<int> v3(10, 1); 		// v3 has ten elements with value 1
+vector<int> v4{10, 1}; 		// v4 has two elements with values 10 and 1
+```
+
+When we use parentheses, we are saying that the values we supply are to be used to construct the object.
+
+<font color='red'>When we use curly braces, `{...}`, we’re saying that, if possible, we want to list initialize the object. That is, if there is a way to use the values inside the curly braces as a list of element initializers, the class will do so. Only if it is not possible to list initialize the object will the other ways to initialize the object be considered.</font>
+
+On the other hand, if we use braces and there is no way to use the initializers to list initialize the object, then those values will be used to construct the object:
+
+```c++
+vector<string> v5{"hi"};		// list initialization: v5 has one element
+vector<string> v6("hi");		// error: can't construct a vector from a string literal
+vector<string> v7{10};			// v7 has ten default-initialized elements
+vector<string> v8{10, "hi"};	// v8 has ten elements with value "hi"
+```
+
+### 3.3.2. Adding Elements to a `vector`
+
+In some cases, it is better to create an empty `vector` and use a `vector` member named `push_back` to add elements at run time. The `push_back` operation takes a value and “pushes” that value as a new last element onto the “back” of the `vector`.
+
+The fact that we can easily and efficiently add elements to a `vector` greatly simplifies many programming tasks. However, this simplicity imposes new obligations on our programs: 
+
+* We must ensure that any loops we write are correct even if the loop changes the size of the vector.
+* We cannot use a range `for` if the body of the loop adds elements to the `vector`.
+
+### 3.3.3. Other `vector` Operations
+
+ ![image-20220705150625019](C++ Primer PartⅠ.assets/image-20220705150625019.png)
+
+1. The `size` member returns a value of the `size_type` defined by the corresponding `vector` type:
+
+   ```c++
+   vector<int>::size_type 	// ok
+   vector::size_type 		// error
+   ```
+
+2.  We can compare two `vector`s only if we can compare the elements in those `vector`s. Some class types, such as `string`, define the meaning of the equality and relational operators. Others, such as our `Sales_item` class, do not. As a result, we cannot compare two `vector<Sales_item>` objects.
+
+#### ⭐Subscripting Does Not Add Elements
+
+Programmers new to C++ sometimes think that subscripting a `vector` adds elements; it does not. The following code intends to add ten elements to `ivec`:
+
+```c++
+vector<int> ivec;
+for(decltype(ivec.size()) ix = 0; ix != 10; ix++){
+    ivec[ix] = ix;	// disaster: ivec has no elements
+}
+```
+
+However, it is in error: `ivec` is an empty `vector`; there are no elements to subscript! As we’ve seen, the right way to write this loop is to use `push_back`.
+
