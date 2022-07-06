@@ -1317,3 +1317,394 @@ for(decltype(ivec.size()) ix = 0; ix != 10; ix++){
 
 However, it is in error: `ivec` is an empty `vector`; there are no elements to subscript! As we’ve seen, the right way to write this loop is to use `push_back`.
 
+## 3.4. Introducing Iterators
+
+Although we can use subscripts to access the characters of a `string` or the elements in a `vector`, there is a more general mechanism—known as iterators—that we can use for the same purpose. All of the library containers have iterators, but only a few of them support the subscript operator.
+
+### 3.4.1. Using Iterators
+
+We use `begin` and `end` member to get iterators:
+
+* The `begin` member returns an iterator that denotes the first element
+* The iterator returned by `end` is an iterator positioned “<font color='red'>one past the end</font>” of the associated container. The iterator returned by `end` is often referred to as the <font color='blue'>off-the-end iterator</font>
+
+> If the container is empty, the iterators returned by `begin` and `end` are equal —they are both off-the-end iterators.
+
+#### Iterator Operations
+
+ ![image-20220706094938447](C++ Primer PartⅠ.assets/image-20220706094938447.png)
+
+#### Moving Iterators from One Element to Another
+
+Iterators use the increment (`++`) operator to move from one element to the next.
+
+```c++
+// process characters in s until we run out of characters or we hit a whitespace
+for(auto it = s.begin(); s != s.end() && !isspace(*it); it++)
+    *it = toUpper(*it);		// Capitalize the current character
+```
+
+> Key Concept: Generic Programming
+>
+> Programmers coming to C++ from C or Java might be surprised that we used `!=` rather than `<` in our for loops such as the one above. C++ programmers use `!=` as a matter of habit. They do so for the same reason that they use iterators rather than subscripts: This coding style
+> applies equally well to various kinds of containers provided by the library.
+
+#### Iterator Types
+
+As with `size_type`, the library types that have iterators define types named `iterator` and `const_iterator` that represent actual iterator types:
+
+```c++
+vector<int>::iterator it;
+string::iterator it2;
+vector<int>::const_iterator it3;
+string::const_iterator it4;
+```
+
+A `const_iterator` behaves like a `const` pointer. It may read but not write the element it denotes. If a `vector` or `string` is `const`, we may use only its `const_iterator` type. With a non`const` `vector` or `string`, we can use either `iterator` or `const_iterator`.
+
+#### The `begin` and `end` Operations
+
+The type returned by `begin` and `end` depends on whether the object on which they operator is `const`. If the object is `const`, then `begin` and `end` return a `const_iterator`; if the object is not `const`, they return `iterator`.
+
+```c++
+vector<int> v;
+const vector<int> cv;
+auto it1 = v.begin(); 	// it1 has type vector<int>::iterator
+auto it2 = cv.begin(); 	// it2 has type vector<int>::const_iterator
+```
+
+To let us ask specifically for the `const_iterator` type, the new standard introduced two new functions named `cbegin` and `cend`. Regardless of whether the `vector` (or `string`) is `const`, they return a `const_iterator`.
+
+#### Some `vector` Operations Invalidate Iterators
+
+For now, it is important to realize that loops that use iterators should not add elements to the container to which the iterators refer.
+
+### 3.4.2. Iterator Arithmetic
+
+Incrementing an iterator moves the iterator one element at a time. All the library containers have iterators that support increment. Similarly, we can use `==` and `!=` to compare two valid iterators into any of the library container types.
+
+Iterators for `string` and `vector` support additional operations that can move an iterator multiple elements at a time. They also support all the relational operators. These operations are referred to as <font color='blue'>iterator arithmetic</font>.
+
+ ![image-20220706101907647](C++ Primer PartⅠ.assets/image-20220706101907647.png)
+
+We can subtract two iterators so long as they refer to elements in, or one off the end of, the same `vector` or `string`. The result is the distance between the iterators. By distance we mean the amount by which we’d have to change one iterator to get the other. <font color='red'>The result type is a signed integral type named `difference_type`.</font> Both vector and string define difference_type. 
+
+## 3.5. Arrays
+
+An array is a data structure that is similar to the library `vector` type. 
+
+* Like a `vector`, an array is a container of unnamed objects of a single type that we access by position.
+* Unlike a `vector`, arrays have fixed size; we cannot add elements to an array.
+
+### 3.5.1. Defining and Initializing Built-in Arrays
+
+Arrays are a compound type. An <font color='blue'>array declarator</font> has the form `a[d]`, where `a` is the name being defined and `d` is the dimension of the array. The
+number of elements in an array is part of the array’s type. As a result, the dimension must be known at compile time, which means that <font color='red'>the dimension must be a constant expression.</font>
+
+```c++
+unsigned cnt = 42; 					// not a constant expression
+constexpr unsigned sz = 42; 		// constant expression
+int arr[10]; 						// array of ten ints
+int *parr[sz]; 						// array of 42 pointers to int
+string bad[cnt]; 					// error: cnt is not a constant expression
+string strs[get_size()]; 			// ok if get_size is constexpr, error otherwise
+```
+
+<font color='red'>By default, the elements in an array are default initialized</font>. As with variables of built-in type, a default-initialized array of built-in type that is defined inside a function will have undefined values.
+
+#### Explicitly Initializing Array Elements
+
+We can list initialize the elements in an array:
+
+* If we omit the dimension, the compiler infers it from the number of initializers. 
+* If we specify a dimension, the number of initializers must not exceed the specified size. 
+* If the dimension is greater than the number of initializers, the initializers are used for the first elements and any remaining elements are <font color='red'>value initialized</font>
+
+```c++
+const unsigned sz = 3;
+int ia1[sz] = {0,1,2}; 			// array of three ints with values 0, 1, 2
+int a2[] = {0, 1, 2}; 			// an array of dimension 3
+int a3[5] = {0, 1, 2}; 			// equivalent to a3[] = {0, 1, 2, 0, 0}
+string a4[3] = {"hi", "bye"}; 	// same as a4[] = {"hi", "bye", ""}
+int a5[2] = {0,1,2}; 			// error: too many initializers
+
+unsigned scores[11] = {};		// 11 elements, all value initialized to 0
+```
+
+#### ⭐Character Arrays Are Special
+
+Character arrays have an additional form of initialization: We can initialize such arrays from a string literal. When we use this form of initialization, it is
+important to remember that string literals end with a null character. <font color='red'>That null character is copied into the array along with the characters in the literal</font>:
+
+```c++
+char a1[] = {'C', '+', '+'}; 			// list initialization, no null
+char a2[] = {'C', '+', '+', '\0'}; 		// list initialization, explicit null
+char a3[] = "C++"; 						// null terminator added automatically
+const char a4[6] = "Daniel"; 			// error: no space for the null!
+```
+
+#### No Copy or Assignment
+
+We cannot initialize an array as a copy of another array, nor is it legal to assign one array to another:
+
+```c++
+int a[] = {0, 1, 2}; 		// array of three ints
+int a2[] = a; 				// error: cannot initialize one array with another
+a2 = a; 					// error: cannot assign one array to another
+```
+
+#### Understanding Complicated Array Declarations
+
+```c++
+int *ptrs[10]; 					// ptrs is an array of ten pointers to int
+int &refs[10] = /* ? */; 		// error: no arrays of references
+int (*Parray)[10] = &arr; 		// Parray points to an array of ten ints
+int (&arrRef)[10] = arr; 		// arrRef refers to an array of ten ints
+```
+
+<font color='red'>Reading from the inside out</font> makes it much easier to understand the type of `Parray`. 
+
+* We start by observing that the parentheses around `*Parray` mean that `Parray` is a pointer. 
+* Looking right, we see that `Parray` points to an array of size 10. 
+* Looking left, we see that the elements in that array are `int`s. Thus, `Parray` is a pointer to an array of ten `int`s.
+
+### 3.5.2. Accessing the Elements of an Array
+
+As with the library `vector` and `string` types, we can use a range `for` or the subscript operator to access elements of an array.
+
+```c++
+unsigned scores[] = {1, 2, 3, 4};
+for(auto i : scores){
+    cout << i << endl;
+}
+```
+
+When we use a variable to subscript an array, we normally should define that variable to have type `size_t`. `size_t` is a machine-specific（机器相关） unsigned type that is guaranteed to be large enough to hold the size of any object in memory. The `size_t` type is defined in the `cstddef` header, which is the C++ version of the `stddef.h` header from the C library.
+
+### 3.5.3. Pointers and Arrays
+
+In C++ pointers and arrays are closely intertwined. In particular, as we’ll see, when we use an array, the compiler ordinarily converts the array to a pointer.
+
+As with any other object, we can obtain a pointer to an array element by taking the address of that element:
+
+```c++
+string nums[] = {"one", "two", "three"};
+string *p = &nums[0];			// p points to the first element in nums
+```
+
+However, arrays have a special property—in most places when we use an array, the compiler automatically substitutes<font color='red'> a pointer to the first element</font>:
+
+```c++
+string *p2 = nums; // equivalent to p2 = &nums[0]
+```
+
+1. When we use an array as an initializer for a variable defined using `auto` , the deduced type is a pointer, not an array
+
+   ```c++
+   int ia[] = {0,1,2,3,4,5,6,7,8,9}; 		// ia is an array of ten ints
+   auto ia2(ia); 							// ia2 is an int* that points to the first element in ia
+   ```
+
+   Although `ia` is an array of ten `int`s, when we use `ia` as an initializer, the compiler treats that initialization as if we had written
+
+   ```c++
+   auto ia2(&ia[0]);	// now it's clear that ia2 has type int*
+   ```
+
+2. It is worth noting that this conversion does not happen when we use `decltype`. The type returned by `decltype(ia)` is array of ten `int`s:
+
+   ```c++
+   decltype(ia) ia3 = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+   ```
+
+#### Pointers Are Iterators
+
+Pointers that address elements in an array support the same operations as iterators on `vector`s and `string`s. 
+
+* We can obtain a pointer to the first element by using the array itself or by taking the address-of the first element.
+
+  ```c++
+  int arr[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+  int *b = arr;
+  ```
+
+* We can obtain an off-the-end pointer by taking the address of the nonexistent element one past the last element of an array
+
+  ```c++
+  int *q = &arr[10];	// pointer just past the last element in arr
+  ```
+
+  Here we used the subscript operator to index a nonexisting element; The only thing we can do with this element is take its address.
+
+```c++
+for(int *b = arr; b != e; b++)
+    cout << *b;
+```
+
+#### The Library begin and end Functions
+
+Although we can compute an off-the-end pointer, doing so is error-prone. To make it easier and safer to use pointers, the new library includes two functions, named `begin` and `end`.
+
+These functions act like the similarly named container members. However, arrays are not class types, so these functions are not member functions. Instead, they take an argument that is an array:
+
+```c++
+int ia[] = {0,1,2,3,4,5,6,7,8,9}; 	// ia is an array of ten ints
+int *beg = begin(ia); 				// pointer to the first element in ia
+int *last = end(ia); 				// pointer one past the last element in ia
+```
+
+#### Pointer Arithmetic
+
+1. When we add (or subtract) an integral value to (or from) a pointer, the result is a new pointer. That new pointer points to the element the given number ahead of (or behind) the original pointer:
+
+   ```c++
+   constexpr size_t sz = 5;
+   int arr[sz] = {1,2,3,4,5};
+   int *ip = arr; 			// equivalent to int *ip = &arr[0]
+   int *ip2 = ip + 4; 		// ip2 points to arr[4], the last element in arr
+   ```
+
+2. As with iterators, subtracting two pointers gives us the distance between those pointers. The pointers must point to elements in the same array:
+
+   ```c++
+   auto n = end(arr) - begin(arr);		// n is 5, the number of elements in arr
+   ```
+
+3. We can use the relational operators to compare pointers that point to elements of an array, or one past the last element in that array. But We cannot use the relational operators on pointers to two unrelated objects:
+
+   ```c++
+   int i = 0, sz = 42;
+   int *p = &i, *e = &sz;
+   // undefined: p and e are unrelated; comparison is meaningless!
+   while(p < e)
+   ```
+
+#### Interaction between Dereference and Pointer Arithmetic
+
+```c++
+int ia[] = {0,2,4,6,8}; 	// array with 5 elements of type int
+int last = *(ia + 4);		// ok: initializes last to 8, the value of ia[4]
+last = *ia + 4;				// ok: last = 4, equivalent to ia[0] + 4
+```
+
+#### Subscripts and Pointers
+
+<font color='red'>When we subscript an array, we are really subscripting a pointer to an element in that array</font>:
+
+```c++
+int ia[] = {0,2,4,6,8}; // array with 5 elements of type int
+int i = ia[2];			// ia is converted to a pointer to the first element in ia
+						// ia[2] fetches the element to which (ia + 2) points
+```
+
+We can use the subscript operator on any pointer, as long as that pointer points to an element (or one past the last element) in an array:
+
+```c++
+int *p = &ia[2];
+int j = p[1];			// p[1] is equivalent to *(p + 1),
+						// p[1] is the same element as ia[3]
+int k = p[-2];			// p[-2] is the same element as ia[0]
+```
+
+The library types force the index used with a subscript to be an unsigned value. The built-in subscript operator does not. <font color='red'>The index used with the built-in subscript operator can be a negative value.</font>
+
+### 3.5.4. C-Style Character Strings
+
+Character string literals are an instance of a more general construct that C++ inherits from C: C-style character strings. C-style strings are not a type. Instead, they are a convention for how to represent and use character strings. Strings that follow this convention are stored in character arrays and are null terminated.
+
+#### C Library String Functions
+
+These functions are defined in the `cstring` header, which is the C++ version of the C header `string.h`.
+
+ ![image-20220706112153423](C++ Primer PartⅠ.assets/image-20220706112153423.png)
+
+The pointer(s) passed to these routines must point to null-terminated array(s):
+
+```c++
+char ca[] = {'C', '+', '+'};
+cout strlen(ca);			// disaster: ca isn't null terminated
+```
+
+In this case, `ca` is an array of `char` but is not null terminated. The result is undefined. The most likely effect of this call is that `strlen` will keep looking through the memory that follows `ca` until it encounters a null character.
+
+#### Comparing Strings
+
+When we compare two library `string`s, we use the normal relational or equality operators:
+
+```c++
+string s1 = "A string example";
+string s2 = "A different string";
+if (s1 < s2) // false: s2 is less than s1
+```
+
+Using these operators on similarly defined C-style strings compares the pointer values, not the strings themselves:
+
+```c++
+const char ca1[] = "A string example";
+const cahr ca2[] = "A different string";
+if (ca1 < ca2) // undefined: compares two unrelated addresses
+```
+
+Remember that when we use an array, we are really using a pointer to the first element in the array. Hence, this condition actually compares two
+`const char*` values. Those pointers do not address the same object, so the comparison is undefined.
+
+To compare the strings, rather than the pointer values, we can call `strcmp`.
+
+```c++
+if(strcmp(ca1, ca2) < 0)
+```
+
+#### Caller Is Responsible for Size of a Destination String
+
+Concatenating or copying C-style strings is also very different from the same operations on library `string`sThe expression `ca1 + ca2` tries to add two pointers, which is illegal and meaningless. Instead we can use `strcat` and `strcpy`. 
+
+However, to use these functions, we must pass an array to hold the resulting string. <font color='red'>The array we pass must be large enough to hold the generated string, including the null character at the end.</font>
+
+```c++
+// disastrous if we miscalculated the size of largeStr
+strcpy(largeStr, ca1); // copies ca1 into largeStr
+strcat(largeStr, " "); // adds a space at the end of largeStr
+strcat(largeStr, ca2); // concatenates ca2 onto largeStr
+```
+
+### 3.5.5. Interfacing to Older Code
+
+#### ⭐Mixing Library `string`s and C-Style Strings
+
+1. We can initialize a `string` from a string literal
+
+   ```c++
+   string s("Hello World!");
+   ```
+
+   More generally, we can use a null-terminated character array anywhere that we can use a string literal:
+
+   * We can use a null-terminated character array to initialize or assign a `string`.
+   * We can use a null-terminated character array as one operand (but not both operands) to the `string` addition operator or as the right-hand operand in the `string` compound assignment (`+=`) operator.
+
+2. The reverse functionality is not provided: There is no direct way to use a library `string` when a C-style string is required. For example, there is no way to initialize a character pointer from a `string`. There is, however, a `string` member function named `c_str` that we can often use to accomplish what we want:
+
+   ```c++
+   char *str = s;			// error: can't initialize a char* from a string
+   const char *str = s.c_str();	// ok
+   ```
+
+   The name `c_str` indicates that the function returns a C-style character string. That is, <font color='red'>it returns a pointer to the beginning of a null-terminated character array that holds the same data as the characters in the `string`.</font> The type of the pointer is `const char*`, which prevents us from changing the contents of the array.
+
+#### Using an Array to Initialize a vector
+
+We can use an array to initialize a `vector`. To do so, we specify the address of the first element and one past the last element that we wish to copy:
+
+```c++
+int int_arr[] = {0, 1, 2, 3, 4, 5};
+// ivec has six elements; each is a copy of the corresponding element in int_arr
+vector<int> ivec(begin(int_arr), end(int_arr));
+```
+
+The two pointers used to construct `ivec` mark the range of values to use to initialize the elements in `ivec`. The second pointer points one past the last element to be copied. The specified range can be a subset of the array:
+
+```c++
+// copies three elements: int_arr[1], int_arr[2], int_arr[3]
+vector<int> subVec(int_arr + 1, int_arr + 4);
+```
+
