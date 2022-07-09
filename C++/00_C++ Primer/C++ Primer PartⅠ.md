@@ -1,4 +1,4 @@
-# 1. Getting Started
+# Chapter 1. Getting Started
 
 ## 1.1 A First Look at Input/Output
 
@@ -116,7 +116,7 @@ Because the `>>` operator returns its left operand, in this case, the `while` st
 
    A member function is a function that is defined as part of a class
 
-# 2. Variables and Basic Types
+# Chapter 2. Variables and Basic Types
 
 ## 2.1 Primitive Built-in Types
 
@@ -1009,7 +1009,7 @@ The first time `Sales_data.h` is included, the `#ifndef` test will succeed. The 
 
 If we include `Sales_data.h` later on in the same file, the `#ifndef` directive will be false. The lines between it and the `#endif` directive will be ignored.
 
-# 3. Strings, Vectors, and Arrays
+# Chapter 3. Strings, Vectors, and Arrays
 
 ## 3.1. Namespace `using` Declarations
 
@@ -1706,5 +1706,525 @@ The two pointers used to construct `ivec` mark the range of values to use to ini
 ```c++
 // copies three elements: int_arr[1], int_arr[2], int_arr[3]
 vector<int> subVec(int_arr + 1, int_arr + 4);
+```
+
+## 3.6. Multidimensional Arrays
+
+Strictly speaking, there are no multidimensional arrays in C++. What are commonly referred to as multidimensional arrays are actually <font color='red'>arrays of arrays</font>.
+
+We define an array whose elements are arrays by providing two dimensions: the dimension of the array itself and the dimension of its elements：
+
+```c++
+int ia[3][4]; // array of size 3; each element is an array of ints of size 4
+// array of size 10; each element is a 20-element array whose elements are arrays of 30 ints
+int arr[10][20][30] = {0}; // initialize all elements to 0
+```
+
+We can more easily understand these definitions by reading them from the inside out:
+
+* We start with the name we’re defining (`ia`) and see that `ia` is an array of size 3. 
+
+* Continuing to look to the right, we see that the elements of `ia` also have a dimension. Thus, the elements in `ia` are themselves arrays of size 4.
+* Looking left, we see that the type of those elements is `int`. 
+* So, `ia` is an array of size 3, each of whose elements is an array of four `int`s.
+
+#### Initializing the Elements of a Multidimensional Array
+
+1. Multidimensional arrays may be initialized by specifying bracketed values for each row:
+
+   ```c++
+   int ia[3][4] = { 			// three elements; each element is an array of size 4
+   	{0, 1, 2, 3}, 			// initializers for the row indexed by 0
+   	{4, 5, 6, 7}, 			// initializers for the row indexed by 1
+   	{8, 9, 10, 11} 			// initializers for the row indexed by 2
+   };
+   ```
+
+2. <font color='red'>The nested braces are optional.</font> The following initialization is equivalent, although considerably less clear:
+
+   ```c++
+   // equivalent initialization without the optional nested braces for each row
+   int ia[3][4] = {0,1,2,3,4,5,6,7,8,9,10,11};
+   ```
+
+3. As is the case for single-dimension arrays, elements may be left out of the initializer list. We can initialize only the first element of each row as follows:
+
+   ```c++
+   // explicitly initialize only element 0 in each row
+   int ia[3][4] = {{ 0 }, { 4 }, { 8 }};
+   ```
+
+   The remaining elements are value initialized in the same way as ordinary, single-dimension arrays
+
+4. If the nested braces were omitted, the results would be very different.
+
+   ```c++
+   // explicitly initialize row 0; the remaining elements are value initialized
+   int ix[3][4] = {0, 3, 6, 9};
+   ```
+
+#### Subscripting a Multidimensional Array
+
+As with any array, we can use a subscript to access the elements of a multi-dimensional array. To do so, we use a separate subscript for each dimension.
+
+If an expression provides as many subscripts as there are dimensions, we get an element with the specified type. If we supply fewer subscripts than there are dimensions, then the result is the inner-array element at the specified index:
+
+```C++
+int ia[3][4];
+int arr[10][20][30] = {0};
+ia[2][3] = arr[0][0][0];
+int (&row)[4] = ia[1];		// binds row to the second four-element array in ia
+```
+
+#### ⭐Using a Range for with Multidimensional Arrays
+
+```c++
+size_t cnt = 0;
+for(auto &row : ia){			// for every element in the outer array
+    for(auto &col : row){		// for every element in the inner array
+        col = cnt;
+        ++cnt;
+    }
+}
+```
+
+We want to change the value of the elements, so we declare our control variables, `row` and `col`, as references.
+
+In the example above, we used references as our loop control variables because we wanted to change the elements in the array. However, there is a deeper reason for using references. As an example, consider the following loop:
+
+```c++
+for (const auto &row : ia) // for every element in the outer array
+	for (auto col : row) // for every element in the inner array
+		cout << col << endl;	
+```
+
+This loop does not write to the elements, yet we still define the control variable of the outer loop as a reference. <font color='red'>We do so in order to avoid the normal array to pointer conversion.</font> Had we neglected the reference and written these loops as:
+
+```c++
+for (auto row : ia)
+	for (auto col : row)
+```
+
+Our program would not compile. As before, the first `for` iterates through `ia`, whose elements are arrays of size 4. Because `row` is not a reference, when the compiler initializes `row` it will convert each array element (like any other object of array type) to a pointer to that array’s first element. As a result, in this loop the type of `row` is `int*`. The inner `for` loop is illegal. Despite our intentions, that loop attempts to iterate over an `int*`.
+
+> To use a multidimensional array in a range for, the loop control variable for all but the innermost array must be references.
+
+#### Pointers and Multidimensional Arrays
+
+As with any array, when we use the name of a multidimensional array, it is automatically converted to a pointer to the first element in the array. Because a multidimensional array is really an array of arrays, the pointer type to which the array converts is <font color='red'>a pointer to the first inner array</font>:
+
+```c++
+int ia[3][4]; 			// array of size 3; each element is an array of ints of size 4
+int (*p)[4] = ia; 		// p points to an array of four ints
+p = &ia[2]; 			// p now points to the last element in ia
+```
+
+With the advent of the new standard, we can often avoid having to write the type of a pointer into an array by using `auto` or `decltype`.
+
+```c++
+// print the value of each element in ia, with each inner array on its own line
+// p points to an array of four ints
+for(auto p = ia; p != ia + 3; p++){
+    // q points to the first element of an array of four ints; that is, q points to an int
+    for(auto q = *p; q != *p + 4; q++)
+        cout << *q << " ";
+    cout << endl;
+}
+```
+
+Of course, we can even more easily write this loop using the library `begin` and `end` functions
+
+```c++
+for(auto p = begin(ia); p != end(ia); ++p){
+    for(auto q = begin(*p); q != end(*p); ++q)
+      	cout << *q << " ";
+    cout << endl;
+}
+```
+
+#### Type Aliases Simplify Pointers to Multidimensional Arrays
+
+A type alias can make it easier to read, write, and understand pointers to multi-dimensional arrays.
+
+```c++
+using int_array = int[4];
+typedef int int_array[4];
+for(int_array *p = ia; p != ia + 3; ++p)
+    for(int *q = *p; q != *p + 4; ++q)
+        ...
+```
+
+Here we start by defining `int_array` as a name for the type “array of four `int`s.” We use that type name to define our loop control variable in the outer `for` loop.
+
+# Chapter 4. Expressions
+
+## 4.1. Fundamentals
+
+### 4.1.1. Basic Concepts
+
+#### Operand Conversions
+
+The binary operators usually expect operands with the same type. These operators can be used on operands with differing types so long as the
+operands can be converted to a common type.
+
+For example, we can convert an integer to floating-point, and vice versa, but we cannot convert a pointer type to floating-point. What may be a bit
+surprising is that <font color='red'>small integral type operands (e.g., bool, char, short, etc.) are generally promoted to a larger integral type, typically `int`.</font>
+
+#### Overloaded Operators
+
+The language defines what the operators mean when applied to built-in and compound types. We can also define what most operators mean when applied to class types.
+
+When we use an overloaded operator, the meaning of the operator—including the type of its operand(s) and the result—depend on how the operator is defined. However,<font color='red'> the number of operands and the precedence and the associativity of the operator cannot be changed.</font>
+
+#### Lvalues and Rvalues
+
+Every expression in C++ is either an rvalue or an lvalue. In C++, an lvalue expression yields an object or a function. However, some lvalues, such as `const` objects, may not be the left-hand operand of an assignment. Moreover, some expressions yield objects but return them as rvalues, not lvalues. 
+
+<font color='red'>Roughly speaking, when we use an object as an rvalue, we use the object’s value (its contents). When we use an object as an lvalue, we use the object’s identity (its location in memory).</font>
+
+* Assignment requires a (non`const`) lvalue as its left-hand operand and yields its left-hand operand as an lvalue.
+* The address-of operator requires an lvalue operand and returns a pointer to its operand as an rvalue.
+* The built-in dereference and subscript operators and the iterator dereference and string and vector subscript operators all yield lvalues.
+* The built-in and iterator increment and decrement operators require lvalue operands and <font color='red'>the prefix versions (which are the ones we have used so far) also yield lvalues.</font>
+
+Lvalues and rvalues also differ when used with `decltype` . <font color='red'>When we apply `decltype` to an expression (other than a variable), the result is a reference type if the expression yields an lvalue.</font> As an example, assume `p` is an `int*`. 
+
+* Because dereference yields an lvalue, `decltype(*p)` is `int&`. 
+
+* On the other hand, because the address-of operator yields an rvalue, `decltype(&p)` is `int**`, that is, a pointer to a pointer to type `int`.
+
+### 4.1.2. Precedence and Associativity
+
+Operands of operators with higher precedence group more tightly than operands of operators at lower precedence. 
+
+Associativity determines how to group operands with the same precedence. For example, The arithmetic operators are left associative, which means operators at the same precdence group left to right: the expression `20-15-3` is `2`, not `8`.
+
+Table below lists all the operators organized into segments separated by double lines. Operators in each segment have the same precedence, and have higher precedence than operators in subsequent segments.
+
+ ![image-20220708111742782](C++ Primer PartⅠ.assets/image-20220708111742782.png)
+
+ ![image-20220708111832247](C++ Primer PartⅠ.assets/image-20220708111832247.png)
+
+### 4.1.3. Order of Evaluation
+
+Precedence specifies how the operands are grouped. It says nothing about the order in which the operands are evaluated. <font color='red'>In most cases, the order is largely unspecified.</font>
+
+```c++
+int i = f1() * f2();
+```
+
+We know that `f1` and `f2` must be called before the multiplication can be done. After all, it is their results that are multiplied. However, we have no way of knowing whether `f1` will be called before `f2` or vice versa.
+
+For operators that do not specify evaluation order, it is an error for an expression to refer to and change the same object. Expressions that do so have undefined behavior. As a simple example, the `<<` operator makes no guarantees about when or how its operands are evaluated. As a result, the following output expression is undefined:
+
+```c++
+int i = 0;
+cout << i << " " << ++i << endl; // undefined
+```
+
+There are four operators that do guarantee the order in which operands are evaluated.
+
+* The logical `AND` (`&&`) operator guarantees that its left-hand operand is evaluated first. Moreover, we are also guaranteed that the right-hand operand is evaluated only if the left-hand operand is `true`.
+* The logical `OR`(`||`) operator
+* The conditional (`? :`) operator
+* The comma (`,`) operator
+
+#### ⭐Order of Evaluation, Precedence, and Associativity
+
+Order of operand evaluation is independent of precedence and associativity. In an expression such as `f() + g() * h() + j()`:
+
+* Precedence guarantees that the results of `g()` and `h()` are multiplied.
+* Associativity guarantees that the result of `f()` is added to the product of `g()` and `h()` and that the result of that addition is added to the value of `j()`.
+* There are no guarantees as to the order in which these functions are called.
+
+## 4.2. Arithmetic Operators
+
+Arithmetic Operators(All Left Associative)
+
+ ![image-20220708113109593](C++ Primer PartⅠ.assets/image-20220708113109593.png)
+
+1. <font color='red'>The operands and results of these operators are rvalues.</font>
+
+2. Unless noted otherwise, the arithmetic operators may be applied to any of the arithmetic types or to any type that can be converted to an arithmetic type. 
+
+3. The unary plus operator and the addition and subtraction operators may also be applied to pointers. <font color='red'>When applied to a pointer or arithmetic value, unary plus returns a (possibly promoted) copy of the value of its operand.</font>
+
+4. The unary minus operator returns the result of negating a (possibly promoted) copy of the value of its operand:
+
+   ```c++
+   int i = 1024;
+   int k = -i; 	// i is -1024
+   bool b = true;
+   bool b2 = -b; 	// b2 is true!
+   ```
+
+   For most operators, operands of type `bool` are promoted to `int`. In this case, the value of `b` is `true`, which promotes to the `int` value `1` . That
+   (promoted) value is negated, yielding `-1`. The value `-1` is converted back to `bool` and used to initialize `b2`. This initializer is a nonzero value, which when converted to `bool` is `true`. Thus, the value of `b2` is `true`!
+
+5. ⭐In a division, a nonzero quotient is positive if the operands have the same sign and negative otherwise. The modulus operator is defined so that if `m%n` is nonzero, it has the same sign as `m`.  Moreover, except for the obscure case where `-m` overflows, `(-m)/n` and `m/(-n)` are always equal to         `-(m/n)`, `m%(-n)` is equal to `m%n`, and `(-m)%n` is equal to `-(m%n)`.
+
+   ```c++
+   21 % 6; 	/* result is 3 */ 	21 / 6; 	/* result is 3 */
+   21 % 7; 	/* result is 0 */ 	21 / 7; 	/* result is 3 */
+   -21 % -8; 	/* result is -5 */ 	-21 / -8; 	/* result is 2 */
+   21 % -5; 	/* result is 1 */ 	21 / -5; 	/* result is -4 */
+   ```
+
+## 4.3. Logical and Relational Operators
+
+Logical and Relational Operators
+
+ ![image-20220708144056452](C++ Primer PartⅠ.assets/image-20220708144056452.png)
+
+1. The operands to these operators are rvalues and the result is an rvalue.
+
+#### Logical `AND` and `OR` Operators
+
+The logical `AND` and `OR` operators always evaluate their left operand before the right. Moreover, <font color='red'>the right operand is evaluated if and only if the left operand does not determine the result.</font> This strategy is known as <font color='blue'>short-circuit evaluation</font>:
+
+* The right side of an `&&` is evaluated if and only if the left side is `true`.
+*  The right side of an `||` is evaluated if and only if the left side is `false`.
+
+#### The Relational Operators
+
+Because the relational operators return `bool`s, the result of chaining these operators together is likely to be surprising:
+
+```c++
+// oops! this condition compares k to the bool result of i < j
+if (i < j < k) // true if k is greater than 1!
+```
+
+This condition groups `i` and `j` to the first `<` operator. The `bool` result of that expression is the left-hand operand of the second less-than operator. That is, `k` is compared to the `true`/`false` result of the first comparison!
+
+#### Equality Tests and the `bool` Literals
+
+If we want to test the truth value of an arithmetic or pointer object, the most direct way is to use the value as a condition:
+
+```c++
+if (val) { /* ... */ } 		// true if val is any nonzero value
+if (!val) { /* ... */ } 	// true if val is zero
+```
+
+We might think we could rewrite a test of this kind as
+
+```c++
+if (val == true) { /* ... */ } // true only if val is equal to 1!
+```
+
+If `val` is not a bool, then `true` is converted to the type of `val` before the `==`operator is applied. That is, when `val` is not a `bool`, it is as if we had written
+
+```C++
+if (val == 1) { /* ... */ }
+```
+
+## 4.4. Assignment Operators
+
+The left-hand operand of an assignment operator must be a <font color='red'>modifiable </font>lvalue. For example, given
+
+```c++
+int i = 0, j = 0, k = 0; 	// initializations, not assignment
+const int ci = i; 			// initialization, not assignment
+// Each of these assignments is illegal:
+1024 = k; 					// error: literals are rvalues
+i + j = k; 					// error: arithmetic expressions are rvalues
+ci = k; 					// error: ci is a const (nonmodifiable) lvalue
+```
+
+Under the new standard, we can use a braced initializer list on the right-hand side:
+
+```c++
+k = {3.14}; 					// error: narrowing conversion
+vector<int> vi; 				// initially empty
+vi = {0,1,2,3,4,5,6,7,8,9}; 	// vi now has ten elements, values 0 through 9
+```
+
+#### Assignment Is Right Associative
+
+```c++
+int ival, jval;
+ival = jval = 0; // ok: each assigned 0
+```
+
+Because assignment is right associative, the right-most assignment, `jval = 0`, is the right-hand operand of the left-most assignment operator. Because assignment returns its left-hand operand, the result of the right-most assignment (i.e., `jval`) is assigned to `ival`.
+
+#### ⭐Assignment Has Low Precedence
+
+Assignments often occur in conditions. Because assignment has relatively low precedence, we usually must parenthesize the assignment for the condition to work properly.
+
+```c++
+int i;
+while((i = getValue()) != 42)
+    // do something
+```
+
+Without the parentheses, the operands to `!=` would be the value returned from `getValue` and `42`. The `true` or `false` result of that test would be assigned to `i`—clearly not what we intended!
+
+#### Beware of Confusing Equality and Assignment Operators
+
+The fact that we can use assignment in a condition can have surprising effects:
+`if (i = j)`
+The condition in this `if` assigns the value of `j` to `i` and then tests the result of the assignment. If `j` is nonzero, the condition will be `true`. The author of this code almost surely intended to test whether `i` and `j` have the same value:
+`if (i == j)`
+Bugs of this sort are notoriously difficult to find. Some, but not all, compilers are kind enough to warn about code such as this example.
+
+#### Compound Assignment Operators
+
+There are compound assignments for each of arithmetic operators and the bitwise operators
+
+```c++
++= -= *= /= %= 			// arithmetic operators
+<<= >>= &= ^= |= 		// bitwise operators
+```
+
+Each compound operator is essentially equivalent to
+`a = a op b;`
+with the exception that, <font color='red'>when we use the compound assignment, the left-hand operand is evaluated only once. If we use an ordinary assignment, that operand is evaluated twice</font>: 
+
+* Once in the expression on the right-hand side 
+* And again as the operand on the left hand.
+
+In many, perhaps most, contexts this difference is immaterial aside from possible performance consequences.
+
+## 4.5. Increment and Decrement Operators
+
+There are two forms of these operators: prefix and postfix:
+
+* The prefix form increments (or decrements) its operand and yields the changed object as its result. 
+* The postfix operators increment (or decrement) the operand but yield a copy of the original, unchanged value as its result
+
+```c++
+int i = 0, j;
+j = ++i; // j = 1, i = 1: prefix yields the incremented value
+j = i++; // j = 1, i = 2: postfix yields the unincremented value
+```
+
+<font color='red'>These operators require lvalue operands. The prefix operators return the object itself as an lvalue. The postfix operators return a copy of the object’s original value as an rvalue.</font>
+
+> Advice: Use Postfix Operators only When Necessary
+>
+> The postfix operator must store the original value so that it can return the unincremented value as its result. If we don’t need the unincremented value, there’s no need for the extra work done by the postfix operator.
+
+#### Combining Dereference and Increment in a Single Expression
+
+The postfix versions of `++` and `--` are used when we want to use the current value of a variable and increment it in a single compound expression.
+
+``` c++
+auto pbeg = v.begin();
+while(pbeg != v.end() && *beg >= 0)
+    cout << *pbeg++ << endl;
+```
+
+The precedence of postfix increment is higher than that of the dereference operator, so `*pbeg++` is equivalent to `*(pbeg++)`. The subexpression `pbeg++`
+increments `pbeg` and yields a copy of the previous value of `pbeg` as its result. Accordingly, the operand of `*` is the unincremented value of `pbeg`. Thus, the statement prints the element to which `pbeg` originally pointed and increments `pbeg`.
+
+#### ⭐Remember That Operands Can Be Evaluated in Any Order
+
+Most operators give no guarantee as to the order in which operands will be evaluated. This lack of guaranteed order often doesn’t matter. The cases where it does matter are when one subexpression changes the value of an operand that is used in another subexpression.Because the increment and decrement operators change their operands, it is easy to misuse these operators in compound expressions.
+
+```c++
+auto beg = s.begin();
+while(beg != s.end() && !isspace(*beg)){
+    *beg = toupper(*beg++);		// error: this assignment is undefined
+}
+// 对于二元或者多元运算符，如果它的运算对象使用了同一个 object，并且有其中一个运算对象修改了这个 object，就会导致错误。这里的问题在于 = 运算符
+```
+
+The problem is that both the left- and right-hand operands to `=` use `beg` and the right-hand operand changes `beg`. The assignment is therefore undefined. The compiler might evaluate this expression as either
+
+```c++
+*beg = toupper(*beg); 			// execution if left-hand side is evaluated first
+*(beg + 1) = toupper(*beg); 	// execution if right-hand side is evaluated first
+```
+
+or it might evaluate it in yet some other way
+
+## 4.6. The Member Access Operators
+
+The dot and arrow operators provide for member access. The dot operator fetches a member from an object of class type; arrow is defined so that 
+ptr`->`mem is a synonym for (`*`ptr).mem.
+
+The arrow operator requires a pointer operand and yields an lvalue. The dot operator yields an lvalue if the object from which the member is fetched is an lvalue; otherwise the result is an rvalue.
+
+## 4.7. The Conditional Operator
+
+The conditional operator has the following form:
+`cond ? expr1 : expr2;`
+where cond is an expression that is used as a condition and expr1 and expr2 are expressions of the same type (or types that can be converted to a common type). This operator executes by evaluating cond. If the condition is `true`, then expr1 is evaluated; otherwise, expr2 is evaluated.
+
+Like the logical `AND` and logical `OR` (`&&` and `||`) operators, the conditional operator guarantees that only one of expr1 or expr2 is evaluated.
+
+That result of the conditional operator is an lvalue if both expressions are lvalues or if they convert to a common lvalue type. Otherwise the result is an rvalue.
+
+#### ⭐Using a Conditional Operator in an Output Expression
+
+<font color='red'>The conditional operator has fairly low precedence.</font>
+
+```c++
+cout << ((grade < 60) ? "fail" : "pass"); 	// prints pass or fail
+cout << (grade < 60) ? "fail" : "pass"; 	// prints 1 or 0!
+cout << grade < 60 ? "fail" : "pass"; 		// error: compares cout to 60
+```
+
+* The second expression uses the comparison between `grade` and `60` as the operand to the `<<` operator. The value `1` or `0` is printed, depending on whether `grade < 60` is `true` or `false`. The `<<` operator returns `cout`, which is tested as the condition for the conditional operator. That is, the second expression is equivalent
+
+  ```c++
+  cout << (grade < 60); 		// prints 1 or 0
+  cout ? "fail" : "pass"; 	// test cout and then yield one of the two literals
+  							// depending on whether cout is true or false
+  ```
+
+* The last expression is an error because it is equivalent to
+
+  ```c++
+  cout << grade; // less-than has lower precedence than shift, so print grade first
+  cout < 60 ? "fail" : "pass"; // then compare cout to 60!
+  ```
+
+## 4.8. The Bitwise Operators
+
+The bitwise operators take operands of integral type that they use as a collection of bits. As usual, if an operand is a “small integer,” its value is first promoted to a larger integral type. The operand(s) can be either signed or unsigned.
+
+ ![image-20220708155120418](C++ Primer PartⅠ.assets/image-20220708155120418.png)
+
+#### Using Bitwise Operators
+
+Let’s assume a teacher has 30 students in a class. Each week the class is given a pass/fail quiz. We’ll track the results of each quiz using one bit per student to represent the pass or fail grade on a given test. We might represent each quiz in an unsigned integral value:
+
+```c++
+unsigned long quiz1 = 0; // we'll use this value as a collection of bits
+```
+
+1. The teacher must be able to set and test individual bits. 
+
+   For example, we’d like to be able to set the bit corresponding to student number 27 to indicate that this student passed the quiz. We can indicate that student number 27 passed by creating a value that has only bit 27 turned on. If we then bitwise `OR` that value with `quiz1`, all the bits except bit 27 will remain unchanged:
+
+   ```c++
+   // We can obtain a value indicating that student 27 passed 
+   // by using the left-shift operator and an unsigned long integer literal 1
+   quiz1 |= 1UL << 27;
+   ```
+
+2. Imagine that the teacher reexamined the quiz and discovered that student 27 actually had failed the test. The teacher must now turn off bit 27.
+
+   ```c++
+   quiz1 &= ~(1UL << 27);
+   ```
+
+3. Finally, we might want to know how the student at position 27 fared:
+
+   ```c++
+   bool status = quiz1 & (1UL << 27);
+   ```
+
+   Here we `AND` a value that has bit 27 turned on with `quiz1`. The result is nonzero (i.e., `true`) if bit 27 of `quiz1` is also on; otherwise, it evaluates to zero.
+
+#### Shift Operators (aka IO Operators) Are Left Associative
+
+The shift operators have midlevel precedence:<font color='red'> lower than the arithmetic operators but higher than the relational, assignment, and conditional operators. </font>These relative precedence levels mean we usually have to use parentheses to force the correct grouping of operators with lower precedence.
+
+```c++
+cout << 42 + 10; 		// ok: + has higher precedence, so the sum is printed
+cout << (10 < 42); 		// ok: parentheses force intended grouping; prints 1
+cout << 10 < 42; 		// error: attempt to compare cout to 42!
 ```
 
