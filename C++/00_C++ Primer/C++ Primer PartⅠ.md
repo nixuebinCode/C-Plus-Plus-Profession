@@ -2228,3 +2228,652 @@ cout << (10 < 42); 		// ok: parentheses force intended grouping; prints 1
 cout << 10 < 42; 		// error: attempt to compare cout to 42!
 ```
 
+## 4.9. The `sizeof` Operator
+
+The `sizeof` operator returns the size, in bytes, of an expression or a type name. The result of sizeof is a <font color='red'>constant expression</font> of type `size_t` . Because `sizeof` returns a constant expression, we can use the result of a `sizeof` expression to specify the dimension of an array.The operator takes one of two forms:
+
+```c++
+sizeof (type)
+sizeof expr
+```
+
+In the second form, `sizeof` returns the size of the type returned by the given expression.
+
+```c++
+Sales_data data, *p;
+sizeof(Sales_data); 			// size required to hold an object of type Sales_data
+sizeof data; 					// size of data's type, i.e., sizeof(Sales_data)
+sizeof p; 						// size of a pointer
+sizeof *p; 						// size of the type to which p points, i.e., sizeof(Sales_data)
+sizeof data.revenue; 			// size of the type of Sales_data's revenue member
+sizeof Sales_data::revenue; 	// alternative way to get the size of revenue
+```
+
+The most interesting of these examples is `sizeof *p`. First, because `sizeof` is right associative and has the same precedence as `*`, this expression groups right to left. That is, it is equivalent to `sizeof (*p)`. Second, because `sizeof` does not evaluate its operand, it doesn’t matter that `p` is an invalid (i.e., uninitialized) pointer. <font color='red'>Dereferencing an invalid pointer as the operand to `sizeof` is safe because the pointer is not actually used.</font> `sizeof` doesn’t need dereference the pointer to know what type it will return.
+
+The result of applying `sizeof` depends in part on the type involved:
+
+* `sizeof char` or an expression of type `char` is guaranteed to be 1.
+* `sizeof` a reference type returns the size of an object of the referenced type.
+* `sizeof` a pointer returns the size needed hold a pointer.
+* `sizeof` a dereferenced pointer returns the size of an object of the type to which the pointer points; <font color='red'>the pointer need not be valid</font>.
+* `sizeof` an array is the size of the entire array. It is equivalent to taking the `sizeof` the element type times the number of elements in the array. Note that <font color='red'>`sizeof` does not convert the array to a pointer.</font>
+* `sizeof` a `string` or a `vector` returns only the size of the fixed part of these types; <font color='red'>it does not return the size used by the object’s elements</font>.
+
+## 4.10. Comma Operator
+
+The comma operator takes two operands, which it evaluates from left to right. The comma operator guarantees the order in which its operands are evaluated. <font color='red'>The left-hand expression is evaluated and its result is discarded. The result of a comma expression is the value of its right-hand expression. </font>The result is an lvalue if the right-hand operand is an lvalue.
+
+One common use for the comma operator is in a `for` loop:
+
+```c++
+vector<int>::size_type cnt = ivec.size();
+	// assign values from size... 1 to the elements in ivec
+for(vector<int>::size_type ix = 0; ix != ivec.size(); ++ix, --cnt)
+	ivec[ix] = cnt;
+```
+
+## 4.11. Type Conversions
+
+#### Implicit Conversions
+
+The implicit conversions among the arithmetic types are defined to <font color='red'>preserve precision</font>, if possible. Most often, if an expression has both integral and floatingpoint operands, the integer is converted to floating-point:
+
+```C++
+int ival = 3.541 + 3; // initializes ival to 6
+```
+
+In this case, `3` is converted to `double`, floating-point addition is done, and the result is a `double`. 
+
+The initialization happens next. In this case, the `double` result of the addition is converted to `int` and used to initialize `ival`. Converting a `double` to an `int` truncates the `double`’s value, discarding the decimal portion. In this expression, the value `6` is assigned to `ival`.
+
+### 4.11.1. The Arithmetic Conversions
+
+#### Integral Promotions 整型提升
+
+The integral promotions convert the small integral types to a larger integral type. The types `bool`, `char`, `signed char`, `unsigned char`, `short`, and `unsigned short` are promoted to `int` if all possible values of that type fit in an `int`. Otherwise, the value is promoted to `unsigned int`. As we’ve seen many times, a `bool` that is `false` promotes to `0` and `true` to `1`.
+
+```c++
+short sval;
+char cval;
+3.14159L + 'a'; // 'a' promoted to int, then that int converted to long double
+sval + cval; // sval and cval promoted to int
+```
+
+#### Operands of Unsigned Type
+
+If the operands of an operator have differing types, those operands are ordinarily converted to a common type:
+
+* <font color='red'>As usual, integral promotions happen first.</font> If the resulting type(s) match, no further conversion is needed.
+
+* If both (possibly promoted) operands have the same signedness, then the operand with the smaller type is converted to the larger type.
+
+* When the signedness differs and the type of the unsigned operand is the same as or larger than that of the signed operand, the signed operand is converted to unsigned. For example, given an `unsigned int` and an `int`, the `int` is converted to `unsigned int`.
+
+* <font color='red'>When the signed operand has a larger type than the unsigned operand. In this case, the result is machine dependent. </font>
+
+  * If all values in the unsigned type fit in the larger type, then the unsigned operand is converted to the signed type.
+  * If the values don’t fit, then the signed operand is converted to the unsigned type.
+
+  For example, if the operands are `long` and `unsigned int`, and `int` and `long` have the same size, the `long` will be converted to `unsigned int`. If the `long` type has more bits, then the `unsigned int` will be converted to `long`.
+
+### 4.11.2. Other Implicit Conversions
+
+1. Array to Pointer Conversions
+
+   In most expressions, when we use an array, the array is automatically converted to a pointer to the first element in that array. 
+
+   This conversion is not performed when an array is used with `decltype` or as the operand of the address-of (`&`), `sizeof`, or `typeid` operators. The conversion is also omitted when we initialize a reference to an array.
+
+2. Pointer Conversions
+
+   There are several other pointer conversions: A constant integral value of `0` and the literal `nullptr` can be converted to any pointer type; a pointer to any nonconst type can be converted to `void*`, and a pointer to any type can be converted to a `const void*`.
+
+3. Conversions to `bool`
+
+   There is an automatic conversion from arithmetic or pointer types to `bool`.
+
+4. Conversion to `const`
+
+   We can convert a pointer to a non`const` type to a pointer to the corresponding `const` type, and similarly for references. The reverse conversion—removing a low-level `const`—does not exist.
+
+5. Conversions Defined by Class Types
+
+   Class types can define conversions that the compiler will apply automatically. <font color='red'>The compiler will apply only one class-type conversion at a time</font>.
+
+   For example, We use a class-type conversion when we use a C-style character string where a library `string` is expected and when we read from an `istream` in a condition:
+
+   ```c++
+   string s, t = "a value"; 	// character string literal converted to type string
+   while (cin >> s) 			// while condition converts cin to bool
+   ```
+
+   The IO library defines a conversion from `istream` to `bool`. That conversion is used (automatically) to convert `cin` to `bool`.
+
+### ⭐4.11.3. Explicit Conversions
+
+#### Named Casts 命名的强制类型转换
+
+A named cast has the following form:
+
+```c++
+cast_name<type> (expression);
+```
+
+The cast-name may be one of `static_cast`, `dynamic_cast`, `const_cast`, and `reinterpret_cast`.
+
+#### `static_cast`
+
+Any well-defined(具有明确定义的) type conversion, other than those involving low-level `const`, can be requested using a `static_cast`.
+
+```c++
+int i, j;
+double slope = static_cast<double>(j) / i;
+```
+
+A `static_cast` is also useful to perform a conversion that the compiler will not generate automatically. For example, we can use a `static_cast` to retrieve a pointer value that was stored in a `void*` pointer
+
+```c++
+void *p = &d;
+double *dp = static_cast<double*>(p);
+```
+
+When we store a pointer in a `void*` and then use a `static_cast` to cast the pointer back to its original type, we are guaranteed that the pointer value is
+preserved. That is, the result of the cast will be equal to the original address value.
+
+#### `const_cast`
+
+**<font color='red'>A const_cast changes only a low-level `const` in its operand:</font>**
+
+```c++
+const char *pc;
+char *p = const_cast<char*>(pc);	// ok: but writing through p is undefined
+```
+
+If the object was originally not a `const`, using a cast to obtain write access is legal. However, using a `const_cast` in order to write to a `const` object is undefined.
+
+> A `const_cast` is most useful in the context of overloaded functions
+
+#### reinterpret_cast
+
+A `reinterpret_cast` generally performs a low-level reinterpretation of the bit pattern of its operands.
+
+reinterpret_cast 通常为运算对象的位模式提供较低层次上的重新解释
+
+```c++
+int *ip;
+char *pc = reinterpret_cast<char*>(ip);
+```
+
+We must never forget that the actual object addressed by `pc` is an `int`, not a character. Any use of `pc` that assumes it’s an ordinary character pointer is likely to fail at run time. For example:
+
+```C++
+string str(pc);
+```
+
+
+is likely to result in bizarre run-time behavior.
+
+#### Old-Style Casts
+
+In early versions of C++, an explicit cast took one of the following two forms:
+
+```c++
+type (expr); 	// function-style cast notation
+(type) expr; 	// C-language-style cast notation
+```
+
+Depending on the types involved, an old-style cast has the same behavior as a `const_cast`, a `static_cast`, or a `reinterpret_cast`. When we use an old-style cast where a `static_cast` or a `const_cast` would be legal, the old-style cast does the same conversion as the respective named cast. If neither cast is legal, then an old-style cast performs a `reinterpret_cast`. For example:
+
+```c++
+char *pc = (char*) ip;
+```
+
+has the same effect as using a `reinterpret_cast`.
+
+# Chapter 5. Statements
+
+## 5.1. Simple Statements
+
+An expression, such as `ival + 5`, becomes an expression statement when it is followed by a semicolon. **<font color='red'>Expression statements cause the expression to be evaluated and its result discarded</font>:**
+
+```c++
+ival + 5; 			// rather useless expression statement
+cout << ival; 		// useful expression statement
+```
+
+#### Null Statements
+
+A null statement is a single semicolon:
+
+```c++
+; // null statement
+```
+
+Such usage is most common when a loop’s work can be done within its condition. For example, we might want to read an input stream, ignoring everything we read until we encounter a particular value:
+
+```c++
+while(cin >> s && s != sought)
+    ;	// null statement
+```
+
+#### Compound Statements (Blocks)
+
+A compound statement, usually referred to as a block, is a (possibly empty) sequence of statements and declarations surrounded by a pair of curly braces.
+
+A block is a scope. Names introduced inside a block are accessible only in that block and in blocks nested inside that block. Names are visible from where they are defined until the end of the (immediately) enclosing block.
+
+Compound statements are used when the language requires a single statement but the logic of our program needs more than one.
+
+## 5.2. Statement Scope 语句作用域
+
+We can define variables inside the control structure of the `if`, `switch`, `while`, and `for` statements. Variables defined in the control structure are visible only within that statement and are out of scope after the statement end.
+
+## 5.3. Conditional Statements
+
+### 5.3.1. The `if` Statement
+
+There are two forms of the `if`: one with an `else` branch and one without.
+
+```c++
+if (condition)
+	statement
+```
+
+```c++
+if (condition)
+	statement
+else
+	statement2
+```
+
+#### Dangling `else` 悬垂 `else`
+
+When we nest an `if` inside another `if`, it is possible that there will be more `if` branches than `else` branches. The question arises: How do we know to which `if` a given `else` belongs? This problem, usually referred to as a <font color='blue'>dangling `else`</font>. 
+
+In C++ the ambiguity is resolved by specifying that each `else` is matched with the closest preceding unmatched `if`.
+
+### 5.3.2. The `switch` Statement
+
+A `switch` statement executes by evaluating the parenthesized expression that follows the keyword `switch`. That expression may be an initialized variable declaration. **<font color='red'>The expression is converted to integral type.</font>** The result of the expression is compared with the value associated with each `case`.
+
+The `case` keyword and its associated value together are known as the **<font color='blue'>`case` label</font>**. **<font color='red'>`case` labels must be integral constant expressions</font>**
+
+```c++
+char ch = getVal();
+int ival = 42;
+switch(ch){
+    case 3.14:	// error: noninteger as case label
+    case ival:	// error: nonconstant as case label
+}
+```
+
+#### Control Flow within a switch
+
+After a case label is matched, execution starts at that label and**<font color='red'> continues across all the remaining cases or until the program explicitly interrupts it.</font>** To avoid executing code for subsequent `case`s, we must explicitly tell the compiler to stop execution. Under most conditions, the last statement before the next `case` label is `break`.
+
+However, there are situations where the default `switch` behavior is exactly what is needed. Each `case` label can have only a single value, but sometimes we have two or more values that share a common set of actions. In such instances, we omit a `break` statement, allowing the program to fall through multiple `case` labels.
+
+```c++
+unsigned vowelCnt = 0;
+switch(ch){
+    case 'a':
+	case 'e':
+	case 'i':
+	case 'o':
+	case 'u':
+		++vowelCnt;
+		break;  
+}
+
+switch (ch)
+{
+	// alternative legal syntax
+	case 'a': case 'e': case 'i': case 'o': case 'u':
+		++vowelCnt;
+		break;
+}
+```
+
+#### ⭐Forgetting a break Is a Common Source of Bugs
+
+It is a common misconception to think that only the statements associated with the matched `case` label are executed.
+
+```c++
+// warning: deliberately incorrect!
+switch (ch) {
+	case 'a':
+		++aCnt; // oops: should have a break statement
+	case 'e':
+		++eCnt; // oops: should have a break statement
+	case 'i':
+		++iCnt; // oops: should have a break statement
+    case 'o':
+		++oCnt; // oops: should have a break statement
+	case 'u':
+		++uCnt;
+}
+```
+
+To understand what happens, assume that the value of `ch` is '`e`'. Execution jumps to the code following the `case 'e'` label, which increments `eCnt`. Execution continues across the `case` labels, incrementing `iCnt`, `oCnt`, and `uCnt` as well.
+
+#### The `default` Label
+
+The statements following the `default` label are executed when no `case` label matches the value of the switch expression. 
+
+```c++
+switch(ch){
+    case 'a': case 'e': case 'i': case 'o': case 'u':
+        ++vowelCnt;
+        break;
+    default:
+        ++nonVowleCnt;
+        break;
+}
+```
+
+> Although it is not necessary to include a `break` after the last label of a `switch`, the safest course is to provide one. That way, if an additional `case`
+> is added later, the `break` is already in place.
+
+#### ⭐Variable Definitions inside the Body of a `switch`
+
+When execution jumps to a particular `case`, any code that occurred inside the `switch` before that label is ignored. The fact that code is bypassed raises an interesting question: What happens if the code that is skipped includes a variable definition?
+
+The answer is that **<font color='red'>the language does not allow us to jump over an initialization if the initialized variable is in scope at the point to which control transfers.</font>** (C++语言规定，不允许跨过变量的初始化语句直接跳转到该变量作用域内的另一个位置)
+
+```c++
+case true:
+	string file_name; 		// error: control bypasses an implicitly initialized variable
+	int ival = 0; 			// error: control bypasses an explicitly initialized variable
+	int jval; 				// ok: because jval is not initialized
+	break;
+case false:
+	// ok: jval is in scope but is uninitialized
+	jval = next_num(); 		// ok: assign a value to jval
+	if (file_name.empty()) 	// file_name is in scope but wasn't initialized
+		// ...
+```
+
+If this code were legal, then any time control jumped to the `false` case, it would bypass the initialization of `file_name` and `ival`. Those variables would be in scope. Code following `false` could use those variables. However, these variables would not have been initialized.
+
+If we need to define and initialize a variable for a particular `case`, we can do so by **<font color='red'>defining the variable inside a block</font>**, thereby ensuring that the variable is out of scope at the point of any subsequent label.
+
+```c++
+case true:
+	{
+		// ok: declaration statement within a statement block
+		string file_name = get_file_name();
+		// ...
+	}
+	break;
+case false:
+	if(file_name.empty())	// error: file_name is not in scope
+```
+
+## 5.4. Iterative Statements
+
+### 5.4.1. The `while` Statement
+
+A `while` statement repeatedly executes a target statement as long as a condition is true. Its syntactic form is
+
+```c++
+while (condition)
+	statement
+```
+
+The condition can be an expression or an initialized variable declaration. **<font color='red'>Variables defined in a `while` condition or `while` body are created and
+destroyed on each iteration.</font>**
+
+### 5.4.2. Traditional `for` Statement
+
+The syntactic form of the `for` statement is:
+
+```c++
+for (initializer; condition; expression)
+	statement
+```
+
+#### Multiple Definitions in the `for` Header
+
+As in any other declaration, `init-statement` can define several objects. However, `init-statement` may be only a single declaration statement. Therefore, all the variables must have the same base type
+
+```c++
+for(decltype(v.size()) i = 0, sz = v.size(); i != sz; ++i){
+    v.push_back(v[i]);
+}
+```
+
+#### Omitting Parts of the `for` Header
+
+A `for` header can omit any (or all) of init-statement, condition, or expression.
+
+1. We can use a null statement for init-statement when an initialization is unnecessary.
+
+   ```c++
+   auto beg = v.begin();
+   for ( /* null */; beg != v.end() && *beg >= 0; ++beg)
+   	; // no work to do
+   ```
+
+2. Omitting condition is equivalent to writing `true` as the condition. Because the condition always evaluates as `true`, the `for` body must contain a statement that exits the loop. Otherwise the loop will execute indefinitely:
+
+   ```c++
+   for(int i = 0; /* no condition */; ++i){
+       // process i; code inside the loop must stop the iteration!
+   }
+   ```
+
+3. We can also omit expression from the `for` header. In such loops, either the condition or the body must do something to advance the iteration.
+
+   ```c++
+   for(int i; cin >> i; /* no expression */){
+       v.push_back(i);
+   }
+   ```
+
+### 5.4.3. Range `for` Statement
+
+The new standard introduced a simpler `for` statement that can be used to iterate through the elements of a container or other sequence.
+
+```c++
+for (declaration : expression)
+	statement
+```
+
+expression must represent a sequence, such as a braced initializer list, an array, or an object of a type such as `vector` or `string` that has `begin` and `end` members that return iterators. 
+
+**<font color='red'>If we want to write to the elements in the sequence, the loop variable must be a reference type.</font>**
+
+```c++
+vector<int> ivec = {0, 1, 2, 3, 4, 5, 6, 7, 8};
+for(auto &r : ivec)
+    r *= 2;		// double the value of each element in ivec
+```
+
+### 5.4.4. The `do while` Statement
+
+A `do while` statement is like a `while` but the condition is tested after the statement body completes. Regardless of the value of the condition, we execute the loop at least once.
+
+```c++
+do{
+    statement
+}while(condition);
+```
+
+Variables used in `condition` must be defined outside the body of the `do while` statement.
+
+Because the condition is not evaluated until after the statement or block is executed, **<font color='red'>the `do while` loop does not allow variable definitions inside the condition:</font>**
+
+```c++
+do {
+	// . . .
+	mumble(foo);
+} while (int foo = get_foo()); // error: declaration in a do condition
+```
+
+## 5.5. Jump Statements
+
+### 5.5.1. The `break` Statement
+
+A `break` statement terminates the nearest enclosing `while`, `do while`, `for`, or `switch` statement.
+
+A `break` can appear only within an iteration statement or switch statement (including inside statements or blocks nested inside such loops). A `break` affects only the nearest enclosing loop or switch.
+
+### 5.5.2. The `continue` Statement
+
+A `continue` statement terminates the current iteration of the nearest enclosing loop and immediately begins the next iteration.
+
+A `continue` can appear only inside a `for`, `while`, or `do while` loop, including inside statements or blocks nested inside such loops.
+
+A continue interrupts the current iteration; execution stays inside the loop. 
+
+* In the case of a `while` or a `do while`, execution continues by evaluating the condition. 
+* **<font color='red'>In a traditional `for` loop, execution continues at the expression inside the `for` header. </font>**
+* In a range `for`, execution continues by initializing the control variable from the next element in the sequence.
+
+### 5.5.3. The `goto` Statement
+
+A `goto` statement provides an unconditional jump from the `goto` to a another statement in the same function.
+
+The syntactic form of a `goto` statement is
+
+```C++
+goto label;
+```
+
+where label is an identifier that identifies a statement. A labeled statement is any statement that is preceded by an identifier followed by a colon:
+
+```c++
+end: return; // labeled statement; may be the target of a goto
+```
+
+**<font color='red'>The `goto` and the labeled statement to which it transfers control must be in the same function.</font>**
+
+1. As with a `switch` statement, a `goto` cannot transfer control from a point where an initialized variable is out of scope to a point where that variable is in scope:
+
+   ```c++
+   	// . . .
+   	goto end;
+   	int ix = 10; // error: goto bypasses an initialized variable definition
+   end:
+   	// error: code here could use ix but the goto bypassed its declaration
+   	ix = 42;
+   ```
+
+2. A jump backward over an already executed definition is okay. Jumping back to a point before a variable is defined destroys the variable and constructs it again:
+
+   ```c++
+   // backward jump over an initialized variable definition is okay
+   begin:
+   	int sz = get_size();
+   	if (sz <= 0) {
+   		goto begin;	// Here sz is destroyed when the goto executes.
+       }
+   ```
+
+## 5.6. ⭐`try` Blocks and Exception Handling
+
+Exception handling is generally used when one part of a program detects a problem that it cannot resolve and the problem is such that the detecting part of the program cannot continue. In such cases:
+
+1. The detecting part needs a way to signal that something happened and that it cannot continue. 
+2. The detecting part needs a way to signal the problem without knowing what part of the program will deal with the exceptional condition. 
+3. Having signaled what happened, the detecting part stops processing.
+
+Exception handling supports this cooperation between the **<font color='red'>detecting </font>**and **<font color='red'>handling </font>**parts of a program. In C++, exception handling involves
+
+* **<font color='blue'>`throw` expressions</font>**
+
+  The detecting part uses to indicate that it encountered something it can’t handle. We say that a `throw` raises an exception.
+
+* **<font color='blue'>`try` blocks</font>**
+
+  The handling part uses to deal with an exception. A try block starts with the keyword `try` and ends with one or more `catch` clauses.
+
+  Exceptions thrown from code executed inside a `try` block are usually handled by one of the `catch` clauses. Because they “handle” the exception, `catch` clauses are also known as exception handlers.
+
+* A set of **<font color='blue'>exception classes </font>**
+
+  They are used to pass information about what happened between a `throw` and an associated `catch`.
+
+### 5.6.1. A `throw` Expression
+
+A `throw` consists of the keyword `throw` followed by an expression. The type of the expression determines what kind of exception is thrown
+
+```c++
+// first check that the data are for the same item
+if (item1.isbn() != item2.isbn())
+	throw runtime_error("Data must refer to same ISBN");
+// if we're still here, the ISBNs are the same
+cout << item1 + item2 << endl;
+```
+
+In this code, if the `ISBN`s differ, we throw an expression that is an object of type `runtime_error`. Throwing an exception terminates the current function and transfers control to a handler that will know how to handle this error.
+
+The type `runtime_error` is one of the standard library exception types and is defined in the `stdexcept` header. We must initialize a `runtime_error` by giving it a string or a Cstyle character string. That string provides additional information about the problem.
+
+### 5.6.2. The `try` Block
+
+The general form of a `try` block is
+
+```c++
+try {
+	program-statements
+} catch (exception-declaration) {
+	handler-statements
+} catch (exception-declaration) {
+	handler-statements
+} // . . .
+```
+
+Following the `try` block is a list of one or more `catch` clauses. A `catch` consists of three parts: the keyword `catch`, **<font color='red'>the declaration of a (possibly unnamed) object within parentheses (referred to as an exception declaration)</font>**, and a block.
+
+When a `catch` is selected to handle an exception, the associated block is executed. Once the `catch` finishes, execution continues with the statement immediately following the last `catch` clause of the try block.
+
+#### Writing a Handler
+
+```c++
+while(cin >> item1 >> item2){
+    try{
+        if (item1.isbn() != item2.isbn())
+			throw runtime_error("Data must refer to same ISBN");
+		// execute code that will add the two Sales_items
+    }catch(runtime_error err){
+        cerr << err.what()
+            >> "\nTry Again? Enter y or n" << endl;
+        char c;
+        cin >> c;
+        if(!cin || c == 'n')
+            break;		// break out of the while loop
+    }
+    
+}
+```
+
+#### Functions Are Exited during the Search for a Handler
+
+In complicated systems, the execution path of a program may pass through multiple `try` blocks before encountering code that throws an exception. For example, a `try` block might call a function that contains a `try`, which calls another function with its own `try`, and so on.
+
+**<font color='red'>The search for a handler reverses the call chain</font>**. When an exception is thrown, the function that threw the exception is searched first. If no matching `catch` is found, that function terminates. The function that called the one that threw is searched next. If no handler is found, that function also exits.
+
+**<font color='red'>If no appropriate `catch` is found, execution is transferred to a library function named `terminate`. The behavior of that function is system dependent but is guaranteed to stop further execution of the program.</font>**
+
+**<font color='red'>Exceptions that occur in programs that do not define any `try` blocks are handled in the same manner</font>**: After all, if there are no `try` blocks, there can be no handlers. If a program has no `try` blocks and an exception occurs, then `terminate` is called and the program is exited.
+
+### 5.6.3. Standard Exceptions
+
+The C++ library defines several classes that it uses to report problems encountered in the functions in the standard library. These exception classes are also intended to be used in the programs we write. These classes are defined in four headers:
+
+* The `exception` header defines the most general kind of exception class named `exception`. It communicates only that an exception occurred but provides no additional information.
+
+* The `stdexcept` header defines several general-purpose exception classes
+
+   ![image-20220711110452720](C++ Primer PartⅠ.assets/image-20220711110452720.png)
+
+* The `new` header defines the `bad_alloc` exception type
+* The `type_info` header defines the `bad_cast` exception type
+
+We can only default initialize `exception`, `bad_alloc`, and `bad_cast` objects; it is not possible to provide an initializer for objects of these exception types. The other exception types have the opposite behavior: We can initialize those objects from either a `string` or a C-style string, but we cannot default initialize them.
+
+The exception types define only a single operation named `what`. That function takes no arguments and returns a `const char*` that points to a C-style character string. The purpose of this C-style character string is to provide some sort of textual description of the exception thrown.
+
+The contents of the C-style string that what returns depends on the type of the exception object. For the types that take a string initializer, the `what` function returns that string. For the other types, the value of the string that what returns varies by compiler.
