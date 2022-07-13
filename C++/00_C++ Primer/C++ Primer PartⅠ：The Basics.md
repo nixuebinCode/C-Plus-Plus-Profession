@@ -122,7 +122,7 @@ Because the `>>` operator returns its left operand, in this case, the `while` st
 
 ### 2.1.1 Arithmetic Types
 
- ![image-20220630110110696](C++ Primer PartⅠ.assets/image-20220630110110696.png)
+ ![image-20220630110110696](images/image-20220630110110696.png)
 
 The arithmetic types are divided into two categories:
 
@@ -219,7 +219,7 @@ A value, such as `42`, is known as a literal because its <font color='red'>value
 
    By default, floating-point literals have type double. We can override defaults by using a suffix.
 
-    ![image-20220630115246277](C++ Primer PartⅠ.assets/image-20220630115246277.png)
+    ![image-20220630115246277](images/image-20220630115246277.png)
 
    ```c++
    L'a' // wide character literal, type is wchar_t
@@ -1064,7 +1064,7 @@ The reason is that the contents of a header are copied into the including progra
 
 ### 3.2.1. Defining and Initializing strings
 
- ![image-20220705102309524](C++ Primer PartⅠ.assets/image-20220705102309524.png)
+ ![image-20220705102309524](images/image-20220705102309524.png)
 
 When we supply a `string` literal, the characters from that literal—up to but not including the null character at the end of the literal—are copied into the newly created `string`.
 
@@ -1082,7 +1082,7 @@ string s4(10, 'c');
 
 ### 3.2.2. Operations on `string`s
 
- ![image-20220705102835584](C++ Primer PartⅠ.assets/image-20220705102835584.png)
+ ![image-20220705102835584](images/image-20220705102835584.png)
 
 #### Reading and Writing `string`s
 
@@ -1154,7 +1154,7 @@ The subexpression `s1 + ", "` returns a `string`, which forms the left-hand oper
 
 One part of processing characters is knowing and/or changing the characteristics of a character.This part of the job is handled by a set of library functions. These functions are defined in the `cctype` header.
 
-  ![image-20220705105637243](C++ Primer PartⅠ.assets/image-20220705105637243.png)
+  ![image-20220705105637243](images/image-20220705105637243.png)
 
 #### Processing Every Character? Use Range-Based `for`
 
@@ -1211,7 +1211,7 @@ We can define `vector`s to hold objects of most any type. Because references are
 
 #### 3.3.1. Defining and Initializing `vector`s
 
- ![image-20220705111508401](C++ Primer PartⅠ.assets/image-20220705111508401.png)
+ ![image-20220705111508401](images/image-20220705111508401.png)
 
 When we copy a `vector`, each element in the new `vector` is a copy of the corresponding element in the original `vector`. <font color='red'>The two `vector`s must be the same type</font>:
 
@@ -1293,7 +1293,7 @@ The fact that we can easily and efficiently add elements to a `vector` greatly s
 
 ### 3.3.3. Other `vector` Operations
 
- ![image-20220705150625019](C++ Primer PartⅠ.assets/image-20220705150625019.png)
+ ![image-20220705150625019](images/image-20220705150625019.png)
 
 1. The `size` member returns a value of the `size_type` defined by the corresponding `vector` type:
 
@@ -1332,7 +1332,7 @@ We use `begin` and `end` member to get iterators:
 
 #### Iterator Operations
 
- ![image-20220706094938447](C++ Primer PartⅠ.assets/image-20220706094938447.png)
+ ![image-20220706094938447](images/image-20220706094938447.png)
 
 #### Moving Iterators from One Element to Another
 
@@ -1385,7 +1385,7 @@ Incrementing an iterator moves the iterator one element at a time. All the libra
 
 Iterators for `string` and `vector` support additional operations that can move an iterator multiple elements at a time. They also support all the relational operators. These operations are referred to as <font color='blue'>iterator arithmetic</font>.
 
- ![image-20220706101907647](C++ Primer PartⅠ.assets/image-20220706101907647.png)
+ ![image-20220706101907647](images/image-20220706101907647.png)
 
 We can subtract two iterators so long as they refer to elements in, or one off the end of, the same `vector` or `string`. The result is the distance between the iterators. By distance we mean the amount by which we’d have to change one iterator to get the other. <font color='red'>The result type is a signed integral type named `difference_type`.</font> Both vector and string define difference_type. 
 
@@ -1616,7 +1616,7 @@ Character string literals are an instance of a more general construct that C++ i
 
 These functions are defined in the `cstring` header, which is the C++ version of the C header `string.h`.
 
- ![image-20220706112153423](C++ Primer PartⅠ.assets/image-20220706112153423.png)
+ ![image-20220706112153423](images/image-20220706112153423.png)
 
 The pointer(s) passed to these routines must point to null-terminated array(s):
 
@@ -1901,9 +1901,9 @@ Associativity determines how to group operands with the same precedence. For exa
 
 Table below lists all the operators organized into segments separated by double lines. Operators in each segment have the same precedence, and have higher precedence than operators in subsequent segments.
 
- ![image-20220708111742782](C++ Primer PartⅠ.assets/image-20220708111742782.png)
+ ![image-20220708111742782](images/image-20220708111742782.png)
 
- ![image-20220708111832247](C++ Primer PartⅠ.assets/image-20220708111832247.png)
+ ![image-20220708111832247](images/image-20220708111832247.png)
 
 ### 4.1.3. Order of Evaluation
 
@@ -1941,7 +1941,7 @@ Order of operand evaluation is independent of precedence and associativity. In a
 
 Arithmetic Operators(All Left Associative)
 
- ![image-20220708113109593](C++ Primer PartⅠ.assets/image-20220708113109593.png)
+ ![image-20220708113109593](images/image-20220708113109593.png)
 
 1. <font color='red'>The operands and results of these operators are rvalues.</font>
 
@@ -1974,7 +1974,7 @@ Arithmetic Operators(All Left Associative)
 
 Logical and Relational Operators
 
- ![image-20220708144056452](C++ Primer PartⅠ.assets/image-20220708144056452.png)
+ ![image-20220708144056452](images/image-20220708144056452.png)
 
 1. The operands to these operators are rvalues and the result is an rvalue.
 
@@ -2184,7 +2184,7 @@ cout << grade < 60 ? "fail" : "pass"; 		// error: compares cout to 60
 
 The bitwise operators take operands of integral type that they use as a collection of bits. As usual, if an operand is a “small integer,” its value is first promoted to a larger integral type. The operand(s) can be either signed or unsigned.
 
- ![image-20220708155120418](C++ Primer PartⅠ.assets/image-20220708155120418.png)
+ ![image-20220708155120418](images/image-20220708155120418.png)
 
 #### Using Bitwise Operators
 
@@ -2867,7 +2867,7 @@ The C++ library defines several classes that it uses to report problems encounte
 
 * The `stdexcept` header defines several general-purpose exception classes
 
-   ![image-20220711110452720](C++ Primer PartⅠ.assets/image-20220711110452720.png)
+    ![image-20220711110452720](images/image-20220711110452720.png)
 
 * The `new` header defines the `bad_alloc` exception type
 * The `type_info` header defines the `bad_cast` exception type
@@ -2877,3 +2877,642 @@ We can only default initialize `exception`, `bad_alloc`, and `bad_cast` objects;
 The exception types define only a single operation named `what`. That function takes no arguments and returns a `const char*` that points to a C-style character string. The purpose of this C-style character string is to provide some sort of textual description of the exception thrown.
 
 The contents of the C-style string that what returns depends on the type of the exception object. For the types that take a string initializer, the `what` function returns that string. For the other types, the value of the string that what returns varies by compiler.
+
+# Chapter 6. Functions
+
+## 6.1. Function Basics
+
+#### Parameters and Arguments
+
+Arguments are the initializers for a function’s parameters.
+
+**<font color='red'>Although we know which argument initializes which parameter, we have no guarantees about the order in which arguments are evaluated. The
+compiler is free to evaluate the arguments in whatever order it prefers.</font>**
+
+#### Function Parameter List
+
+A function’s parameter list can be empty but cannot be omitted. Typically we define a function with no parameters by writing an empty parameter list. For compatibility with C, **<font color='red'>we also can use the keyword `void` to indicate that there are no parameters</font>**:
+
+```c++
+void f1(){ /* ... */ } 			// implicit void parameter list
+void f2(void){ /* ... */ } 		// explicit void parameter list
+```
+
+Parameter names are optional. However, there is no way to use an unnamed parameter. Therefore, parameters ordinarily have names. **<font color='red'>Occasionally a function has a parameter that is not used. Such parameters are often left unnamed, to indicate that they aren’t used.</font>** Leaving a parameter unnamed doesn’t change the number of arguments that a call must supply. A call must supply an argument for every parameter, even if that parameter isn’t used.
+
+#### Function Return Type
+
+The return type may not be an array type or a function type. However, a function may return a pointer to an array or a function.
+
+### 6.1.1. ⭐Local Objects 局部对象
+
+Parameters and variables defined inside a function body are referred to as **<font color='blue'>local variables</font>**. 
+
+Objects defined outside any function exist throughout the program’s execution. Such objects are created when the program starts and are not destroyed until the program ends. The lifetime of a local variable depends on how it is defined.
+
+#### Automatic Objects 自动对象
+
+Objects that exist only while a block is executing are known as **<font color='blue'>automatic objects</font>**. After execution exits a block, the values of the automatic objects created in that block are undefined.
+
+Parameters are automatic objects. Storage for the parameters is allocated when the function begins. Parameters are defined in the scope of the function body. Hence they are destroyed when the function terminates.
+
+Automatic objects corresponding to local variables are initialized if their definition contains an initializer. Otherwise, they are default initialized, which means that **<font color='red'>uninitialized local variables of built-in type have undefined values</font>**.
+
+#### Local static Objects 局部静态对象
+
+It can be useful to have a local variable whose lifetime continues across calls to the function. We obtain such objects by defining a local variable as `static`.
+
+Each local static object is initialized before the first time execution passes through the object’s definition.（局部静态对象在程序的执行路径第一次经过对象定义语句时初始化） Local statics are not destroyed when a function ends; they are destroyed when the program terminates.
+
+```c++
+size_t count_calls(){
+    static size_t ctr = 0;
+    return ++ctr;
+}
+int mian(){
+    for(size_t i = 0; i != 10; i++)
+        cout << count_calls() << endl;
+    return 0;
+}
+```
+
+Before control flows through the definition of `ctr` for the first time, `ctr` is created and given an initial value of `0`. Each call increments `ctr` and returns its new value. Whenever `count_calls` is executed, the variable `ctr` already exists and has whatever value was in that variable the last time the function exited.
+
+**<font color='red'>If a local `static` has no explicit initializer, it is value initialized, meaning that local `static`s of built-in type are initialized to zero.</font>**
+
+### 6.1.2. Function Declarations
+
+Like any other name, the name of a function must be declared before we can use it. As with variables, a function may be defined only once but may be
+declared multiple times.
+
+A function declaration is just like a function definition except that a declaration has no function body. In a declaration, a semicolon replaces the function body.
+
+Because a function declaration has no body, there is no need for parameter names. Hence, **<font color='red'>parameter names are often omitted in a declaration</font>**. Although parameter names are not required, they can be used to help users of the function understand what the function does
+
+Function declarations are also known as the **<font color='blue'>function prototype</font>**.
+
+### 6.1.3. Separate Compilation 分离式编译
+
+Separate compilation lets us split our programs into several files, each of which can be compiled independently.
+
+#### Compiling and Linking Multiple Source Files
+
+As an example, assume that the definition of our `fact` function is in a file named `fact.cc` and its declaration is in a header file named `Chapter6.h`. Our `fact.cc` file, like any file that uses these functions, will include the `Chapter6.h` header. We’ll store a `main` function that calls `fact` in a second file named `factMain.cc`. 
+
+Most compilers provide a way to separately compile each file. This process usually yields a file with the `.obj` (Windows) or `.o` (UNIX) file extension,
+indicating that the file contains object code.
+
+The compiler lets us link object files together to form an executable. On the system we use, we would separately compile our program as follows:
+
+```shell
+$ CC -c factMain.cc # generates factMain.o
+$ CC -c fact.cc # generates fact.o
+$ CC factMain.o fact.o # generates factMain.exe or a.out
+$ CC factMain.o fact.o -o main # generates main or main.exe
+```
+
+## 6.2. Argument Passing
+
+As we’ve seen, each time we call a function, its parameters are created and initialized by the arguments passed in the call. Parameter initialization works the same way as variable initialization.
+
+### 6.2.1. Passing Arguments by Value
+
+Passing an argument by value works the same way: nothing the function does to the parameter can affect the argument.
+
+#### Pointer Parameters
+
+Pointers behave like any other nonreference type. When we copy a pointer, the value of the pointer is copied. After the copy, the two pointers are
+distinct. However, a pointer also gives us indirect access to the object to which that pointer points. We can change the value of that object by assigning through the pointer.
+
+### 6.2.2. Passing Arguments by Reference
+
+Reference parameters are often used to allow a function to change the value of one or more of its arguments.
+
+#### Using References to Avoid Copies
+
+It can be inefficient to copy objects of large class types or large containers. Moreover, some class types (including the IO types) cannot be copied. Functions must use reference parameters to operate on objects of a type that cannot be copied.
+
+#### Using Reference Parameters to Return Additional Information
+
+A function can return only a single value. However, sometimes a function has more than one value to return. Reference parameters let us effectively return multiple results.
+
+### 6.2.3. `const` Parameters and Arguments
+
+When we use parameters that are `const`, just as in any other initialization, when we copy an argument to initialize a parameter, top-level `const`s are ignored. As a result, **<font color='red'>top-level `const` on parameters are ignored.</font>** We can pass either a `const` or a non`const` object to a parameter that has
+a top-level `const`.
+
+```c++
+void fcn(const int i) { /* fcn can read but not write to i */ }
+void fcn(int i) { /* . . . */ } // error: redefines fcn(int)
+```
+
+In C++, we can define several different functions that have the same name. However, we can do so only if their parameter lists are sufficiently different. **<font color='red'>Because top-level `const`s are ignored, we can pass exactly the same types to either version of `fcn`. The second version of `fcn` is an error.</font>**
+
+#### Pointer or Reference Parameters and `const`
+
+Because parameters are initialized in the same way that variables are initialized, it can be helpful to remember the general initialization rules. We can initialize an object with a low-level `const` from a non`const` object but not vice versa, and a**<font color='red'> plain reference must be initialized from an object of the same type.</font>**
+
+```c++
+void reset(int &i);
+void reset(int *ip);
+string::size_type find_char(const string &s, char c, string::size_type &occurs)
+    
+int i = 0;
+const int ci = i;
+string::size_type ctr = 0;
+int i = 0;
+const int ci = i;
+string::size_type ctr = 0;
+
+reset(&i); 			// calls the version of reset that has an int* parameter
+reset(&ci); 		// error: can't initialize an int* from a pointer to a const int object
+reset(i); 			// calls the version of reset that has an int& parameter
+reset(ci); 			// error: can't bind a plain reference to the const object ci
+reset(42); 			// error: can't bind a plain reference to a literal
+reset(ctr); 		// error: types don't match; ctr has an unsigned type
+
+// ok: find_char's first parameter is a reference to const
+find_char("Hello World!", 'o', ctr);
+```
+
+#### Use Reference to `const` When Possible
+
+It is a somewhat common mistake to define parameters that a function does not change as (plain) references.
+
+* Doing so gives the function’s caller the misleading impression that the function might change its argument’s value.
+
+* Using a reference instead of a reference to `const` limits the type of arguments that can be used with the function.  **<font color='red'>As we’ve just seen, we cannot pass a `const` object, or a literal, or an object that requires conversion to a plain reference parameter.</font>**
+
+  As an example, had we defined the parameter of `find_char` as a plain `string&`:
+
+  ```c++
+  // bad design: the first parameter should be a const string&
+  string::size_type find_char(string &s, char c, string::size_type &occurs);
+  
+  find_char("Hello World", 'o', ctr);		// would fail at compile time
+  
+  bool is_sentence(const string &s)
+  {
+  	string::size_type ctr = 0;
+  	return find_char(s, '.', ctr) == s.size() - 1 && ctr ==1;	// compile-time error. The problem is that s is a reference
+  																// to a const string, but find_char was (incorrectly) defined 
+  																// to take a plain reference
+  }
+  ```
+
+### 6.2.4. Array Parameters
+
+Arrays have two special properties that affect how we define and use functions that operate on arrays: 
+
+* We cannot copy an array
+* When we use an array it is (usually) converted to a pointer. 
+
+**<font color='red'>Because we cannot copy an array, we cannot pass an array by value. Because arrays are converted to pointers, when we pass an array to a function, we are actually passing a pointer to the array’s first element.</font>**
+
+Even though we cannot pass an array by value, we can write a parameter that looks like an array:
+
+```c++
+// despite appearances, these three declarations of print are equivalent
+void print(const int*);
+void print(const int[]);
+void print(const int[10]);
+```
+
+Regardless of appearances, these declarations are equivalent: Each declares a function with a single parameter of type `const int*`. **<font color='red'>When the compiler checks a call to `print`, it checks only that the argument has type `const int*`</font>**:
+
+```c++
+int i = 0, j[2] = {0, 1};
+print(&i); 	// ok: &i is int*
+print(j); 	// ok: j is converted to an int* that points to j[0]
+```
+
+Because arrays are passed as pointers, functions ordinarily don’t know the size of the array they are given. They must rely on additional information provided by the caller. There are three common techniques used to manage pointer parameters:
+
+* **Using a Marker to Specify the Extent of an Array**
+
+  The first approach to managing array arguments requires **<font color='red'>the array itself to contain an end marker</font>**. C-style character strings are an example of this approach. C-style strings are stored in character arrays in which the last character of the string is followed by a null character.
+
+  ```c++
+  void print(const char *cp){
+      void print(const char *cp)
+  {
+  	if (cp) 				// if cp is not a null pointer
+  		while (*cp) 		// so long as the character it points to is not a null character
+  			cout << *cp++; 	// print the character and advance the pointer
+  }
+  ```
+
+* ⭐**Using the Standard Library Conventions**
+
+  A second technique used to manage array arguments is to **<font color='red'>pass pointers to the first and one past the last element in the array</font>**.
+
+  ```c++
+  void print(const int *beg, const int *end)
+  {
+  	// print every element starting at beg up to but not including end
+  	while (beg != end)
+  		cout << *beg++ << endl; // print the current element
+      							// and advance the pointer
+  }
+  ```
+
+  To call this function, we pass two pointers—one to the first element we want to print and one just past the last element:
+
+  ```c++
+  int j[2] = {0, 1};
+  // j is converted to a pointer to the first element in j
+  // the second argument is a pointer to one past the end of j
+  print(begin(j), end(j));
+  ```
+
+* **Explicitly Passing a Size Parameter**
+
+  A third approach for array arguments, which is common in C programs and older C++ programs, is to define a second parameter that indicates the size of the array.
+
+  ```c++
+  void print(const int ia[], size_t size)
+  {
+  	for (size_t i = 0; i != size; ++i) {
+  		cout << ia[i] << endl;
+  	}
+  }
+  ```
+
+#### Array Parameters and `const`
+
+When a function does not need write access to the array elements, the array parameter should be a pointer to `const`. A parameter should be
+a plain pointer to a non`const` type only if the function needs to change element values.
+
+#### Array Reference Parameters
+
+As usual, the reference parameter is bound to the corresponding argument, which in this case is an array:
+
+```c++
+void print(int (&arr)[10]){
+    for(auto elem : arr)
+        	cout << elem << endl;
+}
+```
+
+Because the size of an array is part of its type, it is safe to rely on the dimension in the body of the function. However, the fact that the size is part of the type limits the usefulness of this version of `print`. We may call this function only for an array of exactly ten `int`s.
+
+We’ll see in § 16.1.1 how we might write this function in a way that would allow us to pass a reference parameter to an array of any size.
+
+#### Passing a Multidimensional Array
+
+As with any array, a multidimensional array is passed as a pointer to its first element. Because we are dealing with an array of arrays, that element is an array, so the pointer is a pointer to an array. **<font color='red'>The size of the second (and any subsequent) dimension is part of the element type and must be specified</font>**:
+
+```c++
+void print(int (*matrix)[10], int rowSize){ /* . . . */ }
+// equivalent definition
+void print(int matrix[][10], int rowSize) { /* . . . */ }
+```
+
+### 6.2.5. `main`: Handling Command-Line Options
+
+The most common use of arguments to `main` is to let the user specify a set of options to guide the operation of the program. For example, assuming our `main` program is in an executable file named `prog`, we might pass options to the program as follows:
+
+```shell
+prog -d -o ofile data0
+```
+
+Such command-line options are passed to `main` in two (optional) parameters:
+
+```c++
+int main(int argc, char *argv[]) {}
+```
+
+The second parameter, `argv`, is an array of pointers to C-style character strings. The first parameter, `argc`, passes the number of strings in that array. Because the second parameter is an array, we might alternatively define `main` as
+
+```c++
+int main(int argc, char **argv){}
+```
+
+When arguments are passed to `main`, the first element in `argv` points either to the name of the program or to the empty string. Subsequent elements pass the arguments provided on the command line. The element just past the last pointer is guaranteed to be 0.
+
+Given the previous command line, `argc` would be 5, and `argv` would hold the following C-style character strings:
+
+```c++
+argv[0] = "prog"; // or argv[0] might point to an empty string
+argv[1] = "-d";
+argv[2] = "-o";
+argv[3] = "ofile";
+argv[4] = "data0";
+argv[5] = 0;
+```
+
+> When you use the arguments in `argv`, remember that the optional arguments begin in `argv[1]`; `argv[0]` contains the program’s name, not user input.
+
+### ⭐6.2.6. Functions with Varying Parameters
+
+The new standard provides two primary ways to write a function that takes a varying number of arguments:
+
+* If all the arguments have the same type, we can pass a library type named `initializer_list`.
+* If the argument types vary, we can write a special kind of function, known as a variadic template(可变参数模板), which we’ll cover in § 16.4
+
+C++ also has a special parameter type, ellipsis（省略符）, that can be used to pass a varying number of arguments. However, it is worth noting that this facility ordinarily should be used only in programs that need to interface to C functions.
+
+#### `initializer_list` Parameters
+
+An `initializer_list` is a library type that represents an array of values of the specified type. This type is defined in the `initializer_list` header. The operations that `initializer_list` provides are
+
+ ![image-20220712220316451](images/image-20220712220316451.png)
+
+Like a `vector`, `initializer_list` is a template type. When we define an `initializer_list`, we must specify the type of the elements that the list will contain.
+
+**<font color='red'>Unlike `vector`, the elements in an `initializer_list` are always `const` values; there is no way to change the value of an element in an `initializer_list`.</font>**
+
+Because `initializer_list` has `begin` and `end` members, we can use a range `for` to process the elements.
+
+```c++
+void error_msg(initializer_list<string> il)
+{
+	for (auto beg = il.begin(); beg != il.end(); ++beg)
+		cout << *beg << " " ;
+	cout << endl;
+}
+
+void error_msg(ErrCode e, initializer_list<string> il){
+    cerr << e.msg() << ": ";
+    for(const auto &elem : il)
+        cout << elem << " ";
+    cout << endl;
+}
+```
+
+When we pass a sequence of values to an `initializer_list` parameter, we must enclose the sequence in curly braces:
+
+```c++
+// expected, actual are strings
+if (expected != actual)
+	error_msg({"functionX", expected, actual});
+else
+	error_msg({"functionX", "okay"});
+```
+
+#### Ellipsis Parameters
+
+**<font color='red'>Ellipsis parameters should be used only for types that are common to both C and C++. In particular, objects of most class types are not copied properly
+when passed to an ellipsis parameter.</font>**
+
+An ellipsis parameter may appear only as the last element in a parameter list and may take either of two forms:
+
+```c++
+void foo(parm_list, ...);
+void foo(...);
+```
+
+## 6.3. Return Types and the `return` Statement
+
+### 6.3.1. Functions with No Return Value
+
+A `return` with no value may be used only in a function that has a return type of `void`. Functions that return `void` are not required to contain a `return`. In a `void` function, an implicit `return` takes place after the function’s last statement.
+
+### 6.3.2. Functions That Return a Value
+
+The value returned must have the same type as the function return type, or it must have a type that can be implicitly converted to that type.
+
+Failing to provide a `return` after a loop that contains a `return` is an error. However, many compilers will not detect such errors.
+
+```c++
+// incorrect return values, this code will not compile
+bool str_subrange(const string &str1, const string &str2)
+{
+	// same sizes: return normal equality test
+	if (str1.size() == str2.size())
+		return str1 == str2; 			// ok: == returns bool
+	// find the size of the smaller string
+	auto size = (str1.size() < str2.size()) ? str1.size() : str2.size();
+	// look at each element up to the size of the smaller string
+	for (decltype(size) i = 0; i != size; ++i) {
+		if (str1[i] != str2[i])
+			return; 					// error #1: no return value; compiler should detect this error
+	}
+	// error #2: control might flow off the end of the function without a return
+	// the compiler might not detect this error
+}
+```
+
+#### How Values Are Returned
+
+Values are returned in exactly the same way as variables and parameters are initialized: **<font color='red'>The return value is used to initialize a temporary at the call site</font>**, and that temporary is the result of the function call.
+
+#### Never Return a Reference or Pointer to a Local Object
+
+When a function completes, its storage is freed. After a function terminates, references to local objects refer to memory that is no longer valid:
+
+```c++
+// disaster: this function returns a reference to a local object
+const string &manip()
+{
+	string ret;
+	// transform ret in some way
+	if (!ret.empty())
+        return ret; 		// WRONG: returning a reference to a local object!
+	else
+		return "Empty"; 	// WRONG: "Empty" is a local temporary string
+}
+```
+
+Both of these return statements return an undefined value—what happens if we try to use the value returned from `manip` is undefined. Both `return`s refer to memory that is no longer available:
+
+* In the first `return`, it should be obvious that the function returns a reference to a local object. 
+* In the second case, **<font color='red'>the string literal is converted to a local temporary string object</font>**. That object, like the
+  `string` named s, is local to `manip`. The storage in which the temporary resides is freed when the function ends. 
+
+#### Functions That Return Class Types and the Call Operator
+
+The call operator has the same precedence as the dot and arrow operators. Like those operators, the call operator is left associative. As a result, if a
+function returns a pointer, reference or object of class type, we can use the result of a call to call a member of the resulting object.
+
+```c++
+const string &shorterString(const string &s1, const string &s2);
+auto sz = shorterString(s1, s2).size();
+```
+
+#### Reference Returns Are Lvalues
+
+Calls to functions that return references are lvalues; other return types yield rvalues. In particular, we can assign to the result of a function that returns a reference to non`const`:
+
+```c++
+char &get_val(string &str, string::size_type ix)
+{
+	return str[ix]; // get_val assumes the given index is valid
+}
+int main()
+{
+	string s("a value");
+	cout << s << endl; // prints a value
+	get_val(s, 0) = 'A'; // changes s[0] to A
+	cout << s << endl; // prints A value
+	return 0;
+}
+```
+
+#### ⭐List Initializing the Return Value
+
+Under the new standard, functions can return a braced list of values. As in any other return, the list is used to initialize the temporary that represents the function’s return. If the list is empty, that temporary is value initialized. Otherwise, the value of the return depends on the function’s return type.
+
+```c++
+vector<string> process()
+{
+	// . . .
+	// expected and actual are strings
+	if (expected.empty())
+        return {};	// return an empty vector
+    else if (expected == actual)
+		return {"functionX", "okay"}; // return list-initialized vector
+	else
+		return {"functionX", expected, actual};
+}
+```
+
+In a function that returns a built-in type, a braced list may contain at most one value, and that value must not require a narrowing conversion. If the
+function returns a class type, then the class itself defines how the intiailizers are used
+
+#### Return from main
+
+There is one exception to the rule that a function with a return type other than void must return a value: The `main` function is allowed to terminate without a `return`. If control reaches the end of `main` and there is no `return`, then the compiler implicitly inserts a return of `0`.
+
+### 6.3.3. Returning a Pointer to an Array
+
+Because we cannot copy an array, a function cannot return an array. However, a function can return a pointer or a reference to an array.
+
+```c++
+typedef int arrT[10]; 		// arrT is a synonym for the type array of ten ints
+using arrtT = int[10]; 		// equivalent declaration of arrT
+arrT* func(int i); 			// func returns a pointer to an array of ten ints
+```
+
+#### ⭐Declaring a Function That Returns a Pointer to an Array
+
+To declare `func` without using a type alias, we must remember that the dimension of an array follows the name being defined:
+
+```c++
+int arr[10]; 			// arr is an array of ten ints
+int *p1[10]; 			// p1 is an array of ten pointers
+int (*p2)[10] = &arr; 	// p2 points to an array of ten ints
+```
+
+As with these declarations, if we want to define a function that returns a pointer to an array, the dimension must follow the function’s name. However, a function includes a parameter list, which also follows the name. **<font color='red'>The parameter list precedes the dimension.</font>**
+
+```c++
+int (*func(int i))[10];
+```
+
+To understand this declaration, it can be helpful to think about it as follows:
+
+* `func(int)` says that we can call `func` with an `int` argument.
+* `(*func(int))` says we can dereference the result of that call.
+* `(*func(int))[10]` says that dereferencing the result of a call to `func` yields an array of size ten.
+* `int (*func(int))[10]` says the element type in that array is `int`.
+
+#### Using a Trailing Return Type
+
+Trailing returns can be defined for any function, but are most useful for functions with complicated return types, such as pointers (or references) to arrays. A trailing return type follows the parameter list and is preceded by `->`. To signal that the return follows the parameter list, we use `auto` where the return type ordinarily appears:
+
+```c++
+// func takes an int argument and returns a pointer to an array of ten ints
+auto func(int i) -> int(*)[10];
+```
+
+#### Using decltype
+
+As another alternative, if we know the array(s) to which our function can return a pointer, we can use `decltype` to declare the return type.
+
+```c++
+int odd[] = {1, 3, 5, 7, 9};
+int even[] = {0, 2, 4, 6, 8};
+decltype(odd) *func(int i){
+	return (i % 2) ? &odd : &even; // returns a pointer to the array
+}
+```
+
+## 6.4. Overloaded Functions
+
+Functions that have the same name but different parameter lists and that appear in the same scope are overloaded.
+
+* Overloaded functions must differ in the number or the type(s) of their parameters.
+* **<font color='red'>It is an error for two functions to differ only in terms of their return types.</font>** If the parameter lists of two functions match but the return types differ, then the second declaration is an error:
+
+#### ⭐Overloading and const Parameters
+
+Top-level `const` has no effect on the objects that can be passed to the function. A parameter that has a top-level `const` is indistinguishable from one without a top-level `const`:
+
+```c++
+Record lookup(Phone);
+Record lookup(const Phone);		// redeclares Record lookup(Phone)
+
+Record lookup(Phone*);
+Record lookup(Phone* const); // redeclares Record lookup(Phone*)
+```
+
+**<font color='red'>In these declarations, the second declaration declares the same function as the first.</font>**
+
+On the other hand, we can overload based on whether the parameter is a reference (or pointer) to the `const` or nonconst `version` of a given type; such `const`s are low-level:
+
+```c++
+Record lookup(Account&); 			// function that takes a reference to Account
+Record lookup(const Account&); 		// new function that takes a const reference
+Record lookup(Account&); 			// function that takes a reference to Account
+Record lookup(const Account&); 		// new function that takes a const reference
+```
+
+In these cases, the compiler can use the `const`ness of the argument to distinguish which function to call.
+
+* Because there is no conversion from `const`, we can pass a `const` object (or a pointer to `const`) only to the version with a `const` parameter.
+* Because there is a conversion to `const`, we can call either function on a non`const` object or a pointer to non`const`. However, the compiler will prefer the non`const` versions when we pass a non`const` object or pointer to non`const`.
+
+#### ⭐`const_cast` and Overloading
+
+`const_cast`s are most useful in the context of overloaded functions.
+
+```c++
+// return a reference to the shorter of two strings
+const string &shorterString(const string &s1, const string &s2)
+{
+	return s1.size() <= s2.size() ? s1 : s2;
+}
+```
+
+This function takes and returns references to `const string`. We can call the function on a pair of non`const string` arguments, but we’ll get a reference to a `const` string as the result. We might want to have a version of `shorterString` that, when given non`const` arguments, would yield a plain reference. We can write this version of our function using a `const_cast`:
+
+```c++
+string &shorterstring(string &s1, string &s2){
+   auto &r = shorterstring(const_cast<const string&>(s1), const_cast<const string&>(s2));
+   return const_cast<string&>(r);
+}
+```
+
+This version calls the `const` version of `shorterString` by casting its arguments to references to `const`. That function returns a reference to a `const string`, which we know is bound to one of our original, non`const` arguments. Therefore, we know it is safe to cast that `string` back to a plain `string&` in the return.
+
+#### Calling an Overloaded Function
+
+For any given call to an overloaded function, there are three possible outcomes:
+
+* The compiler finds exactly one function that is a **<font color='blue'>best match</font>** for the actual arguments and generates code to call that function.
+* There is no function with parameters that match the arguments in the call, in which case the compiler issues an error message that there was **<font color='blue'>no match</font>**.
+* There is more than one function that matches and none of the matches is clearly best. This case is also an error; it is an **<font color='blue'>ambiguous call</font>**.（二义性调用）
+
+### ⭐6.4.1. Overloading and Scope
+
+Overloading has no special properties with respect to scope: As usual, if we declare a name in an inner scope, that name hides uses of that name declared in an outer scope. Names do not overload across scopes（在不同的作用域中无法重载函数名）:
+
+```c++
+string read();
+void print(const string &);
+void print(double);				// overloads the print function
+void fooBar(int ival){
+    bool read = false;			// new scope: hides the outer declaration of read
+    string s = read();			// error: read is a bool variable, not a function
+    // bad practice: usually it's a bad idea to declare functions at local scope
+    void print(int);			// new scope: hides previous instances of print
+    print("Value: "); 			// error: print(const string &) is hidden
+	print(ival); 				// ok: print(int) is visible
+	print(3.14); 				// ok: calls print(int); print(double) is hidden
+}
+```
+
+The declaration of `print(int)` in `fooBar` hides the earlier declarations of `print`. It is as if there is only one `print` function available: the one that takes a single `int` parameter.
+
+**<font color='red'>In C++, name lookup happens before type checking.</font>** When we call `print`, the compiler first looks for a declaration of that name. It finds the local declaration for `print` that takes an `int`. Once a name is found, the compiler ignores uses of that name in any outer scope.
