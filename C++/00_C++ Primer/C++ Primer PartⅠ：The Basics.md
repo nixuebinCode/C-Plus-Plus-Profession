@@ -3516,3 +3516,399 @@ void fooBar(int ival){
 The declaration of `print(int)` in `fooBar` hides the earlier declarations of `print`. It is as if there is only one `print` function available: the one that takes a single `int` parameter.
 
 **<font color='red'>In C++, name lookup happens before type checking.</font>** When we call `print`, the compiler first looks for a declaration of that name. It finds the local declaration for `print` that takes an `int`. Once a name is found, the compiler ignores uses of that name in any outer scope.
+
+## 6.5. Features for Specialized Uses
+
+### 6.5.1. Default Arguments
+
+Functions with default arguments can be called with or without that argument.
+
+```c++
+typedef string::size_type sz'
+string screen(sz ht = 24, sz wid = 80, char backgrnd = ' ');
+```
+
+Here we’ve provided a default for each parameter. A default argument is specified as an initializer for a parameter in the parameter list. We may define defaults for one or more parameters. However, **<font color='red'>if a parameter has a default argument, all the parameters that follow it must also have default arguments.</font>**
+
+#### Calling Functions with Default Arguments
+
+If we want to use the default argument, we omit that argument when we call the function:
+
+```C++
+string window;
+window = screen(); 				// equivalent to screen(24,80,' ')
+window = screen(66);			// equivalent to screen(66,80,' ')
+window = screen(66, 256); 		// screen(66,256,' ')
+window = screen(66, 256, '#'); 	// screen(66,256,'#')
+```
+
+Arguments in the call are resolved by position. The default arguments are used for the trailing (right-most) arguments of a call. For example, **<font color='red'>to override the default for `background`, we must also supply arguments for `height` and `width`</font>**:
+
+```c++
+window = screen(, , '?'); 		// error: can omit only trailing arguments
+window = screen('?'); 			// calls screen('?',80,' ')
+```
+
+Part of the work of designing a function with default arguments is ordering the parameters so that those least likely to use a default value appear first and those most likely to use a default appear last.
+
+#### Default Argument Declarations
+
+It is legal to redeclare a function multiple times. However, each parameter can have its default specified only once in a given scope. Thus, any subsequent declaration can add a default only for a parameter that has not previously had a default specified. As usual, defaults can be specified only if all parameters to the right already have defaults.
+
+```c++
+string screen(sz, sz, char = ' ');						// no default for the height or width parameters
+string screen(sz, sz, char = '*');						// error: redeclaration
+string screen(sz = 24, sz = 80, char); 					// ok: adds default arguments
+
+screen();												// equivalent to screen(24, 80, ' ')
+```
+
+#### Default Argument Initializers
+
+Local variables may not be used as a default argument. Excepting that restriction, a default argument can be any expression that has a type that is convertible to the type of the parameter:
+
+```c++
+// the declarations of wd, def, and ht must appear outside a function
+sz wd = 80;
+char def = ' ';
+sz ht();
+string screen(sz = ht(), sz = wd, char = def);
+string window = screen(); // calls screen(ht(), 80, ' ')
+```
+
+**<font color='red'>Names used as default arguments are resolved in the scope of the function declaration.The value that those names represent is evaluated at the time of the call:</font>** （用作默认实参的名字在函数声明所在的作用域内解析，而这些名字的求值过程发生在函数调用时）
+
+```c++
+void f2(){
+    def = '*';			// changes the value of a default argument
+    sz wd = 100;		// hides the other defination of wd but does not change the default
+    window = screen();	// calls screen(ht(), 80, '*')
+}
+```
+
+Inside `f2`, we changed the value of `def`. The call to `screen` passes this updated value. Our function also declared a local variable that hides the outer `wd`. However, the local named `wd` is unrelated to the default argument passed to `screen`.
+
+### 6.5.2. `Inline` and `constexpr` Functions
+
+#### `inline` Functions Avoid Function Call Overhead（开销）
+
+A function specified as `inline` (usually) is expanded “in line” at each call. If `shorterString` were defined as `inline`, then this call
+
+```c++
+cout << shorterString(s1, s2) << endl;
+```
+
+(probably) would be expanded during compilation into something like
+
+```c++
+cout << (s1.size() < s2.size() ? s1 : s2) << endl;
+```
+
+We can define `shorterString` as an `inline` function by putting the keyword `inline` before the function’s return type:
+
+```c++
+inline const string &shorterString(const string &s1, const string &s2){
+    return s1.size() <= s2.size() ? s1 : s2;
+}
+```
+
+> The `inline` specification is only a request to the compiler. The compiler may choose to ignore this request.
+
+#### `constexpr` Functions
+
+A `constexpr` function is a function that can be used in a constant expression. A `constexpr` function is defined like any other function but must meet certain restrictions: **<font color='red'>The return type and the type of each parameter must be a literal type</font>**, and the function body must contain exactly one return statement:
+
+```c++
+constexpr int new_sz() { return 42; }
+constexpr int foo = new_sz();			// ok: foo is a constant expression
+```
+
+A call to `new_sz` returns a constant expression, so we can use `new_sz` to initialize our `constexpr` variable, `foo`. When it can do so, the compiler will replace a call to a `constexpr` function with its resulting value. In order to be able to expand the function immediately, **<font color='red'>`constexpr` functions are implicitly inline.</font>**
+
+A `constexpr` function body may contain other statements so long as those statements generate no actions at run time. For example, a `constexpr` function may contain null statements, type aliases, and `using` declarations.
+
+**<font color='red'>A `constexpr` function is permitted to return a value that is not a constant:</font>**
+
+```c++
+// scale(arg) is a constant expression if arg is a constant expression
+constexpr size_t scale(size_t cnt) { return new_sz() * cnt; }
+```
+
+The `scale` function will return a constant expression if its argument is a constant expression but not otherwise:
+
+```c++
+int arr[scale(2)]; 			// ok: scale(2) is a constant expression
+int i = 2; 					// i is not a constant expression
+int a2[scale(i)]; 			// error: scale(i) is not a constant expression
+```
+
+#### Put `inline` and `constexpr` Functions in Header Files
+
+Unlike other functions, `inline` and `constexpr` functions may be defined multiple times in the program. After all, the compiler needs the definition, not just the declaration, in order to expand the code. However, all of the definitions of a given `inline` or `constexpr` must match exactly. As a result, `inline` and `constexpr` functions normally are defined in headers.
+
+### 6.5.3. Aids for Debugging
+
+C++ programmers sometimes use a technique similar to header guards to conditionally execute debugging code. This approach uses two preprocessor facilities: `assert` and `NDEBUG`.
+
+#### The `assert` Preprocessor Macro
+
+The `assert` macro is defined in the `cassert` header. `assert` is a **<font color='blue'>preprocessor macro</font>**. A preprocessor macro is a preprocessor variable that acts somewhat like an `inline` function. The `assert` macro takes a single expression, which it uses as a condition:
+
+```c++
+assert(expr);
+```
+
+evaluates `expr` and if the expression is `false` (i.e., zero), then `assert` writes a message and terminates the program. If the expression is `true` (i.e., is nonzero), then assert does nothing.
+
+**<font color='red'>The `assert` macro is often used to check for conditions that “cannot happen.”</font>** For example, a program that does some manipulation of input text might know that all words it is given are always longer than a threshold. That program might contain a statement such as
+
+```c++
+assert(word.size() > threshold);
+```
+
+#### The `NDEBUG` Preprocessor Variable
+
+The behavior of `assert` depends on the status of a preprocessor variable named `NDEBUG`. **<font color='red'>If `NDEBUG` is defined, `assert` does nothing</font>**. By default, `NDEBUG` is not defined, so, by default, `assert` performs a run-time check.
+
+We can “turn off” debugging by providing a `#define` to define `NDEBUG`. Alternatively, most compilers provide a command-line option that lets us define
+preprocessor variables:
+
+```shell
+$ CC -D NDEBUG main.C # use /D with the Microsoft compiler
+```
+
+has the same effect as writing `#define NDEBUG` at the beginning of `main.C`.
+
+If `NDEBUG` is defined, we avoid the potential run-time overhead involved in checking various conditions. Of course, there is also no run-time check. **<font color='red'>Therefore, `assert` should be used only to verify things that truly should not be possible.</font>** It can be useful as an aid in getting a program debugged but should not be used to substitute for runtime logic checks or error checking that the program should do.
+
+In addition to using `assert`, we can write our own conditional debugging code using `NDEBUG`. If `NDEBUG` is not defined, the code between the `#ifndef` and the `#endif` is executed. If `NDEBUG` is defined, that code is ignored:
+
+```c++
+void print(const int ia[], size_t size){
+    #ifndef NDEBUG
+    cerr << _ _func_ _ << ": array size is " << size << endl;
+    #endif
+}
+```
+
+Here we use a variable named `_ _func_ _` to print the name of the function we are debugging. The compiler defines `_ _func_ _` in every function. It is a local `static` array of `const` char that holds the name of the function.
+
+In addition to `_ _func_ _`, which the C++ compiler defines, the preprocessor defines four other names that can be useful in debugging:
+
+* `_ _FILE_ _` string literal containing the name of the file
+* `_ _LINE_ _` integer literal containing the current line number
+* `_ _TIME_ _` string literal containing the time the file was compiled
+* `_ _DATE_ _` string literal containing the date the file was compiled
+
+## 6.6. Function Matching
+
+In many (if not most) cases, it is easy to figure out which overloaded function matches a given call. However, it is not so simple when the overloaded functions have the same number of parameters and when one or more of the parameters have types that are related by conversions. As an example, consider the following set of functions and function call:
+
+```c++
+void f();
+void f(int);
+void f(int, int);
+void f(double, double = 3.14);
+f(5.6); // calls void f(double, double)
+```
+
+1. Select the **<font color='blue'>candidate functions</font>**
+
+   A candidate function is a function with the same name as the called function and for which a declaration is visible at the point of the call. this example, there are four candidate functions named `f`.
+
+2. Select the **<font color='blue'>viable functions</font>**
+
+   To be viable, a function must have the same number of parameters as there are arguments in the call, and the type of each argument must match—or be convertible to—the type of its corresponding parameter.
+
+   We can eliminate two of our candidate functions based on the number of arguments. The function that has no parameters and the one that has two `int` parameters are not viable for this call.
+
+   The function that takes a single `int` and the function that takes two `double`s might be viable. Either of these functions can be called with a single argument.
+
+3. Find the **<font color='blue'>Best Match</font>**
+
+   The third step of function matching determines which viable function provides the best match for the call. The idea is that the closer the types of the argument and parameter are to each other, the better the match.
+
+   In our case, there is only one (explicit) argument in the call. That argument has type `double`. To call `f(int)`, the argument would have to be converted from `double` to `int`. The other viable function, `f(double, double)`, is an exact match for this argument. An exact match is better than a match that requires a conversion. Therefore, the compiler will resolve the call `f(5.6)` as a call to the function that has two `double` parameters. The compiler will add the default argument for the second, missing argument.
+
+#### Function Matching with Multiple Parameters
+
+Given the same functions named `f`, let’s analyze the following call:
+
+```c++
+f(42, 2.56);
+```
+
+In this case, the viable functions are `f(int, int)` and `f(double, double)`. 
+
+* When we look only at the first argument, we find that the function `f(int, int)` is an exact match. To match the second function, the `int` argument `42` must be converted to `double`. Considering only the first argument, `f(int, int)` is a better match than `f(double, double)`.
+* When we look at the second argument, `f(double, double)` is an exact match to the argument `2.56`. Calling `f(int, int)` would require that `2.56` be converted from `double` to `int`. When we consider only the second parameter, the function `f(double, double)` is a better match.
+
+**<font color='red'>The compiler will reject this call because it is ambiguous</font>**（二义性）
+
+### 6.6.1. Argument Type Conversions
+
+In order to determine the best match, the compiler ranks the conversions that could be used to convert each argument to the type of its corresponding parameter. Conversions are ranked as follows:
+
+1. An exact match. An exact match happens when:
+   * The argument and parameter types are identical
+   * The argument is converted from an array or function type to the corresponding pointer type
+   * A top-level const is added to or discarded from the argument
+2. Match through a `const` conversion
+3. Match through a promotion
+4. Match through an arithmetic or pointer conversion
+5. Match through a class-type conversion
+
+#### ⭐Matches Requiring Promotion or Arithmetic Conversion
+
+In order to analyze a call, it is important to remember that the small integral types always promote to `int` or to a larger integral type.
+
+1. Given two functions, one of which takes an `int` and the other a `short`, the `short` version will be called only on values of type `short`. Even though the smaller integral values might appear to be a closer match, those values are promoted to `int`, whereas calling the `short` version would require a conversion:
+
+   ```c++
+   void ff(int);
+   void ff(short);
+   ff('a');		// char promotes to int; calls f(int)
+   ```
+
+2. All the arithmetic conversions are treated as equivalent to each other
+
+   ```c++
+   void manip(long);
+   void manip(float);
+   manip(3.14);		// error:ambigious call
+   ```
+
+   The literal `3.14` is a `double`. That type can be converted to either `long` or `float`. Because there are two possible arithmetic conversions, the call is ambiguous.
+
+#### Function Matching and const Arguments
+
+When we call an overloaded function that differs on whether a reference or pointer parameter refers or points to `const`, the compiler uses the constness of the argument to decide which function to call:
+
+```c++
+Record lookup(Account&); 			// function that takes a reference to Account
+Record lookup(const Account&); 		// new function that takes a const reference
+const Account a;
+Account b;
+lookup(a); 							// calls lookup(const Account&)
+lookup(b); 							// calls lookup(Account&)
+```
+
+## 6.7. Pointers to Functions
+
+Like any other pointer, a function pointer points to a particular type. A function’s type is determined by its return type and the types of its parameters. The function’s name is not part of its type. For example:
+
+```c++
+// compares lengths of two strings
+bool lengthCompare(const string &, const string &);
+```
+
+has type `bool(const string&, const string&)`. To declare a pointer that can point at this function, we declare a pointer in place of the function name:
+
+```c++
+bool (*pf)(const string&, const string&)；
+```
+
+#### Using Function Pointers
+
+When we use the name of a function as a value, the function is automatically converted to a pointer:
+
+```c++
+pf = lengthCompare; 		// pf now points to the function named lengthCompare
+pf = &lengthCompare; 		// equivalent assignment: address-of operator is optional
+```
+
+Moreover, we can use a pointer to a function to call the function to which the pointer points. We can do so directly—there is no need to dereference the pointer:
+
+```c++
+bool b1 = pf("hello", "goodbye"); 				// calls lengthCompare
+bool b2 = (*pf)("hello", "goodbye"); 			// equivalent call
+bool b3 = lengthCompare("hello", "goodbye"); 	// equivalent call
+```
+
+#### Pointers to Overloaded Functions
+
+As usual, when we use an overloaded function, the context must make it clear which version is being used. When we declare a pointer to an overloaded function, the compiler uses the type of the pointer to determine which overloaded function to use. **<font color='red'>The type of the pointer must match one of the overloaded functions exactly</font>**:
+
+```c++
+void ff(int*);
+void ff(unsigned int);
+
+void (*pf1)(unsigned int) = ff; // pf1 points to ff(unsigned)
+void (*pf2)(int) = ff; 			// error: no ff with a matching parameter list
+double (*pf3)(int*) = ff; 		// error: return type of ff and pf3 don't match
+```
+
+#### Function Pointer Parameters
+
+As with arrays, we can write a parameter that looks like a function type, but it will be treated as a pointer
+
+```c++
+// third parameter is a function type and is automatically treated as a pointer to function
+void useBigger(const string &s1, const string &s2, bool pf(const string &, const string &));
+// equivalent declaration: explicitly define the parameter as a pointer to function
+void useBigger(const string &s1, const string &s2, bool (*pf)(const string &, const string &));
+
+// automatically converts the function lengthCompare to a pointer to function
+useBigger(s1, s2, lengthCompare);
+```
+
+Writing function pointer types quickly gets tedious. Type aliases, along with `decltype`, let us simplify code that uses function pointers:
+
+```c++
+// Func and Func2 have function type
+typedef bool Func(const string&, const string&);
+typedef decltype(lengthCompare) Func2; 				// equivalent type
+// FuncP and FuncP2 have pointer to function type
+typedef bool(*FuncP)(const string&, const string&);
+typedef decltype(lengthCompare) *FuncP2; 			// equivalent type
+```
+
+`Func` and `Func2` are function types, whereas `FuncP` and `FuncP2` are pointer types. **<font color='red'>It is important to note that `decltype` returns the function type; the automatic conversion to pointer is not done.</font>**
+
+```c++
+// equivalent declarations of useBigger using type aliases
+void useBigger(const string&, const string&, Func);
+void useBigger(const string&, const string&, FuncP2);
+```
+
+Both declarations declare the same function. In the first case, the compiler will automatically convert the function type represented by `Func` to a pointer.
+
+#### 6.3.3. Returning a Pointer to an Array
+
+As with arrays, we can’t return a function type but can return a pointer to a function type. Similarly, we must write the return type as a pointer type; **<font color='red'>the compiler will not automatically treat a function return type as the corresponding pointer type.</font>**
+
+```c++
+using F = int(int*, int); 		// F is a function type, not a pointer
+using PF = int(*)(int*, int); 	// PF is a pointer type
+```
+
+The thing to keep in mind is that, unlike what happens to parameters that have function type, the return type is not automatically converted to a pointer type. We must explicitly specify that the return type is a pointer type:
+
+```c++
+PF f1(int); 		// ok: PF is a pointer to function; f1 returns a pointer to function
+F f1(int); 			// error: F is a function type; f1 can't return a function
+F *f1(int); 		// ok: explicitly specify that the return type is a pointer to function
+```
+
+Of course, we can also declare `f1` directly, which we’d do as
+
+```c++
+int (*f1(int))(int*, int);
+auto f1(int) -> int (*)(int*, int);
+```
+
+Reading this declaration from the inside out, we see that `f1` has a parameter list, so `f1` is a function. `f1` is preceded by a `*` so `f1` returns a pointer. The type of that pointer itself has a parameter list, so the pointer points to a function. That function returns an `int`.
+
+#### Using `auto` or `decltype` for Function Pointer Types
+
+If we know which function(s) we want to return, we can use `decltype` to simplify writing a function pointer return type.
+
+```C++
+string::size_type sumLength(const string&, const string&);
+string::size_type largerLength(const string&, const string&);
+// depending on the value of its string parameter,
+// getFcn returns a pointer to sumLength or to largerLength
+decltype(sumLength) *getFcn(const string &);
+```
+
+The only tricky part in declaring `getFcn` is to remember that **<font color='red'>when we apply `decltype` to a function, it returns a function type, not a pointer to function type.</font>** We must add a `*` to indicate that we are returning a pointer, not a function.
