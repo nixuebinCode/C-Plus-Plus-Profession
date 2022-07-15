@@ -1240,9 +1240,10 @@ So far, we have three examples where the form of initialization matters:
 
 #### ⭐Value Initialization
 
-We can usually omit the value and supply only a size. In this case the library creates a <font color='blue'>value-initialized</font> element initializer for us.
+We can usually omit the value and supply only a size. In this case the library creates a <font color='blue'>value-initialized</font> element initializer for us. This library-generated value is used to initialize each element in the container. The value of the element initializer depends on the type of the elements stored in the vector:
 
-If the `vector` holds elements of a built-in type, such as int, then the element initializer has a value of `0`. If the elements are of a class type, such as `string`, then the element initializer is itself default initialized:
+* If the `vector` holds elements of a built-in type, such as `int`, then the element initializer has a value of `0`. 
+* If the elements are of a class type, such as `string`, then the element initializer is itself default initialized:
 
 ```c++
 vector<int> ivec(10); 		// ten elements, each initialized to 0
@@ -3912,3 +3913,304 @@ decltype(sumLength) *getFcn(const string &);
 ```
 
 The only tricky part in declaring `getFcn` is to remember that **<font color='red'>when we apply `decltype` to a function, it returns a function type, not a pointer to function type.</font>** We must add a `*` to indicate that we are returning a pointer, not a function.
+
+# Chapter 7. Classes
+
+The fundamental ideas behind classes are **<font color='blue'>data abstraction</font>** and **<font color='blue'>encapsulation</font>**
+
+A class that uses data abstraction and encapsulation defines an **<font color='blue'>abstract data type</font>**.
+
+## 7.1. Defining Abstract Data Types
+
+### 7.1.1. Designing the `Sales_data` Class
+
+The interface to `Sales_data` consists of the following operations:
+
+* An `isbn` member function to return the object’s `ISBN`
+* A `combine` member function to add one `Sales_data` object into another
+* A function named `add` to add two `Sales_data` objects
+* A `read` function to read data from an `istream` into a `Sales_data` object
+* A `print` function to print the value of a `Sales_data` object on an `ostream`
+
+#### Using the Revised `Sales_data` Class
+
+Before we think about how to implement our class, let’s look at how we can use our interface functions.
+
+```c++
+int main()
+{
+	Sales_data total;			// variable to hold the running sum
+	if (read(cin, total)) {		// read the first transaction
+		Sales_data trans;		// variable to hold data for the next transaction
+		while (read(cinm trans)) {
+			if (total.isbn() == trans.isbn()) {
+				total.combine(trans);	// update the running total
+			}
+			else {
+				print(cout, total) << endl;	// print the results
+				total = trans;				// process the next book
+			}
+		}
+		print(cout, total) << endl;			// print the last transaction
+	}
+	else {
+		cerr << "No data?!" << endl;		// notify the user
+	}
+}
+```
+
+### 7.1.2. Defining the Revised `Sales_data` Class
+
+Member functions must be declared inside the class. Member functions may be defined inside the class itself or outside the class body. Nonmember
+functions that are part of the interface, such as `add`, `read`, and `print`, are declared and defined outside the class.
+
+As we’ve seen, our class will also have two member functions, `combine` and `isbn`. In addition, we’ll give `Sales_data` another member function to return the average price at which the books were sold. This function, which we’ll name `avg_price`, isn’t intended for general use. **<font color='red'>It will be part of the implementation, not part of the interface</font>**.
+
+```c++
+struct Sales_data {
+	// new member functions
+	string isbn() const { return bookNo; }
+	Sales_data& combine(const Sales_data&);
+	double avg_price() const;
+	// data members
+	string bookNo;					// ISBN
+	unsigned units_sold = 0;		// how many copies of the book were sold
+	double revenue = 0.0;			// the total revenue for sales
+};
+```
+
+> Functions defined in the class are implicitly `inline`
+
+#### ⭐Introducing `this`
+
+Looking at the `isbn` function:
+
+```c++
+std::string isbn() const { return bookNo; }
+```
+
+The interesting thing about this function is how it gets the object from which to fetch the `bookNo` member.
+
+Member functions access the object on which they were called through an extra, implicit parameter named `this`. **<font color='red'>When we call a member function, `this` is initialized with the address of the object on which the function was invoked.</font>** For example, when we call
+
+```c++
+total.isbn()
+```
+
+the compiler passes the address of `total` to the implicit this parameter in `isbn`. It is as if the compiler rewrites this call as
+
+```c++
+Sales_data::isbn(&total);
+```
+
+Inside a member function, Any direct use of a member of the class is assumed to be an implicit reference through `this`. That is, when `isbn` uses `bookNo`, it is implicitly using the member to which `this` points. It is as if we had written `this->bookNo`. Inside the body of a member function, we can
+use `this`. It would be legal, although unnecessary, to define `isbn` as
+
+```c++
+std::string isbn() const { return this->bookNo; }
+```
+
+Because `this` is intended to always refer to “this” object, **<font color='red'>`this` is a `const` pointer</font>**.
+
+#### Introducing `const` Member Functions
+
+The other important part about the `isbn` function is the keyword `const` that follows the parameter list. **<font color='red'>The purpose of that `const` is to modify the type of the implicit `this` pointer.</font>**
+
+By default, the type of `this` is a `const` pointer to the non`const` version of the class type. For example, by default, the type of `this` in a `Sales_data` member function is `Sales_data *const`. Although `this` is implicit, it follows the normal initialization rules, which means that (by default) we cannot bind `this` to a `const` object. This fact, in turn, means that **<font color='red'>we cannot call an ordinary member function on a `const` object.</font>**
+
+A `const` following the parameter list indicates that `this` is a pointer to `const`. Member functions that use `const` in this way are `const` member functions.
+
+We can think of the body of `isbn` as if it were written as
+
+```c++
+string Sales_data::isbn(const Sales_data *const this) { return this->bookNo; }
+```
+
+The fact that `this` is a pointer to `const` means that `const` member functions cannot change the object on which they are called. Thus, `isbn` may read but not write to the data members of the objects on which it is called.
+
+#### Class Scope and Member Functions
+
+It is worth noting that `isbn` can use `bookNo` even though `bookNo` is defined after `isbn`. As we’ll see in § 7.4.1, the compiler processes classes in two steps:
+
+* the member declarations are compiled first
+* after which the member function bodies, if any, are processed.
+
+**<font color='red'>Thus, member function bodies may use other members of their class regardless of where in the class those members appear.</font>**
+
+#### Defining a Member Function outside the Class
+
+When we define a member function outside the class body, the member’s definition must match its declaration.
+
+If the member was declared as a `const` member function, then the definition must also specify `const` after the parameter list. The name of a member defined outside the class must include the name of the class of which it is a member:
+
+```c++
+double Sales_data::avg_price() const {
+	if (units_sold) {
+		return revenue / units_sold;
+	}
+	else return 0;
+}
+```
+
+The function name, `Sales_data::avg_price`, uses the scope operator to say that we are defining the function named `avg_price` that is declared in the
+scope of the `Sales_data` class. **<font color='red'>Once the compiler sees the function name, the rest of the code is interpreted as being inside the scope of the class.</font>** Thus, when `avg_price` refers to `revenue` and `units_sold`, it is implicitly referring to the members of `Sales_data`.
+
+#### Defining a Function to Return “This” Object
+
+The `combine` function is intended to act like the compound assignment operator, `+=`. The object on which this function is called represents the left-hand operand of the assignment. The right-hand operand is passed as an explicit argument:
+
+```c++
+Sales_data& Sales_data::combine(const Sales_data &rhs) {
+	units_sold += rhs.units_sold;		// add the members of rhs into
+	revenue += rhs.revenue;				// the members of "this" object
+	return *this;						// return the object on which the function was called
+}
+```
+
+The interesting part about this function is its return type and the `return` statement. As we’ve seen, we do not need to use the implicit `this` pointer to access the members of the object on which a member function is executing. However, we do need to use `this` to access the object as a whole:
+
+```c++
+total.combine(trans); // update the running total
+```
+
+Here the `return` statement dereferences `this` to obtain the object on which the function is executing. That is, for the call above, we return a reference to `total`.
+
+#### 7.1.3. Defining Nonmember Class-Related Functions
+
+We define nonmember functions as we would any other function. As with any other function, **<font color='red'>we normally separate the declaration of the function from its definition</font>**. Functions that are conceptually part of a class, but not defined inside the class, are typically declared (but not defined) in the same header as the class itself.
+
+#### Defining the `read` and `print` Functions
+
+The `read` function reads data from the given stream into the given object. The `print` function prints the contents of the given object on the given stream.
+
+```c++
+istream &read(istream &is, Sales_data &item) {
+	double price = 0;
+	is >> item.bookNo >> item.units_sold >> price;
+	item.revenue = item.units_sold * price;
+	return is;
+}
+
+ostream &print(ostream &os, const Sales_data &item) {
+	os << item.isbn() << " " << item.units_sold << " "
+		<< item.revenue << " " << item.avg_price();
+	return os;
+}
+```
+
+`print` does not print a newline. Ordinarily, **<font color='red'>functions that do output should do minimal formatting.That way user code can decide whether the newline is needed.</font>** 
+
+#### Defining the `add` Function
+
+The add function takes two `Sales_data` objects and returns a new `Sales_data` representing their sum:
+
+```c++
+Sales_data add(const Sales_data &lhs, const Sales_data &rhs) {
+	Sales_data sum = lhs;		// copy data members from lhs into sum
+	sum.combine(rhs);			// add data members from rhs into sum
+	return sum;
+}
+```
+
+### 7.1.4. Constructors
+
+Classes control object initialization by defining one or more special member functions known as **<font color='blue'>constructors</font>**. The job of a constructor is to initialize the data members of a class object. A constructor is run whenever an object of a class type is created.
+
+Constructors have the same name as the class. Unlike other functions, constructors have no return type. Like other functions, constructors have a (possibly empty) parameter list and a (possibly empty) function body.
+
+**<font color='red'>Unlike other member functions, constructors may not be declared as `const` . When we create a `const` object of a class type, the object does not
+assume its “`const`ness” until after the constructor completes the object’s initialization. Thus, constructors can write to `const` objects during their construction.</font>**
+
+#### The Synthesized Default Constructor
+
+```c++
+Sales_data total;
+```
+
+In the code above, we did not supply an initializer for the object, so we know that `total` is default initialized. **<font color='red'>Classes control default initialization by defining a special constructor, known as the default constructor. The default constructor is one that takes no arguments.</font>**
+
+If our class does not explicitly define any constructors, the compiler will implicitly define the default constructor for us. The compiler-generated constructor is known as the **<font color='blue'>synthesized default constructor</font>**. For most classes, this synthesized constructor initializes each data member of the class as follows:
+
+* If there is an in-class initializer, use it to initialize the member.
+* Otherwise, **<font color='red'>default-initialize</font>** the member.
+
+#### Some Classes Cannot Rely on the Synthesized Default Constructor
+
+1. The compiler generates a default constructor automatically only if a class declares no constructors. If we define any constructors, the class will not have a default constructor unless we define that constructor ourselves.
+2. For some classes, the synthesized default constructor does the wrong thing. Remember that objects of built-in or compound type (such as arrays and pointers) that are defined inside a block have undefined value when they are default initialized. The same rule applies to members of built-in type that are default initialized. Therefore, **<font color='red'>classes that have members of built-in or compound type should ordinarily either initialize those members inside the class or define their own version of the default constructor.</font>** Otherwise, users could create objects with members that have undefined value.
+3. Sometimes the compiler is unable to synthesize one. For example, if a class has a member that has a class type, and that class doesn’t have a default constructor, then the compiler can’t initialize that member. For such classes, we must define our own version of the default constructor. 
+
+#### Defining the `Sales_data` Constructors
+
+For our `Sales_data` class we’ll define four constructors with the following parameters:
+
+* An `istream&` from which to read a transaction
+* A `const string&` representing an `ISBN`, an `unsigned` representing the count of how many books were sold, and a `double` representing the price at which the books sold.
+* A `const string&` representing an `ISBN`. This constructor will use default values for the other members.
+* An empty parameter list (i.e., the default constructor) which as we’ve just seen, we must define because we have defined other constructors.
+
+```c++
+struct Sales_data {
+	// constructors
+	Sales_data() = default;
+	Sales_data(const string &s): bookNo(s) { }
+	Sales_data(const string &s, unsigned n, double p):
+		bookNo(s), units_sold(n), revenue(n * p) { }
+	Sales_data(istream &);
+	...
+};
+```
+
+#### `= default`
+
+Under the new standard, if we want default constructor to do exactly the same work as the synthesized version we had been using, we can ask the compiler to generate the constructor for us by writing **<font color='blue'>= default</font>** after the parameter list. 
+
+**<font color='red'>The `=default` can appear with the declaration inside the class body or on the definition outside the class body.</font>** Like any other function, if the `= default` appears inside the class body, the default constructor will be `inlined`; if it appears on the definition outside the class, the member will not be `inlined` by default.
+
+#### ⭐Constructor Initializer List 构造函数初始值列表
+
+Constructor initializer list specifies initial values for one or more data members of the object being created.
+
+The constructor that has a single `string` parameter uses that `string` to initialize `bookNo` but does not explicitly initialize the `units_sold` and `revenue` members. **<font color='red'>When a member is omitted from the constructor initializer list, it is implicitly initialized using the same process as is used by the synthesized default constructor</font>**. In this case, those members are initialized by the in-class initializers. Thus, the constructor that takes a string is equivalent to
+
+```c++
+Sales_data(const std::string &s):
+	bookNo(s), units_sold(0), revenue(0){ }
+```
+
+#### Defining a Constructor outside the Class Body
+
+Unlike our other constructors, the constructor that takes an `istream` does have work to do. Inside its function body, this constructor calls `read` to give the data members new values:
+
+```c++
+Sales_data::Sales_data(istream &is) {
+	read(is, *this);		// read will read a transaction from is into this object
+}
+```
+
+In this constructor there is no constructor initializer list, although technically speaking, it would be more correct to say that the constructor initializer list is empty. **<font color='red'>Even though the constructor initializer list is empty, the members of this object are still initialized before the constructor body is executed.</font>**
+
+Members that do not appear in the constructor initializer list are initialized by the corresponding in-class initializer (if there is one) or are default initialized. For `Sales_data` that means that when the function body starts executing, `bookNo` will be the empty string, and `units_sold` and `revenue` will both be `0`.
+
+### 7.1.5. Copy, Assignment, and Destruction
+
+In addition to defining how objects of the class type are initialized, classes also control what happens when we copy, assign, or destroy objects of the class type. If we do not define these operations, the compiler will synthesize them for us. Ordinarily, the versions that the compiler generates for us execute by copying, assigning, or destroying each member of the object.
+
+For example, in our bookstore program, when the compiler executes this assignment
+
+```c++
+total = trans; // process the next book
+```
+
+it executes as if we had written
+
+```c++
+// default assignment for Sales_data is equivalent to:
+total.bookNo = trans.bookNo;
+total.units_sold = trans.units_sold;
+total.revenue = trans.revenue;
+```
+
+#### Some Classes Cannot Rely on the Synthesized Versions
+
+For some classes the default versions do not behave appropriately. In particular, the synthesized versions are unlikely to work correctly for classes that allocate resources that reside outside the class objects themselves.(特别是，当类需要分配类对象之外的资源时，合成的版本常常会失效)
