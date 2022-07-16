@@ -1247,7 +1247,7 @@ We can usually omit the value and supply only a size. In this case the library c
 
 ```c++
 vector<int> ivec(10); 		// ten elements, each initialized to 0
-vector<string> svec(10); 	// ten elements, each an empty string
+vector<string> svec(10); 	// ten elements, each an empty stringbrace
 ```
 
 There are two restrictions on this form of initialization: 
@@ -4214,3 +4214,404 @@ total.revenue = trans.revenue;
 #### Some Classes Cannot Rely on the Synthesized Versions
 
 For some classes the default versions do not behave appropriately. In particular, the synthesized versions are unlikely to work correctly for classes that allocate resources that reside outside the class objects themselves.(特别是，当类需要分配类对象之外的资源时，合成的版本常常会失效)
+
+## 7.2. Access Control and Encapsulation
+
+At this point, we have defined an interface for our class; but our class is not yet encapsulated—users can reach inside a `Sales_data` object and meddle with its implementation. In C++ we use access specifiers to enforce encapsulation:
+
+* Members defined after a `public` specifier are accessible to all parts of the program. The `public` members define the interface to the class.
+* **<font color='red'>Members defined after a `private` specifier are accessible to the member functions of the class but are not accessible to code that uses the class.</font>** The `private` sections encapsulate (i.e., hide) the implementation.
+
+Redefining `Sales_data` once again, we now have
+
+```c++
+class Sales_data {
+public:
+	// constructors
+	Sales_data() = default;
+	Sales_data(const string &s): bookNo(s) { }
+	Sales_data(const string &s, unsigned n, double p):
+		bookNo(s), units_sold(n), revenue(n * p) { }
+	Sales_data(istream &);
+	// new member functions
+	string isbn() const { return bookNo; }
+	Sales_data& combine(const Sales_data&);
+private:
+	double avg_price() const;
+	// data members
+	string bookNo;					// ISBN
+	unsigned units_sold = 0;		// how many copies of the book were sold
+	double revenue = 0.0;			// the total revenue for sales
+};
+```
+
+Each access specifier specifies the access level of the succeeding members. The specified access level remains in effect until the next access specifier or the end of the class body.
+
+#### Using the `class` or `struct` Keyword
+
+We can define a class type using either keyword. The only difference between `struct` and `class` is the default access level:
+
+* If we use the `struct` keyword, the members defined before the first access specifier are `public`
+* If we use `class`, then the members are `private`.
+
+### 7.2.1. Friends
+
+A class can allow another class or function to access its non`public` members by making that class or function a **<font color='blue'>friend</font>**. A class makes a function its friend by including a declaration for that function preceded by the keyword `friend`:
+
+```c++
+class Sales_data {
+// friend declarations for nonmember Sales_data operations added
+friend Sales_data add(const Sales_data&, const Sales_data&);
+friend std::istream &read(std::istream&, Sales_data&);
+friend std::ostream &print(std::ostream&, const Sales_data&);
+// other members and access specifiers as before
+public:
+	...
+private:
+	...
+};
+// declarations for nonmember parts of the Sales_data interface
+Sales_data add(const Sales_data&, const Sales_data&);
+std::istream &read(std::istream&, Sales_data&);
+std::ostream &print(std::ostream&, const Sales_data&);
+```
+
+Friend declarations may appear only inside a class definition; they may appear anywhere in the class. Friends are not members of the class and are not affected by the access control of the section in which they are declared.
+
+#### Declarations for Friends
+
+A friend declaration only specifies access. It is not a general declaration of the function. If we want users of the class to be able to call a friend function, then **<font color='red'>we must also declare the function separately from the friend declaration</font>**.
+
+## 7.3. Additional Class Features
+
+### 7.3.1. Class Members Revisited
+
+To explore several additional features, we’ll define a pair of cooperating classes named `Screen` and `Window_mgr`.
+#### Defining a Type Member
+
+A `Screen` represents a window on a display. Each `Screen` has a `string` member that holds the `Screen`’s contents, and three `string::size_type` members that represent the position of the cursor, and the height and width of the screen.
+
+In addition to defining data and function members, a class can define its own local names for types. Type names defined by a class are subject to the same access controls as any other member and may be either `public` or `private`:
+
+```c++
+class Screen{
+public:
+    typedef string::size_type pos;
+private:
+    pos cursor = 0;
+    pos height = 0, width = 0;
+    string contents;
+};
+```
+
+We defined `pos` in the `public` part of `Screen` because we want users to use that name. Unlike ordinary members, **<font color='red'>members that define types must appear before they are used</font>**. As a result, type members usually appear at the beginning of the class.
+
+#### Member Functions of class `Screen`
+
+To make our class more useful, we’ll add a constructor that will let users define the size and contents of the screen, along with members to move the cursor and to get the character at a given location:
+
+```c++
+class Screen{
+public:
+    typedef string::size_type pos;
+    Screen() = default;				// needed because Screen has another constructor
+    Screen(pos ht, pos wd, char c): 
+    	height(ht), width(wd), contents(ht * wd, c) { }	// cursor initialized to 0 by its in-class initializer
+    char get() const { return contents[cursor]; }	// get the character at the cursor, // implicitly inline
+    inline char get(pos ht, pos wd) const;			// explicitly inline
+    Screen &move(pos r, pos c);						// can be made inline later
+private:
+    pos cursor = 0;
+    pos height = 0, width = 0;
+    string contents;
+};
+```
+
+#### Making Members `inline`
+
+As we’ve seen, member functions defined inside the class are automatically `inline`. Thus, `Screen`’s constructors and the version of `get` that returns the character denoted by the cursor are `inline` by default.
+
+We can explicitly declare a member function as `inline` as part of its declaration inside the class body. Alternatively, we can specify `inline` on the function definition that appears outside the class body:
+
+```c++
+inline									// we can specify inline on the definition
+Screen &Screen::move(pos r, pos c){
+    pos row = r * width;
+    cursor = row + c;
+    return *this;
+}
+
+char Screen::get(pos r, pos c) const{ 	// declared as inline in the class
+	pos row = r * width;
+	return contents[row + c];
+}
+```
+
+Although we are not required to do so, it is legal to specify `inline` on both the declaration and the definition. However, specifying `inline` only on the definition outside the class can make the class easier to read.
+
+#### Overloading Member Functions
+
+As with nonmember functions, member functions may be overloaded. The same function-matching process is used for calls to member functions as for
+nonmember functions.
+
+For example, our `Screen` class defined two versions of `get`. The compiler uses the number of arguments to determine which version to run:
+
+```c++
+Screen myscreen;
+char ch = myscreen.get();		// calls Screen::get()
+ch = myscreen.get(0,0); 		// calls Screen::get(pos, pos)
+```
+
+#### ⭐`mutable` Data Members
+
+It sometimes (but not very often) happens that a class has a data member that we want to be able to modify, even inside a `const` member function. We indicate such members by including the `mutable` keyword in their declaration.
+
+A `mutable` data member is never `const`, even when it is a member of a `const` object. Accordingly, **<font color='red'>a `const` member function may change a `mutable` member. </font>**
+
+As an example, we’ll give `Screen` a mutable member named `access_ctr`, which we’ll use to track how often each `Screen` member function is called:
+
+```c++
+class Screen{
+public:
+    void some_member() const;
+private:
+    mutable size_t access_ctr;
+    ...
+};
+void Screen::some_member() const{
+    ++access_ctr;
+}
+```
+
+Despite the fact that `some_member` is a `const` member function, it can change the value of `access_ctr`. That member is a `mutable` member, so any member function, including `const` functions, can change its value.
+
+#### ⭐Initializers for Data Members of Class Type
+
+In addition to defining the `Screen` class, we’ll define a window manager class that represents a collection of `Screen`s on a given display. This class will have a `vector` of `Screen`s in which each element represents a particular `Screen`. By default, we’d like our `Window_mgr` class to start up with a single, default-initialized `Screen`. Under the new standard, **<font color='red'>the best way to specify this default value is as an in-class initializer</font>**
+
+```c++
+class Window_mgr{
+private:
+    // Screens this Window_mgr is tracking
+	// by default, a Window_mgr has one standard sized blank Screen
+    vector<Screen> screens{Screen(24, 80, ' ')};
+};
+```
+
+In-class initializers must use either the**<font color='red'> `=` </font>**form of initialization (which we used when we initialized the the data members of `Screen`) or the direct form of
+initialization using **<font color='red'>curly braces</font>** (as we do for `screens`). 类内初始值必须使用 = 或者 {}
+
+```c++
+class Sales_data {
+...
+private:
+	// data members
+	string bookNo("A01");					// error
+	string bookNo{"A01"};					// ok
+    string bookNo = "A01";					// ok
+};
+```
+
+### 7.3.2. Functions That Return `*this`
+
+Next we’ll add functions to set the character at the cursor or at a given location:
+
+```c++
+class Screen {
+public:
+	Screen &set(char);
+	// other members as before
+};
+
+inline Screen &Screen::set(char c)
+{
+	contents[cursor] = c; 	// set the new value at the current cursor location
+	return *this; 			// return this object as an lvalue
+}
+```
+
+Like the `move` operation, our `set` member returns a reference to the object on which they are called. Functions that return a reference are lvalues, which means that they return the object itself, not a copy of the object. If we concatenate a sequence of these actions into a single expression:
+
+```c++
+// move the cursor to a given position, and set that character
+myScreen.move(4,0).set('#');
+```
+
+these operations will execute on the same object. That is, this statement is equivalent to
+
+```c++
+myScreen.move(4,0);
+myScreen.set('#');
+```
+
+Had we defined `move` and `set` to return `Screen`, rather than `Screen&`, this statement would execute quite differently. In this case it would be equivalent to:
+
+```c++
+// if move returns Screen not Screen&
+Screen temp = myScreen.move(4,0); // the return value would be copied
+temp.set('#'); // the contents inside myScreen would be unchanged
+```
+
+If `move` had a nonreference return type, then the return value of `move` would be a copy of `*this`. The call to `set` would change the temporary copy,
+not `myScreen`.
+
+#### Returning `*this` from a `const` Member Function
+
+Next, we’ll add an operation, which we’ll name `display`, to print the contents of the `Screen`. Logically, displaying a `Screen` doesn’t change the object, so we should make `display` a `const` member. If `display` is a `const` member, then**<font color='red'> `this` is a pointer to `const` and `*this` is a `const` object. </font>**Hence, the return type of `display` must be `const Sales_data&`. However, if `display` returns a reference to `const`, we won’t be able to embed `display` into a series of actions:
+
+```c++
+Screen myScreen;
+// if display returns a const reference, the call to set is an error
+myScreen.display(cout).set('*');
+```
+
+The problem is that the `const` version of `display` returns a reference to `const` and we cannot call `set` on a `const` object.
+
+#### ⭐Overloading Based on `const`
+
+We can overload a member function based on whether it is `const`. The non`const` version will not be viable for `const` objects; we can only call `const` member functions on a `const` object. We can call either version on a non`const` object, but the non`const` version will be a better match.
+
+In this example, we’ll define a `private` member named `do_display` to do the actual work of printing the `Screen`. Each of the `display` operations will call this function and then return the object on which it is executing:
+
+```c++
+class Screen{
+public:
+    Screen &display(ostream &os)
+    	{ do_display(os); return *this; }
+    const Screen &display(ostream &os) const
+    	{ do_display(os); return *this; }
+private:
+    void do_display(ostream &os) const {os << contents;}
+}
+```
+
+As in any other context, **<font color='red'>when one member calls another the `this` pointer is passed implicitly.</font>** Thus, **<font color='red'>when `display` calls `do_display`, its own `this` pointer is implicitly passed to `do_display`.</font>** When the non`const` version of `display` calls `do_display`, its `this` pointer is implicitly converted from a pointer to non`const` to a pointer to `const`.
+
+When `do_display` completes, the `display` functions each return the object on which they execute by dereferencing `this`. In the non`const` version, `this` points to a non`const` object, so that version of display returns an ordinary (non`const`) reference; the `const` member returns a `const` reference.
+
+### 7.3.3. Class Types
+
+Every class defines a unique type. Two different classes define two different types even if they define the same members.
+
+We can refer to a class type directly, by using the class name as a type name. Alternatively, we can use the class name following the keyword `class` or `struct`:
+
+```c++
+Sales_data item1; // default-initialized object of type Sales_data
+class Sales_data item1; // equivalent declaration
+```
+
+#### Class Declarations
+
+Just as we can declare a function apart from its definition, we can also declare a class without defining it:
+
+```c++
+class Screen; // declaration of the Screen class
+```
+
+This declaration, sometimes referred to as a **<font color='blue'>forward declaration</font>**, introduces the name `Screen` into the program and indicates that `Screen` refers to a class type. After a declaration and before a definition is seen, the type `Screen` is an **<font color='blue'>incomplete type</font>**—it’s known that `Screen` is a class type but not known what members that type contains.
+
+We can use an incomplete type in only limited ways: 
+
+* We can define pointers or references to such types
+* **<font color='red'>We can declare (but not define) functions that use an incomplete type as a parameter or return type.</font>**
+
+Because a class is not defined until its class body is complete, a class cannot have data members of its own type. However, a class is considered declared (but not yet defined) as soon as its class name has been seen. Therefore, a class can have data members that are pointers or references to its own type:
+
+```c++
+class Link_screen {
+	Screen window;
+	Link_screen *next;
+	Link_screen *prev;
+};
+```
+
+### 7.3.4. Friendship Revisited
+
+Our `Sales_data` class defined three ordinary nonmember functions as friends. A class can also make another class its friend or it can declare specific
+member functions of another (previously defined) class as friends.
+
+In addition, a friend function can be defined inside the class body. Such functions are implicitly inline.
+
+#### Friendship between Classes
+
+The member functions of a friend class can access all the members, including the non`public` members, of the class granting friendship.
+
+Suppose our `Window_mgr` class will have a member function, named `clear` that will reset the contents of a particular `Screen` to all blanks. To do
+this job, `clear` needs to access the private data members of `Screen`. To allow this access, `Screen` can designate `Window_mgr` as its friend:
+
+```c++
+class Screen{
+  friend class Window_mgr;
+  ...
+};
+
+class Window_mgr{
+public:
+    using ScreenIndex = vector<Screen>::size_type;
+    void clear(ScreenIndex);
+private:
+	vector<Screen> screens{Screen(24, 80, ' ')};
+};
+
+void Window_mgr::clear(ScreenIndex i){
+    Screen &s = screens[i];
+    s.contents = string(s.height * s.width, ' ');
+}
+```
+
+If `clear` were not a friend of `Screen`, this code would not compile. The `clear` function would not be allowed to use the `height` `width`, or `contents` members of `Screen`. 
+
+**<font color='red'>It is important to understand that friendship is not transitive.</font>** That is, if class `Window_mgr` has its own friends, those friends have no special access to `Screen`.
+
+#### Making A Member Function a Friend
+
+Rather than making the entire `Window_mgr` class a friend, `Screen` can instead specify that only the `clear` member is allowed access.
+
+```c++
+class Screen{
+    // Window_mgr::clear must have been declared before class Screen
+    friend void Window_mgr::clear(ScreenIndex i);
+    ...
+}
+```
+
+Making a member function a friend requires careful structuring of our programs to accommodate interdependencies among the declarations and definitions. In this example, we must order our program as follows:
+
+* First, define the `Window_mgr` class, which declares, but cannot define, `clear`. `Screen` must be declared before `clear` can use the members of `Screen`.
+* Next, define class `Screen`, including a friend declaration for `clear`.
+* Finally, define `clear`, which can now refer to the members in `Screen`.
+
+#### Overloaded Functions and Friendship
+
+Although overloaded functions share a common name, they are still different functions. Therefore, a class must declare as a friend each function in a set of overloaded functions that it wishes to make a friend:
+
+```C++
+// overloaded storeOn functions
+extern ostream& storeOn(ostream &, Screen &);
+extern BitMap& storeOn(Bitmao &, Screen &);
+class Screen{
+    friend ostream& storeOn(ostream &, Screen &);
+};
+```
+
+Class `Screen` makes the version of `storeOn` that takes an `ostream&` its friend. The version that takes a `BitMap&` has no special access to `Screen`.
+
+#### ⭐Friend Declarations and Scope
+
+Classes and nonmember functions need not have been declared before they are used in a friend declaration.
+
+Even if we define the function inside the class, we must still provide a declaration outside of the class itself to make that function visible. A declaration must exist even if we only call the friend from members of the friendship granting class.
+
+```c++
+struct X{
+    friend void f(){ /* friend function can be defined in the class body */ }
+    X(){ f(); }		// error: no declaration for f
+    void g();
+	void h();
+};
+void X::g() { return f(); } 		// error: f hasn't been declared
+void f(); 							// declares the function defined inside X
+void X::h() { return f(); } 		// ok: declaration for f is now in scope
+```
+
+It is important to understand that a friend declaration affects access but is not a declaration in an ordinary sense
