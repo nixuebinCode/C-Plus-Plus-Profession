@@ -4049,3 +4049,50 @@ vector<int> maxInWindows(const vector<int>& num, unsigned int size){
 }
 ```
 
+## 面试题59-2：队列的最大值
+
+### 题目
+
+请定义一个队列并实现函数 max 得到队列里的最大值，要求函数 max、push_back 和 pop_front 的时间复杂度都是 O(1)
+
+#### 解题思路
+
+参考上题的方法，只需要增加一个双端队列 maximums 维护该队列的最大值即可，当需要获取队列的最大值时，只需要取出 maximums 队首的元素：
+
+当往队列中插入一个值时，依次弹出队尾中比其小的元素，并把该值加入 maximums 中。
+
+当从队列中弹出一个值时，若该值为当前队列的最大值，则需要将其从 maximums 队首弹出。
+
+### 代码实现
+
+```c++
+template<typename T> class QueueWithMax
+{
+public:
+    void push_back(T val){
+        data.push_back(val);
+        while(!maximums.empty() && maximums.back() < val)
+            maximums.pop_back();
+        maximums.push_back(val);
+    }
+    void pop_front(){
+        T top = data.front();
+        data.pop_front();
+        if(top == max()){
+            maximums.pop_front();
+        }
+    }
+    T max() const{
+        if(maximums.empty()){
+            // error
+        }
+        return maximums.front();
+    }
+private:
+    deque<T> data;
+    deque<T> maximums;
+};
+```
+
+
+
