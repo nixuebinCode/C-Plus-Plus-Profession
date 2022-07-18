@@ -4615,3 +4615,615 @@ void X::h() { return f(); } 		// ok: declaration for f is now in scope
 ```
 
 It is important to understand that a friend declaration affects access but is not a declaration in an ordinary sense
+
+## 7.4. Class Scope
+
+#### Scope and Members Defined outside the Class
+
+Every class defines its own new scope. Outside the class scope, ordinary data and function members may be accessed only through an object, a reference, or a pointer using a member access operator.
+
+Outside of the class, the names of the members are hidden. **<font color='red'>Once the class name is seen, the remainder of the definition—including the parameter
+list and the function body—is in the scope of the class.</font>** As a result, we can refer to other class members without qualification.
+
+```c++
+void Window_mgr::clear(ScreenIndex i){
+    Screen &s = screens[i];
+    s.contents = string(s.height * s.width, ' ');
+}
+```
+
+Because the compiler sees the parameter list after noting that we are in the scope of class `WindowMgr`, there is no need to specify that we want the `ScreenIndex` that is defined by `WindowMgr`. For the same reason, the use of `screens` in the function body refers to name declared inside class `Window_mgr`.
+
+On the other hand, the return type of a function normally appears before the function’s name. When a member function is defined outside the class body, **<font color='red'>any name used in the return type is outside the class scope.</font>** As a result, the return type must specify the class of which it is a member.
+
+```c++
+class Window_mgr {
+public:
+	// add a Screen to the window and returns its index
+	ScreenIndex addScreen(const Screen&);
+	// other members as before
+};
+// return type is seen before we're in the scope of Window_mgr
+Window_mgr::ScreenIndex
+Window_mgr::addScreen(const Screen &s){
+	screens.push_back(s);
+	return screens.size() - 1;
+}
+```
+
+### 7.4.1. Name Lookup and Class Scope
+
+Class definitions are processed in two phases:
+
+* First, the member declarations are compiled.
+* Function bodies are compiled only after the entire class has been seen.
+
+> Member function definitions are processed after the compiler processes all of the declarations in the class.
+
+Because member function bodies are not processed until the entire class is seen, they can use any name defined inside the class.
+
+#### Name Lookup for Class Member Declarations
+
+The two-step process above applies only to names used in the body of a member function. **<font color='red'>Names used in declarations, including names used for the return type and types in the parameter list, must be seen before they are used.</font>**
+
+```c++
+typedef double Money;
+string bal;
+class Account{
+public:
+    Money balance() { return bal; }
+private:
+    Money bal;
+    // ...
+};
+```
+
+When the compiler sees the declaration of the `balance` function, it will look for a declaration of `Money` in the `Account` class. The compiler considers only declarations inside `Account` that appear before the use of `Money`. Because no matching member is found, the compiler then looks for a declaration in the enclosing scope(s). In this example, the compiler will find the `typedef` of `Money`. That type will be used for the return type of the function `balance` and as the type for the data member `bal`. 
+
+On the other hand, the function body of `balance` is processed only after the entire class is seen. Thus, the `return` inside that function returns the member named `bal`, not the `string` from the outer scope.
+
+#### ⭐Type Names Are Special
+
+Ordinarily, an inner scope can redefine a name from an outer scope even if that name has already been used in the inner scope. However, in a class, if a member uses a name from an outer scope and that name is a type, then the class may not subsequently redefine that name:
+
+```c++
+typedef double Money;
+class Account{
+public:
+    Money balance() {return bal;}
+private:
+    typedef double Money;	// error: cannot redefine Money
+    Money bal;
+};
+```
+
+#### Normal Block-Scope Name Lookup inside Member Definitions
+
+A name used in the body of a member function is resolved as follows:
+
+* First, look for a declaration of the name inside the member function. As usual, only declarations in the function body that precede the use of the name are considered.
+* If the declaration is not found inside the member function, look for a declaration inside the class. All the members of the class are considered.
+* If a declaration for the name is not found in the class, look for a declaration that is in scope before the member function definition.
+
+```c++
+int height;
+class Screen {
+public:
+	typedef std::string::size_type pos;
+	void dummy_fcn(pos height) {
+		cursor = width * height; // which height? the parameter
+	}
+private:
+	pos cursor = 0;
+	pos height = 0, width = 0;
+};
+```
+
+A function’s parameters are in the function’s scope. Thus, the name `height`, used in the body of `dummy_fcn`, refers to this parameter declaration.
+
+**<font color='red'>If we wanted to refer to the member `height`, we can do so:</font>**
+
+```c++
+void Screen::dummy_fcn(pos height) {
+	cursor = width * this->height;
+    // alternative way to indicate the member
+    cursor = width * Screen::height;
+}
+```
+
+**<font color='red'>If we want the name from the outer scope, we can ask for it explicitly using the scope operator:</font>**
+
+```c++
+void Screen::dummy_fcn(pos height) {
+	cursor = width * ::height;// which height? the global one
+}
+```
+
+#### Names Are Resolved Where They Appear within a File
+
+When a member is defined outside its class, the third step of name lookup includes names declared in the scope of the member definition as well as those that appear in the scope of the class definition. 当成员定义在类的外部时，名字查找的第三步不仅要考虑类定义之前的全局作用域中的声明，还需要考虑在成员函数定义之前的全局作用域中的声明。
+
+```c++
+int height; // defines a name subsequently used inside Screen
+class Screen {
+public:
+	typedef std::string::size_type pos;
+	void setHeight(pos);
+	pos height = 0; // hides the declaration of height in the outer scope
+};
+Screen::pos verify(Screen::pos);
+void Screen::setHeight(pos var) {
+	// var: refers to the parameter
+	// height: refers to the class member
+	// verify: refers to the global function
+	height = verify(var);
+}
+```
+
+Notice that the declaration of the global function `verify` is not visible before the definition of the class `Screen`. However, the third step of name lookup includes the scope in which the member definition appears. In this example, the declaration `for` verify appears before `setHeight` is defined and may, therefore, be used.
+
+## 7.5. Constructors Revisited
+
+### 7.5.1. Constructor Initializer List
+
+If we do not explicitly initialize a member in the constructor initializer list, that member is default initialized before the constructor body starts executing.
+
+```c++
+// use constructor initializer list
+Sales_data::Sales_data(const string &s, unsigned cnt, double price):
+	bookNo(s), units_sold(cnt), revenue(cnt * price) { }
+
+// legal but sloppier way to write the Sales_data constructor: no constructor initializers
+Sales_data::Sales_data(const string &s, unsigned cnt, double price){
+	bookNo = s;
+	units_sold = cnt;
+	revenue = cnt * price;
+}
+```
+
+The difference of the two contructor above is that**<font color='red'> the original version initializes its data members, whereas the other version assigns values to the data members.</font>**
+
+#### ⭐Constructor Initializers Are Sometimes Required
+
+We can often, but not always, ignore the distinction between whether a member is initialized or assigned. **<font color='red'>Members that are `const` or references must be initialized. Similarly, members that are of a class type that does not define a default constructor also must be initialized.</font>**
+
+```c++
+class ConstRef{
+public:
+    ConstRef(int ii);
+private:
+    int i;
+    const int ci;
+    int &ri;
+};
+
+// error: ci and ri must be initialized
+ConstRef::ConstRef(int ii)
+{ 					// assignments:
+	i = ii; 		// ok
+	ci = ii; 		// error: cannot assign to a const
+	ri = i; 		// error: ri was never initialized
+}
+```
+
+By the time the body of the constructor begins executing, initialization is complete. Our only chance to initialize `const` or reference data members is in the constructor initializer. The correct way to write this constructor is
+
+```c++
+ConstRef::ConstRef(int ii):
+	i(ii), ci(ii), ri(i){}
+```
+
+#### Order of Member Initialization
+
+The constructor initializer list specifies only the values used to initialize the members, not the order in which those initializations are performed.
+**<font color='red'>Members are initialized in the order in which they appear in the class definition</font>** The order in which initializers appear in the constructor initializer list does not change the order of initialization.
+
+```c++
+class X {
+	int i;
+	int j;
+public:
+	// undefined: i is initialized before j
+    X(int val): j(val), i(j) { }
+};
+```
+
+In this case, `i` is initialized first. The effect of this initializer is to initialize `i` with the undefined value of `j`!
+
+#### Default Arguments and Constructors
+
+The actions of the `Sales_data` default constructor are similar to those of the constructor that takes a single `string` argument. The only difference is that the constructor that takes a `string` argument uses that argument to initialize `bookNo`. The default constructor (implicitly) uses the `string` default constructor to initialize `bookNo`. We can rewrite these constructors as a single constructor with a default argument:
+
+```c++
+class Sales_data {
+public:
+	// defines the default constructor as well as one that takes a string argument
+	Sales_data(std::string s = ""): bookNo(s) { }
+	..
+};
+```
+
+**<font color='red'>Because we can call this constructor with no arguments, this constructor defines a default constructor for our class.</font>**
+
+> A constructor that supplies default arguments for all its parameters also defines the default constructor.
+
+### 7.5.2. Delegating Constructors
+
+A delegating constructor uses another constructor from its own class to perform its initialization.
+
+Like any other constructor, a delegating constructor has a member initializer list and a function body. **<font color='red'>In a delegating constructor, the member initializer list has a single entry that is the name of the class itself.</font>** The name of the class is followed by a parenthesized list of arguments. The argument list must match another constructor in the class.
+
+```c++
+class Sales_data{
+public:
+    // nondelegating constructor initializes members from corresponding arguments
+    Sales_data(string s, unsigned cnt, double price):
+    	bookNo(s), units_sold(cnt), revenue(cnt * price){}
+    // remaining constructors all delegate to another constructor
+    Sales_data(): Sales_data("", 0, 0) {}
+    Sales_data(string s): Sales_data(s, 0, 0) {}
+    Sales_data(istream &is): Sales_data() { read(is, *this); }
+    ...
+};
+```
+
+The constructor that takes an `istream&` delegates. It delegates to the default constructor, which in turn delegates to the three-argument constructor. Once those constructors complete their work, the body of the `istream&` constructor is run.
+
+When a constructor delegates to another constructor, the constructor initializer list and function body of the delegated-to constructor are both executed. The function bodies of the delegated-to constructors would be run before control returned to the function body of the delegating constructor.
+
+### ⭐7.5.3. The Role of the Default Constructor
+
+The default constructor is used automatically whenever an object is default or value initialized.
+
+Default initialization happens:
+
+* When we define nonstatic variables or arrays at block scope without initializers
+* When a class that itself has members of class type uses the synthesized default constructor
+* When members of class type are not explicitly initialized in a constructor initializer list
+
+Value initialization happens：
+
+* During array initialization when we provide fewer initializers than the size of the array
+* When we define a local static object without an initializer
+* When we explicitly request value initialization by writing an expressions of the form `T`() where `T` is the name of a type (The `vector` constructor that takes a single argument to specify the `vector`’s size uses an argument of this kind to value initialize its element initializer.)
+
+Classes must have a default constructor in order to be used in these contexts:
+
+```c++
+class NoDefault{
+public:
+    NoDefault(string s);
+};
+struct A{
+    NoDefault my_mem;
+};
+struct B{
+    B() {}		// error: no initializer for b_member
+    NoDefault my_mem;
+}
+
+A a; 			// error: cannot synthesize a constructor for A
+
+```
+
+#### Using the Default Constructor
+
+The following declaration of `obj` compiles without complaint. However, when we try to use `obj`, it will be an error:
+
+```c++
+Sales_data obj(); 						// ok: but defines a function, not an object
+if (obj.isbn() == Primer_5th_ed.isbn()) // error: obj is a function
+```
+
+Although we intended to declare a default-initialized object, `obj` actually declares a function taking no parameters and returning an object of type `Sales_data`.
+
+**<font color='red'>The correct way to define an object that uses the default constructor for initialization is to leave off the trailing, empty parentheses:</font>**
+
+```c++
+// ok: obj is a default-initialized object
+Sales_data obj;
+```
+
+### ⭐7.5.4. Implicit Class-Type Conversions
+
+Every constructor that can be called with a single argument defines an implicit conversion to a class type. Such constructors are sometimes referred to as
+**<font color='blue'>converting constructors</font>**.
+
+The `Sales_data` constructors that take a `string` and that take an `istream` both define implicit conversions from those types to `Sales_data`. That is, we can use a `string` or an `istream` where an object of type `Sales_data` is expected:
+
+```c++
+string null_book = "9-999-99999-9";
+// constructs a temporary Sales_data object
+// with units_sold and revenue equal to 0 and bookNo equal to null_book
+item.combien(nulll_book);
+```
+
+The compiler automatically creates a `Sales_data` object from the given `string`. That newly generated (temporary) `Sales_data` is passed to `combine`.
+
+#### Only One Class-Type Conversion Is Allowed
+
+The following code is in error because it implicitly uses two conversions:
+
+```c++
+// error: requires two user-defined conversions:
+// (1) convert "9-999-99999-9" to string
+// (2) convert that (temporary) string to Sales_data
+item.combine("9-999-99999-9");
+```
+
+If we wanted to make this call, we can do so by explicitly converting the character string to either a `string` or a `Sales_data` object:
+
+```c++
+item.combien(string("9-999-99999-9"));
+item.combine(Sales_data("9-999-99999-9"));
+```
+
+#### Suppressing Implicit Conversions Defined by Constructors
+
+We can prevent the use of a constructor in a context that requires an implicit conversion by declaring the constructor as `explicit`:
+
+```c++
+class Sales_data {
+public:
+	Sales_data() = default;
+	Sales_data(const std::string &s, unsigned n, double p):
+		bookNo(s), units_sold(n), revenue(p*n) { }
+	explicit Sales_data(const std::string &s): bookNo(s) { }
+	explicit Sales_data(std::istream&);
+	// remaining members as before
+};
+```
+
+Now, neither constructor can be used to implicitly create a Sales_data object. Neither of our previous uses will compile:
+
+```c++
+item.combine(null_book); 	// error: string constructor is explicit
+item.combine(cin); 			// error: istream constructor is explicit
+```
+
+The `explicit` keyword is used only on the constructor declaration inside the class. **<font color='red'>It is not repeated on a definition made outside the class body</font>**
+
+```c++
+// error: explicit allowed only on a constructor declaration in a class header
+explicit Sales_data::Sales_data(istream& is)
+{
+	read(is, *this);
+}
+```
+
+#### `explicit` Constructors Can Be Used Only for Direct Initialization
+
+We cannot use an `explicit` constructor with the copy form of initialization(with an `=`); we must use direct initialization:
+
+```c++
+ales_data item1 (null_book); // ok: direct initialization
+// error: cannot use the copy form of initialization with an explicit constructor
+Sales_data item2 = null_book;
+```
+
+#### Explicitly Using Constructors for Conversions
+
+Although the compiler will not use an `explicit` constructor for an implicit conversion, we can use such constructors explicitly to force a conversion:
+
+```c++
+item.combine(Sales_data(null_book));
+item.combine(static_cast<Sales_data>(cin));
+```
+
+In the first call, we use the `Sales_data` constructor directly. This call constructs a temporary `Sales_data` object using the `Sales_data` constructor that takes a `string`. In the second call, we use a `static_cast`  to perform an explicit, rather than an implicit, conversion.
+
+### ⭐7.5.5. Aggregate Classes 聚合类
+
+An **<font color='blue'>aggregate class</font>** gives users direct access to its members and has special initialization syntax. A class is an aggregate if
+
+* All of its data members are `public`
+* It does not define any constructors
+* It has no in-class initializers
+* It has no base classes or virtual functions
+
+For example, the following class is an aggregate:
+
+```c++
+struct Data{
+    int iVal;
+    string s;
+};
+```
+
+**<font color='red'>We can initialize the data members of an aggregate class by providing a braced list of member initializers:</font>**
+
+```c++
+// val1.ival = 0; val1.s = string("Anna")
+Data val1 = { 0, "Anna" };
+```
+
+The initializers must appear in declaration order of the data members.
+
+As with initialization of array elements, if the list of initializers has fewer elements than the class has members, the trailing members are value initialized.
+
+It is worth noting that there are three significant drawbacks to explicitly initializing the members of an object of class type:
+
+* It requires that all the data members of the class be `public`.
+* It puts the burden on the user of the class (rather than on the class author) to correctly initialize every member of every object. Such initialization is tedious and error-prone because it is easy to forget an initializer or to supply an inappropriate initializer.
+* If a member is added or removed, all initializations have to be updated.
+
+### 7.5.6. Literal Classes 字面值常量类
+
+In § 6.5.2 we noted that the parameters and return type of a `constexpr` function must be literal types. In addition to the arithmetic types, references, and pointers, certain classes are also literal types.
+
+An aggregate class whose data members are all of literal type is a literal class. 
+
+A nonaggregate class, that meets the following restrictions, is also a literal class:
+
+* The data members all must have literal type.
+* The class must have at least one `constexpr` constructor.
+* If a data member has an in-class initializer, the initializer for a member of built-in type must be a constant expression, or if the member has
+  class type, the initializer must use the member’s own `constexpr` constructor.
+* The class must use default definition for its destructor
+
+#### `constexpr` Constructors
+
+Although constructors can’t be `const` , constructors in a literal class can be `constexpr` functions.
+
+A `constexpr` constructor can be declared as `= default` or as `=delete`. Otherwise, a `constexpr` constructor must meet the requirements of a constructor—meaning **<font color='red'>it can have no return statement</font>**—and of a `constexpr` function—meaning **<font color='red'>the only executable statement it can have is a return statement</font>**. As a result, the body of a `constexpr` constructor is typically empty.
+
+```c++
+class Debug{
+public:
+    constexpr Debug(bool b = true): hw(b), io(b), other(b) {}
+    constexpr Debug(bool h, bool i, bool o): hw(b), io(i), other(o) {}
+    constexpr bool any() { return hw || io || other; }
+	void set_io(bool b) { io = b; }
+	void set_hw(bool b) { hw = b; }
+	void set_other(bool b) { hw = b; }
+private:
+	bool hw; // hardware errors other than IO errors
+	bool io; // IO errors
+	bool other; // other errors
+};
+
+```
+
+A `constexpr` constructor must initialize every data member. The initializers must either use a `constexpr` constructor or be a constant expression.
+
+**<font color='red'>A constexpr constructor is used to generate objects that are `constexpr` and for parameters or return types in `constexpr` functions:</font>**
+
+```c++
+constexpr Debug io_sub(false, true, false); 	// debugging IO
+if (io_sub.any()) // equivalent to if(true)
+	cerr << "print appropriate error messages" << endl;
+constexpr Debug prod(false); // no debugging during production
+if (prod.any()) // equivalent to if(false)
+c	err << "print an error message" << endl;
+```
+
+## ⭐7.6. `static` Class Members
+
+Classes sometimes need members that are associated with the class, rather than with individual objects of the class type.
+
+#### Declaring `static` Members
+
+We say a member is associated with the class by adding the keyword `static` to its declaration.
+
+```c++
+class Account {
+public:
+	void calculate() { amount += amount * interestRate; }
+	static double rate() { return interestRate; }
+	static void rate(double);
+private:
+	std::string owner;
+	double amount;
+	static double interestRate;
+	static double initRate();
+};
+```
+
+The `static` members of a class exist outside any object. Objects do not contain data associated with `static` data members. Thus, each `Account` object will contain two data members—`owner` and `amount`. There is only one `interestRate` object that will be shared by all the `Account` objects.
+
+Similarly, **<font color='red'>`static` member</font>** functions are not bound to any object; they **<font color='red'>do not have a `this` pointer. As a result, `static` member functions may not be declared as `const`, and we may not refer to `this` in the body of a `static` member. </font>**This restriction applies both to explicit uses of `this` and to implicit uses of `this` by calling a nonstatic member.
+
+#### Using a Class `static` Member
+
+We can access a `static` member directly through the scope operator:
+
+```c++
+double r;
+r = Account::rate(); // access a static member using the scope operator
+```
+
+Even though `static` members are not part of the objects of its class, we can use an object, reference, or pointer of the class type to access a `static` member:
+
+```c++
+Account ac1;
+Account *ac2 = &ac1;
+// equivalent ways to call the static member rate function
+r = ac1.rate(); 	// through an Account object or reference
+r = ac2->rate(); 	// through a pointer to an Account object
+```
+
+Member functions can use `static` members directly, without the scope operator:
+
+```c++
+class Account {
+public:
+	void calculate() { amount += amount * interestRate; }
+private:
+	static double interestRate;
+	// remaining members as before
+};
+```
+
+#### Defining `static` Members
+
+When we define a `static` member outside the class, we do not repeat the `static` keyword. The keyword appears only with the declaration
+inside the class body:
+
+```c++
+void Account::rate(double newRate){
+    interestRate = newRate;
+}
+```
+
+Because `static` data members are not part of individual objects of the class type, they are not defined when we create objects of the class. As a result, they are not initialized by the class’ constructors. Moreover, in general, **<font color='red'>we may not initialize a `static` member inside the class. Instead, we must define and initialize each `static` data member outside the class body.</font>**
+
+Like global objects, `static` data members are defined outside any function. Hence, once they are defined, they continue to exist until the program
+completes.
+
+```c++
+// define and initialize a static class member
+double Account::interestRate = initRate();
+```
+
+In this define, once the class name is seen, the remainder of the definition is in the scope of the class. As a result, we can use `initRate` without qualification as the initializer for `interestRate`. Note also that even though `initRate` is `private`, we can use this function to initialize `interestRate`. **<font color='red'>The definition of `interestRate`, like any other member definition, has access to the `private` members of the class.</font>**
+
+#### In-Class Initialization of `static` Data Members
+
+Ordinarily, class `static` members may not be initialized in the class body. However, we can provide in-class initializers for `static` members that have `const` integral type and must do so for `static` members that are `constexpr`s of literal type.
+
+Such members are themselves constant expressions; they can be used where a constant expression is required.
+
+```c++
+class Account{
+public:
+    static double rate() { return interesRate; }
+    static void rate(double);
+private:
+    static constexpr int period = 30;	// period is a constant expression
+    double daily_tbl[period];
+}
+```
+
+Even if a `const static` data member is initialized in the class body, that member ordinarily should be defined outside the class definition.
+
+If an initializer is provided inside the class, the member’s definition must not specify an initial value:
+
+```c++
+// definition of a static member with no initializer
+constexpr int Account::period;	// initializer provided in the class definition
+```
+
+#### `static` Members Can Be Used in Ways Ordinary Members Can’t
+
+A `static` data member can have incomplete type. In particular, **<font color='red'>a `static` data member can have the same type as the class type of which it is a member</font>**. A non`static` data member is restricted to being declared as a pointer or a reference to an object of its class:
+
+```c++
+class Bar{
+    static Bar mem1; 	// ok: static member can have incomplete type
+	Bar *mem2; 			// ok: pointer member can have incomplete type
+	Bar mem3; 			// error: data members must have complete type
+};
+```
+
+Another difference between `static` and ordinary members is that we can use a `static` member as a default argument
+
+```c++
+class Screen{
+public:
+    Screen& clear(char = bkground);
+private:
+    static const char bkground;
+};
+```
+
+A non`static` data member may not be used as a default argument because its value is part of the object of which it is a member. Using a non`static` data member as a default argument provides no object from which to obtain the member’s value and so is an error.
