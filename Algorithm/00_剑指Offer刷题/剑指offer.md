@@ -4055,7 +4055,7 @@ vector<int> maxInWindows(const vector<int>& num, unsigned int size){
 
 请定义一个队列并实现函数 max 得到队列里的最大值，要求函数 max、push_back 和 pop_front 的时间复杂度都是 O(1)
 
-#### 解题思路
+### 解题思路
 
 参考上题的方法，只需要增加一个双端队列 maximums 维护该队列的最大值即可，当需要获取队列的最大值时，只需要取出 maximums 队首的元素：
 
@@ -4094,5 +4094,93 @@ private:
 };
 ```
 
+## 面试题60：n 个骰子的点数
 
+### 题目
+
+把 n 个骰子扔在地上，所有骰子朝上一面的点数之和为 s。输入 n，打印出 s 的所有可能的值出现的概率
+
+### 解题思路一：基于递归求骰子点数，时间效率不高
+
+要想求出 n 个骰子的点数和，可以先把 n 个骰子分为两堆：第一堆只有一个；另一堆有 n-1 个。单独的那一个有可能出现 1~6 的点数。我们需要计算 1~6 的每一种点数和剩下的 n-1 个骰子来计算点数和。接下来把剩下的 n-1 个骰子仍然分为两堆：第一堆只有一个；第二堆有 n-2 个。我们把上一轮那个单独骰子的点数和这一轮单独骰子的点数相加，再和剩下的n -2 个骰子来计算点数和。分析到这里， 我们不难发现这是一种递归的思路，递归结束的条件就是最后只剩下一个骰子。
+
+易知 n 个骰子出现的点数之和 s 在 n~6n 之间，我们可以定义一个长度为 6n-n+1 的数组，令下标为 s - n 的元素表示和为 s 出现的次数。再通过上述方法计算每一个出现的次数，最后除以总次数 $ 6^n $ 即可得到每种可能值的概率。
+
+### 代码实现
+
+```c++
+void Probability(int n, int current, int sum, vector<int> &sums);
+
+void PrintProbability(int n){
+    if(n < 1)
+        return;
+    vector<int> sums(6 * n - n + 1, 0);
+    for(int i = 1; i != 7; i++){
+        Probability(n, n, i, sums);
+    }
+    int total = pow(6, n);
+    for(decltype(sums.size()) i = 0; i != sums.size(); ++i){
+        if(sums[i]){
+            cout << "The value of the sum: " << i + n << "; "
+                    << "The probability: " << static_cast<double>(sums[i]) / total << endl;
+        }
+    }
+}
+
+void Probability(int n, int current, int sum, vector<int> &sums){
+    if(n < 1)
+        return;
+    if(current == 1){
+        sums[sum - n]++;
+    }
+    else{
+        --current;
+        for(int i = 1; i != 7; i++){
+            Probability(n, current, sum + i, sums);
+        } 
+    }
+}
+```
+
+### 解题思路二：基于循环求骰子点数，时间性能好
+
+我们可以考虑用两个数组来存储骰子点数的每个总数出现的次数。在第一轮循环中，第一个数组的第 n 个数字表示骰子和为 n 出现的次数。在下一轮循环中，我们加上一个新的骰子，这个骰子可能的点数为 1、2、3、4、5、6，因此**<font color='red'>此时和为 n 的骰子出现的次数应该等于上一轮循环中骰子点数和为 n-1、n-2、n-3、n-4、n-5 与 n-6 的次数总和。</font>**
+
+### 代码实现
+
+```c++
+void PrintProbability(int n){
+    if(n < 1)
+        return;
+    vector<int> PreSums(6 * n + 1, 0);
+    vector<int> CurSums(6 * n + 1, 0);
+    for(int i = 1; i != 7; i++){
+        PreSums[i]++;
+        CurSums[i]++;
+    }
+
+    for(int k = 2; k <= n; ++k){
+        // k代表当骰子的个数，k个骰子点数之和的最小值为 k，因此 CurSums的前 k-1 个位置都要置为 0
+        for(int i = 0; i < k; ++i)
+            CurSums[i] = 0;
+        for(int i = k; i <= k * 6; ++i){    // k个骰子点数之和的范围为 k~6k
+            CurSums[i] = 0;
+            for(int j = 1; j != 7; j++){
+                if(i - j > 0){
+                    CurSums[i] += PreSums[i - j];
+                }
+            }
+        }
+        PreSums = CurSums;
+    }
+
+    int total = pow(6, n);
+    for(int i = n; i <= n * 6; i++){
+        if(CurSums[i]){
+            cout << "The value of the sum: " << i << "; "
+                    << "The probability: " << static_cast<double>(CurSums[i]) / total << endl;
+        }
+    }
+}
+```
 
