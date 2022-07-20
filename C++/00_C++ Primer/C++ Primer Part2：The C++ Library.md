@@ -258,3 +258,275 @@ for(const auto &entry : people){
 ```
 
 The interesting part of the program is the use of the string streams `formatted` and `badNums`. We use the normal output operator (`<<`) to write to these objects. But, these “writes” are really `string` manipulations. They add characters to the `string`s inside `formatted` and `badNums`, respectively.
+
+# Chapter 9. Sequential Containers
+
+## 9.1. Overview of the Sequential Containers
+
+The sequential containers, which are listed in the table, all provide fast sequential access to their elements.
+
+ ![image-20220720095204083](images/image-20220720095204083.png)
+
+A `deque` is a more complicated data structure. Like `string` and `vector`, **<font color='red'>`deque` supports fast random access.</font>** As with `string` and `vector`, adding or removing elements in the middle of a `deque` is a (potentially) expensive operation. However, adding or removing elements at either end of the `deque` is a fast operation, comparable to adding an element to a `list` or `forward_list`.
+
+The `forward_list` and `array` types were added by the new standard. 
+
+* An `array` is a safer, easier-to-use alternative to built-in arrays. Like built-in arrays, library `array`s have fixed size. As a result, `array` does not support operations to add and remove elements or to resize the container. 
+* A `forward_list` is intended to be comparable to the best handwritten, singly linked list. Consequently, `forward_list` does not have the `size` operation because storing or computing its `size` would entail overhead compared to a handwritten list. 
+
+#### Deciding Which Sequential Container to Use
+
+There are a few rules of thumb that apply to selecting which container to use:
+
+* **<font color='red'>Unless you have a reason to use another container, use a `vector`.</font>**
+* If your program has lots of small elements and space overhead matters, don’t use `list` or `forward_list`.
+* If the program requires random access to elements, use a vector or a `deque`.
+* If the program needs to insert or delete elements in the middle of the container,
+  use a list or forward_list.
+* If the program needs to insert or delete elements at the front and the back, but
+  not in the middle, use a deque.
+* **<font color='red'>If the program needs to insert elements in the middle of the container only while reading input, and subsequently needs random access to the elements:</font>**
+  * First, decide whether you actually need to add elements in the middle of a container. It is often easier to append to a `vector` and then call the library `sort` function to reorder the container when you’re done with input.
+  * If you must insert into the middle, consider using a `list` for the input phase. Once the input is complete, copy the `list` into a `vector`.
+
+## 9.2. Container Library Overview
+
+Firstly, we will cover the operations provided by all container types:
+
+ ![image-20220720100707532](images/image-20220720100707532.png)
+
+ ![image-20220720100815006](images/image-20220720100815006.png)
+
+#### Constraints on Types That a Container Can Hold
+
+Almost any type can be used as the element type of a sequential container. But some container operations impose requirements of their own on the element type. We can define a container for a type that does not support an operation-specific requirement, but we can use an operation only if the element type meets that operation’s requirements.
+
+As an example, the sequential container constructor that takes a size argument uses the element type’s default constructor. Some classes do not have a
+default constructor. We can define a container that holds objects of such types, but we cannot construct such containers using only an element count:
+
+```c++
+// assume noDefault is a type without a default constructor
+vector<noDefault> v1(10, init); 	// ok: element initializer supplied
+vector<noDefault> v2(10); 			// error: must supply an element initializer
+```
+
+### 9.2.1. Iterators
+
+With one exception, the container iterators support all the operations listed in 3.4.1. The exception is that the `forward_list` iterators do not support the
+decrement (`--`) operator. The iterator arithmetic operations listed in Table 3.4.2 apply only to iterators for `string`, `vector`, `deque`, and `array`. We cannot use these operations on iterators for any of the other container types.
+
+#### Iterator Ranges
+
+An **<font color='blue'>iterator range</font>** is denoted by a pair of iterators each of which refers to an element, or to one past the last element, in the same container. These two iterators, often referred to as `begin` and `end`.
+
+This element range is called a **<font color='blue'>left-inclusive interval</font>**. The standard mathematical notation for such a range is
+$$
+[ begin, end)
+$$
+The iterators `begin` and `end` must refer to the same container. The iterator `end` may be equal to `begin` but must not refer to an element before the one denoted by `begin`.
+
+#### Programming Implications of Using Left-Inclusive Ranges 使用左闭合范围蕴含的编程假设
+
+The library uses left-inclusive ranges because such ranges have three convenient properties:
+
+* If `begin` equals `end`, the range is empty.
+
+* If `begin` is not equal to `end`, there is at least one element in the range, and `begin` refers to the first element in that range.
+
+* We can increment `begin` some number of times until `begin == end`
+
+  ```c++
+  while(begin != end){
+      *begin = val;
+      ++begin;
+  }
+  ```
+
+### 9.2.2. Container Type Members
+
+Each container defines several types:
+
+ ![image-20220720103635083](images/image-20220720103635083.png)
+
+If we need the element type, we refer to the container’s `value_type`. If we need a reference to that type, we use `reference` or `const_reference`.
+
+To use one of these types, we must name the class of which they are a member:
+
+```c++
+list<string>::iterator iter;
+vector<int>::difference_type count;
+```
+
+### 9.2.3. `begin` and `end` Members
+
+ ![image-20220720103710511](images/image-20220720103710511.png)
+
+The `begin` and `end` operations yield iterators that refer to the first and one past the last element in the container.
+
+There are several versions of `begin` and `end`: The versions with an `r` return reverse iterators. Those that start with a `c` return the const version of the related iterator.
+
+**<font color='red'>The functions that do not begin with a `c` are overloaded. That is, there are actually two members named `begin`. </font>**
+
+* One is a `const` member that returns the container’s `const_iterator` type. 
+
+* The other is non`const` and returns the container’s `iterator` type. 
+
+Similarly for `rbegin`, `end`, and `rend`. When we call one of these members on a non`const` object, we get the version that returns `iterator`. We get a `const` version of the iterators only when we call these functions on a `const` object. 
+
+As with pointers and references to `const`, we can convert a plain `iterator` to the corresponding `const_iterator`, but not vice versa.
+
+```c++
+// type is explicitly specified
+list<string>::iterator it5 = a.begin();
+list<string>::const_iterator it6 = a.begin();
+// iterator or const_iterator depending on a's type of a
+auto it7 = a.begin(); 		// const_iterator only if a is const
+auto it8 = a.cbegin(); 		// it8 is const_iterator
+```
+
+### 9.2.4. Defining and Initializing a Container
+
+#### ⭐Initializing a Container as a Copy of Another Container
+
+There are two ways to create a new container as a copy of another one:
+
+* We can directly copy the container (excepting array)
+
+  The container and element types must match.
+
+* We can copy a range of elements denoted by a pair of iterators
+
+  There is no requirement that the container types be identical. Moreover, the element types in the new and original containers can differ as long as it is possible to convert the elements we’re copying to the element type of the container we are initializing
+
+```c++
+list<string> authors = {"Milton", "Shakespeare", "Austen"};
+vector<const char*> articles = {"a", "an", "the"};
+list<string> list2(authors); 					// ok: types match
+deque<string> authList(authors);				// error: container types don't match
+vector<string> words(articles);					// error: element types must match
+forward_list<string> words(articles.begin(), articles.end());	// ok: converts const char* elements to string
+```
+
+#### List Initialization
+
+Under the new standard, we can list initialize a container:
+
+```c++
+list<string> authors = {"Milton", "Shakespeare", "Austen"};
+vector<const char*> articles = {"a", "an", "the"};
+```
+
+When we do so, we explicitly specify values for each element in the container. For types other than `array`, the initializer list also implicitly specifies the size of the container: The container will have as many elements as there are initializers.
+
+#### Sequential Container Size-Related Constructors
+
+In addition to the constructors that sequential containers have in common with associative containers, we can also initialize the sequential containers (other than `array`) from a size and an (optional) element initializer. If we do not supply an element initializer, the library creates a **<font color='red'>value-initialized</font>** one for us:
+
+```c++
+vector<int> ivec(10, -1); 		// ten int elements, each initialized to -1
+list<string> svec(10, "hi!"); 	// ten strings; each element is "hi!"
+forward_list<int> ivec(10);		// ten elements, each initialized to 0
+deque<string> svec(10); 		// ten elements, each an empty string
+```
+
+#### Library `array`s Have Fixed Size
+
+Just as the size of a built-in array is part of its type, the size of a library `array` is part of its type.**<font color='red'> When we define an `array`, in addition to specifying the element type, we also specify the container size:</font>**
+
+```c++
+array<int, 42> 		// type is: array that holds 42 ints
+array<string, 10> 	// type is: array that holds 10 strings
+    
+array<int, 10>::size_type i; 	// array type includes element type and size
+array<int>::size_type j; 		// error: array<int> is not a type
+```
+
+Unlike the other containers, a default-constructed `array` is not empty: It has as many elements as its size. These elements are default initialized just as are elements in a built-in array.
+
+If we list initialize the `array`, the number of the initializers must be equal to or less than the size of the `array`. If there are fewer initializers than the size of the `array`, the initializers are used for the first elements and any remaining elements are value initialized.
+
+```c++
+array<int, 10> ia1; 							// ten default-initialized ints
+array<int, 10> ia2 = {0,1,2,3,4,5,6,7,8,9}; 	// list initialization
+array<int, 10> ia3 = {42};	 					// ia3[0] is 42, remaining elements are 0
+```
+
+**<font color='red'>It is worth noting that although we cannot copy or assign objects of built-in array types, there is no such restriction on `array`</font>**:
+
+```c++
+int digs[10] = {0,1,2,3,4,5,6,7,8,9};
+int cpy[10] = digs; 				// error: no copy or assignment for built-in arrays
+array<int, 10> digits = {0,1,2,3,4,5,6,7,8,9};
+array<int, 10> copy = digits; 		// ok: so long as the element type and the size match
+```
+
+### 9.2.5. Assignment and `swap`
+
+Container Assignment Operations:
+
+ ![image-20220720111253663](images/image-20220720111253663.png)
+
+If the containers had been of unequal size, **<font color='red'>after the assignment both containers would have the size of the right-hand operand</font>**.
+
+Unlike built-in arrays, the library `array` type does allow assignment. The left- and right-hand operands must have the same type:
+
+```c++
+array<int, 10> a1 = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+array<int, 10> a2 = {0};		// elements all have value 0
+a1 = a2;						// replaces elements in a1
+a2 = {0};						// error: cannot assign to an array from a braced list
+```
+
+Because the size of the right-hand operand might differ from the size of the left-hand operand, **<font color='red'>the `array` type does not support assign and it does not allow assignment from a braced list of values.</font>**
+
+#### Using `assign` (Sequential Containers Only)
+
+The assignment operator requires that the left-hand and right-hand operands have the same type. 
+
+**<font color='red'>The sequential containers (except `array`) also define a member named `assign` that lets us assign from a different but compatible type, or assign from a
+subsequence of a container. </font>** For example, we can use `assign` to assign a range of `char*` values from a `vector` into a list of `string`:
+
+```c++
+list<string> names;
+vector<const char*> oldstyle;
+names = oldstyle; 	// error: container types don't match
+// ok: can convert from const char*to string
+names.assign(oldstyle.cbegin(), oldstyle.cend());
+```
+
+The call to `assign` replaces the elements in `names` with copies of the elements in the range denoted by the iterators.
+
+A second version of `assign` takes an integral value and an element value. It replaces the elements in the container with the specified number of elements, each of which has the specified element value:
+
+```c++
+list<string> slist1(1); 		// one element, which is the empty string
+slist1.assign(10, "Hiya!"); 	// ten elements; each one is Hiya !
+```
+
+#### Using `swap`
+
+The `swap` operation exchanges the contents of two containers of the same type. After the call to `swap`, the elements in the two containers are interchanged.
+
+With the exception of `array`s, swapping two containers is guaranteed to be fast—the elements themselves are not swapped; internal data structures are swapped.
+
+The fact that elements are not moved means that, **<font color='red'>with the exception of `string`, iterators, references, and pointers into the containers are not invalidated.</font>** They refer to the same elements as they did before the `swap`. However, after the `swap`, those elements are in a different container.
+
+In the new library, the containers offer both a member and nonmember version of `swap`. Earlier versions of the library defined only the member version of `swap`. The nonmember `swap` is of most importance in generic programs. As a matter of habit, **<font color='red'>it is best to use the nonmember version of `swap`.</font>**
+
+### 9.2.6. Container Size Operations
+
+ ![image-20220720112945109](images/image-20220720112945109.png)
+
+**<font color='red'>`forward_list` provides `max_size` and `empty`, but not `size`.</font>**
+
+### 9.2.7. Relational Operators
+
+ ![image-20220720113055684](images/image-20220720113055684.png)
+
+The right- and left-hand operands must be the same kind of container and must hold elements of the same type.
+
+#### Relational Operators Use Their Element’s Relational Operator
+
+We can use a relational operator to compare two containers only if the appropriate comparison operator is defined for the element type.
+
+The container equality operators use the element’s `==` operator, and the relational operators use the element’s `<` operator. If the element type doesn’t support the required operator, then we cannot use the corresponding operations on containers holding that type.
