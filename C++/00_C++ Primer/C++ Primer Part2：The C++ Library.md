@@ -530,3 +530,338 @@ The right- and left-hand operands must be the same kind of container and must ho
 We can use a relational operator to compare two containers only if the appropriate comparison operator is defined for the element type.
 
 The container equality operators use the element’s `==` operator, and the relational operators use the element’s `<` operator. If the element type doesn’t support the required operator, then we cannot use the corresponding operations on containers holding that type.
+
+## 9.3. Sequential Container Operations
+
+### 9.3.1. Adding Elements to a Sequential Container
+
+ ![image-20220721093829665](images/image-20220721093829665.png)
+
+#### Using `push_back`
+
+Aside from `array` and `forward_list`, every sequential container (including the `string` type) supports `push_back`.
+
+```c++
+string word;
+while (cin >> word)
+	container.push_back(word);
+```
+
+The call to `push_back` creates a new element at the end of container, increasing the `size` of `container` by 1. **<font color='red'>The value of that element is a copy of `word`. </font>**The type of `container` can be any of `list`, `vector`, or `deque`.
+
+**<font color='red'>Because `string` is just a container of characters, we can use `push_back` to add characters to the end of the `string`</font>**:
+
+```c++
+void pluralize(size_t cnt, string &word){
+    if(cnt > 1)
+        word.push_back('s');	// same as word += 's'
+}
+```
+
+> **Key Concept: Container Elements Are Copies**
+> When we use an object to initialize a container, or insert an object into a container, a copy of that object’s value is placed in the container, not the object itself. There is no relationship between the element in the container and the object from which that value originated.
+
+#### Using `push_front`
+
+In addition to `push_back`, the `list`, `forward_list`, and `deque` containers support an analogous operation named `push_front`. This operation inserts a new element at the front of the container.
+
+Note that **<font color='red'>`deque`, which like `vector` offers fast random access to its elements, provides the `push_front` member even though `vector` does not.</font>** A `deque` guarantees constant-time insert and delete of elements at the beginning and end of the container. As with `vector`, inserting elements other than at the front or back of a `deque` is a potentially expensive operation.
+
+#### Adding Elements at a Specified Point in the Container
+
+The `insert` members let us insert zero or more elements at any point in the container. The `insert` members are supported for `vector`, `deque`, `list`, and `string`. `forward_list` provides specialized versions of these members that we’ll cover in §9.3.4
+
+Each of the `insert` functions takes an iterator as its first argument. The iterator indicates where in the container to put the element(s). It can refer to any position in the container, including one past the end of the container. **<font color='red'>Element(s) are inserted before the position denoted by the iterator.</font>**
+
+```c++
+vector<string> svec;
+list<string> slist;
+// equivalent to calling slist.push_front("Hello!");
+slist.insert(slist.begin(), "Hello!");
+// no push_front on vector but we can insert before begin()
+// warning: inserting anywhere but at the end of a vector might be slow
+svec.insert(svec.begin(), "Hello!");
+```
+
+####  Inserting a Range of Elements
+
+The arguments to `insert` that appear after the initial iterator argument are analogous to the container constructors that take the same parameters.
+
+1. The version that takes an element count and a value adds the specified number of identical elements before the given position:
+
+   ```c++
+   svec.insert(svec.end(), 10, "Anna")
+   ```
+
+   This code inserts ten elements at the end of `svec` and initializes each of those elements to the `string "Anna"`.
+
+2. The versions of insert that take a pair of iterators or an initializer list insert the elements from the given range before the given position
+
+   ```c++
+   vector<string> v = {"quasi", "simba", "frollo", "scar"};
+   // insert the last two elements of v at the beginning of slist
+   slist.insert(slist.begin(), v.end() - 2, v.end());
+   slist.insert(slist.end(), {"these", "words", "will", "go", "at", "the", "end"});
+   ```
+
+   When we pass a pair of iterators,**<font color='red'> those iterators may not refer to the same container as the one to which we are adding elements.</font>**
+
+   ```c++
+   // run-time error: iterators denoting the range to copy from
+   // must not refer to the same container as the one we are changing
+   slist.insert(slist.begin(), slist.begin(), slist.end());
+   ```
+
+#### ⭐Using the Return from insert
+
+The versions of `insert` that take a count or a range return an iterator to the first element that was inserted. If the range is empty, no elements are
+inserted, and the operation returns its first parameter.
+
+We can use the value returned by `insert` to repeatedly insert elements at a specified position in the container:
+
+```c++
+list<string> lst;
+auto iter = lst.begin();
+while(cin >> word)
+    iter = lst.insert(iter, word);	// same as calling push_front
+```
+
+#### Using the Emplace Operations
+
+The new standard introduced three new members—`emplace_front`, `emplace`, and `emplace_back`—that **<font color='red'>construct rather than copy elements</font>**. 
+
+When we call a `push` or `insert` member, we pass objects of the element type and those objects are copied into the container. When we call an `emplace` member, we pass arguments to a constructor for the element type. **<font color='red'>The `emplace` members use those arguments to construct an element directly in space managed by the container.</font>**
+
+```c++
+// uses the three-argument Sales_data constructor
+c.emplace_back("978-0590353403", 25, 15.99);
+// error: there is no version of push_back that takes three arguments
+c.push_back("978-0590353403", 25, 15.99);
+// ok: we create a temporary Sales_data object to pass to push_back
+c.push_back(Sales_data("978-0590353403", 25, 15.99));
+```
+
+In the call to `emplace_back`, that object is created directly in space managed by the container. The call to `push_back` creates a local temporary object that is pushed onto the container.
+
+The arguments to an `emplace` function vary depending on the element type. The arguments must match a constructor for the element type:
+
+```c++
+// iter refers to an element in c, which holds Sales_data elements
+c.emplace_back(); 					// uses the Sales_data default constructor
+c.emplace(iter, "999-999999999"); 	// uses Sales_data(string)
+// uses the Sales_data constructor that takes an ISBN, a count, and a price
+c.emplace_front("978-0590353403", 25, 15.99);
+```
+
+### 9.3.2. Accessing Elements
+
+ ![image-20220721102106189](images/image-20220721102106189.png)
+
+Each sequential container, including `array`, has a `front` member, and all except `forward_list` also have a back member. These operations return a reference to the first and last element, respectively.
+
+#### The Access Members Return References
+
+The members that access elements in a container (i.e., `front`, `back`, `subscript`, and `at`) return references. If the container is a `const` object, the return is a reference to `const`. If the container is not `const`, the return is an ordinary reference that we can use to change the value of the fetched element:
+
+```c++
+if(!c.empty()){
+    c.front() = 42;			// assigns 42 to the first element in c
+    auto &v = c.back();		// get a reference to the last element
+    v = 1024;				// changes the element in c
+    auto v2 = c.back();		// v2 is not a reference; it's a copy of c.back()
+    v2 = 0;					// no change to the element in c
+}
+```
+
+#### Subscripting and Safe Random Access
+
+The containers that provide fast random access (`string`, `vector`, `deque`, and `array`) also provide the subscript operator. The subscript operator does not check whether the index is in range. Using an out-of-range value for an index is a serious programming error, but one that the compiler will not detect.
+
+If we want to ensure that our index is valid, we can use the `at` member instead. **<font color='red'>The `at` member acts like the subscript operator, but if the index is invalid, `at` throws an `out_of_range` exception.</font>**
+
+```c++
+vector<string> svec; 	// empty vector
+cout << svec[0]; 		// run-time error: there are no elements in svec!
+cout << svec.at(0); 	// throws an out_of_range exception
+```
+
+### 9.3.3. Erasing Elements
+
+ ![image-20220721103548800](images/image-20220721103548800.png)
+
+#### The `pop_front` and `pop_back` Members
+
+The `pop_front` and `pop_back` functions remove the first and last elements, respectively. Just as there is no `push_front` for `vector` and `string`, there is also no `pop_front` for those types. Similarly, `forward_list` does not have pop_back.
+
+These operations return `void`. If you need the value you are about to pop, you must store that value before doing the pop:
+
+```c++
+while (!ilist.empty()) {
+	process(ilist.front()); 	// do something with the current top of ilist
+	ilist.pop_front(); 			// done; remove the first element
+}
+```
+
+#### ⭐Removing an Element from within the Container
+
+The `erase` members remove element(s) at a specified point in the container. We can delete a single element denoted by an iterator or a range of elements marked by a pair of iterators. **<font color='red'>Both forms of `erase` return an iterator referring to the location after the (last) element that was removed.</font>**
+
+```c++
+// erases the odd elements in a list
+list<int> lst = {0,1,2,3,4,5,6,7,8,9};
+auto it = lst.begin();
+while(it != lst.end()){
+    if(*it % 2){				// if the element is odd
+        it = list.erase(it);	// erase this element
+    }
+    else{
+        ++it;
+    }
+}
+```
+
+#### Removing Multiple Elements
+
+The iterator-pair version of `erase` lets us delete a range of elements:
+
+```c++
+elem1 = slist.erase(elem1, elem2);	// after the call elem1 = elem2
+```
+
+The iterator `elem1` refers to the first element we want to erase, and `elem2` refers to **<font color='red'>one past the last</font>** element we want to remove. 
+
+To delete all the elements in a container, we can either call `clear` or pass the iterators from `begin` and `end` to `erase`:
+
+```c++
+slist.clear();								// delete all the elements within the container
+slist.erase(slist.begin(), slist.end());	// equivalent
+```
+
+### 9.3.4. Specialized `forward_list` Operations
+
+Consider what must happen when we remove an element from a singly linked list:
+
+ ![image-20220721104759646](images/image-20220721104759646.png)
+
+Removing `elem3` changes `elem2`; `elem2` had pointed to `elem3`, but after we remove `elem3`, `elem2` points to `elem4`.
+
+When we add or remove an element, the element before the one we added or removed has a different successor. To add or remove an element, we need access to its predecessor in order to update that element’s links. However, `forward_list` is a singly linked list. In a singly linked list there is no easy way to get to an element’s predecessor. For this reason, **<font color='red'>the operations to add or remove elements in a `forward_list` operate by changing the element after the given element.</font>**
+
+For example, in our illustration, to remove `elem3`, we’d call `erase_after` on an iterator that denoted `elem2`. To support these operations, **<font color='red'>`forward_list` also defines `before_begin`, which returns an off-the-beginning iterator.</font>** This iterator lets us add or remove elements “after” the nonexistent element before the first one in the list.
+
+ ![image-20220721105217461](images/image-20220721105217461.png)
+
+**<font color='red'>When we add or remove elements in a `forward_list`, we have to keep track of two iterators—one to the element we’re checking and one to that element’s predecessor.</font>** As an example, we’ll rewrite the loop that removed the odd-valued elements from a `list` to use a `forward_list`:
+
+```c++
+// erases the odd elements in a forward_list
+forward_list<int> flst = {0,1,2,3,4,5,6,7,8,9};
+auto prev = flst.before_begin();
+auto curr = flst.begin();
+while(curr != flst.end()){
+    if(*curr % 2){		// if the element is odd
+        curr = flst.erase_after(prev);
+    }
+    else{
+        prev = curr;
+        ++curr;
+    }
+}
+```
+
+When we find an odd element, we pass `prev` to `erase_after`. This call erases the element after the one denoted by `prev`; that is, it erases the element denoted by `curr`. We reset `curr` to the return from `erase_after`, which makes `curr` denote the next element in the sequence and we leave `prev` unchanged; `prev` still denotes the element before the (new) value of `curr`. 
+
+If the element denoted by `curr` is not odd, then we have to move both iterators, which we do in the `else`.
+
+### 9.3.5. Resizing a Container
+
+ ![image-20220721112507111](images/image-20220721112507111.png)
+
+If the current size is greater than the requested size, elements are deleted from the back of the container; if the current size is less than the new size, elements are added to the back of the container:
+
+```c++
+list<int> ilist(10, 42); 		// ten ints: each has value 42
+ilist.resize(15); 				// adds five elements of value 0 to the back of ilist
+ilist.resize(25, -1); 			// adds ten elements of value -1 to the back of ilist
+ilist.resize(5); 				// erases 20 elements from the back of ilist
+```
+
+The `resize` operation takes an optional element-value argument that it uses to initialize any elements that are added to the container. If this argument is absent, added elements are **<font color='red'>value initialized</font>**.
+
+### 9.3.6. Container Operations May Invalidate Iterators
+
+Operations that add or remove elements from a container can invalidate pointers, references, or iterators to container elements. It is a serious run-time error to use an iterator, pointer, or reference that has been invalidated.
+
+When you use an iterator (or a reference or pointer to a container element), it is a good idea to minimize the part of the program during which an iterator must stay valid. Because code that adds or removes elements to a container can invalidate iterators, **<font color='red'>you need to ensure that the iterator is repositioned</font>**, as appropriate, **<font color='red'>after each operation that changes the container</font>**. This advice is especially important for `vector`, `string`, and `deque`.
+
+#### Writing Loops That Change a Container
+
+Loops that add or remove elements of a `vector`, `string`, or `deque` must cater to the fact that iterators, references, or pointers might be invalidated. The program must ensure that the iterator, reference, or pointer**<font color='red'> is refreshed on each trip</font>** through the loop. Refreshing an iterator is easy if the loop calls `insert` or `erase`. Those operations return iterators, which we can use to reset the iterator:
+
+```c++
+// remove even-valued elements and insert a duplicate of odd-valued elements
+vector<int> vi = {0,1,2,3,4,5,6,7,8,9};
+auto iter = vi.begin();
+while(iter != vi.end()){
+    if(*iter % 2){
+        iter = vi.insert(iter, *iter);	// duplicate the current element
+        iter += 2;
+    }
+    else{
+        iter = vi.erase(iter);			// remove even elements
+    }
+}
+```
+
+We refresh the iterator after both the `insert` and the `erase` because either operation can invalidate the iterator.
+
+* After the call to `erase`, there is no need to increment the iterator, because the iterator returned from `erase` denotes the next element in the sequence.
+* After the call to `insert`, we increment the iterator twice. Remember, `insert` inserts before the position it is given and returns an iterator to the inserted element. Thus, after calling `insert`, `iter` denotes the (newly added) element in front of the one we are processing. We add two to skip over the element we added and the one we just processed. Doing so positions the iterator on the next, unprocessed element.
+
+#### Avoid Storing the Iterator Returned from end
+
+When we add or remove elements in a `vector` or `string`, or add elements or remove any but the first element in a `deque`, the iterator returned by `end` is always invalidated. Thus, **<font color='red'>loops that add or remove elements should always call `end` rather than use a stored copy.</font>**
+
+```c++
+// disaster: the behavior of this loop is undefined
+auto begin = v.begin(),
+end = v.end(); 			// bad idea, saving the value of the end iterator
+while (begin != end) {
+	// do some processing
+	++begin;
+	begin = v.insert(begin, 42);
+	++begin;
+}
+```
+
+The behavior of this code is undefined. On many implementations, we’ll get an infinite loop. The problem is that we stored the value returned by the `end` operation in a local variable named `end`. In the body of the loop, we added an element. Adding an element invalidates the iterator stored in `end`. That iterator neither refers to an element in `v` nor any longer refers to one past the last element in `v`.
+
+## 9.4. How a `vector` Grows
+
+To support fast random access, `vector` elements are stored contiguously—each element is adjacent to the previous element. 
+
+When they have to get new memory, `vector` and `string` implementations typically allocate capacity beyond what is immediately needed. The container holds this storage in reserve and uses it to allocate new elements as they are added. Thus, there is no need to reallocate the container for each new element.
+
+#### Members to Manage Capacity
+
+ ![image-20220721115200940](images/image-20220721115200940.png)
+
+The `vector` and `string` types provide members that let us interact with the memory-allocation part of the implementation. 
+
+* The `capacity` operation tells us how many elements the container can hold before it must allocate more space. 
+
+* The `reserve` operation lets us tell the container how many elements it should be prepared to hold. 
+
+  A call to `reserve` changes the capacity of the `vector` only if the requested space exceeds the current capacity. If the requested size is greater than the current capacity, `reserve` allocates at least as much as (and may allocate more than) the requested amount.**<font color='red'> If the requested size is less than or equal to the existing capacity, `reserve` does nothing.</font>**
+
+  **<font color='red'>As a result, a call to `reserve` will never reduce the amount of space that the container uses.</font>**
+
+* Under the new library, we can call `shrink_to_fit` to ask a `deque`, `vector`, or `string` to return unneeded memory. This function indicates that we no longer need any excess capacity.
+
+#### `capacity` and `size`
+
+The `size` of a container is the number of elements it already holds; its `capacity` is how many elements it can hold before more space must be allocated.
+
+ ![image-20220721115920417](images/image-20220721115920417.png)
+
+A `vector` may be reallocated **<font color='red'>only </font>**when the user performs an insert operation when the `size` equals `capacity` or by a call to `resize` or `reserve` with a value that exceeds the current `capacity`.
