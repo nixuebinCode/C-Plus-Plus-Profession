@@ -865,3 +865,280 @@ The `size` of a container is the number of elements it already holds; its `capac
  ![image-20220721115920417](images/image-20220721115920417.png)
 
 A `vector` may be reallocated **<font color='red'>only </font>**when the user performs an insert operation when the `size` equals `capacity` or by a call to `resize` or `reserve` with a value that exceeds the current `capacity`.
+
+## 9.5. Additional `string` Operations
+
+The `string` type provides a number of additional operations beyond those common to the sequential containers. For the most part, these additional operations **<font color='red'>either support the close interaction between the `string` class and C-style character arrays, or they add versions that let us use indices in place of iterators.</font>**
+
+### 9.5.1. Other Ways to Construct `string`s
+
+ ![image-20220722102135109](images/image-20220722102135109.png)
+
+```c++
+const char *cp = "Hello World!!!";	// null-terminated array
+char noNull[] = {'H', 'i'};			// not null terminated
+string s1(cp);						// copy up to the null in cp; s1 = "Hello World!!!"
+string s2(noNull, 2);				// copy two characters from no_null; s2 == "Hi"
+string s3(noNull); 					// undefined: noNull not null terminated
+string s4(cp + 6, 5);				// copy 5 characters starting at cp[6]; s4 == "World"
+string s5(s1, 6, 5);				// copy 5 characters starting at s1[6]; s5 == "World"
+string s6(s1, 6);					// copy from s1 [6] to end of s1; s6 == "World!!!"
+string s7(s1,6,20);					// ok, copies only to end of s1; s7 == "World!!!"
+string s8(s1, 16);					// throws an out_of_range exception
+```
+
+#### The `substr` Operation
+
+The `substr` operation returns a `string` that is a copy of part or all of the original `string`. We can pass `substr` an optional starting position and count:
+
+ ![image-20220722102835975](images/image-20220722102835975.png)
+
+```c++
+string s("hello world");
+string s2 = s.substr(0, 5); 		// s2 = hello
+string s3 = s.substr(6); 			// s3 = world
+string s4 = s.substr(6, 11); 		// s3 = world
+string s5 = s.substr(12); 			// throws an out_of_range exception
+```
+
+### 9.5.2. Other Ways to Change a `string`
+
+ ![image-20220722104829784](images/image-20220722104829784.png)
+
+#### The `insert` and `erase` Functions
+
+In addition to the versions of `insert` and `erase` that take iterators, string provides versions that take an **<font color='red'>index</font>**. The index indicates the starting element to erase or the position before which to insert the given values:
+
+```c++
+s.insert(s.size(), 5, '!'); 	// insert five exclamation points at the end of s
+s.erase(s.size() - 5, 5); 		// erase the last five characters from s
+```
+
+The `string` library also provides versions of insert and assign that take C-style character arrays.
+
+```c++
+const char *cp = "Stately, plump Buck";
+s.assign(cp, 7);			// s == "Stately"
+s.insert(s.size(), cp + 7);	// s == "Stately, plump Buck"
+```
+
+We can also specify the characters to `insert` or `assign` as coming from another `string` or substring thereof:
+
+```c++
+string s = "some string", s2 = "some other string";
+s.insert(0, s2);				// insert a copy of s2 before position 0 in s
+s.insert(0, s2, 0, s2.size());	// insert s2.size() characters from s2 starting at s2[0] before s[0]
+```
+
+#### The `append` and `replace` Functions
+
+The `append` operation is a shorthand way of inserting at the end:
+
+```c++
+string s("C++ Primer"), s2 = s; 	// initialize s and s2 to "C++ Primer"
+s.insert(s.size(), " 4th Ed."); 	// s == "C++ Primer 4th Ed."
+s2.append(" 4th Ed."); 				// equivalent: appends " 4th Ed." to s2; s == s2
+```
+
+The `replace` operations are a shorthand way of calling `erase` and `insert`
+
+```c++
+// equivalent way to replace "4th" by "5th"
+s.erase(11, 3);				// s == "C++ Primer  Ed."
+s.insert(11, "5th");		// s == "C++ Primer 5th Ed."
+s2.replace(11, 3, "5th");	// equivalent: s == s2
+
+// In this call we remove three characters but insert five in their place.
+s.replace(11, 3, "Fifth"); // s == "C++ Primer Fifth Ed."
+```
+
+#### The Many Overloaded Ways to Change a `string`
+
+1. The `assign` and `append` functions have no need to specify what part of the `string` is changed: `assign` always replaces the entire contents of the `string` and `append` always adds to the end of the `string`.
+2. The `replace` functions provide two ways to specify the range of characters to remove:
+   * By a position and a length
+   * By an iterator range
+3. The `insert` functions give us two ways to specify the insertion point:
+   * By an index
+   * By an iterator
+
+​		In each case, the new element(s) are inserted in front of the given index or iterator
+
+4. There are several ways to specify the characters to add to the `string`. The new characters can be taken from another `string`, from a character pointer, from a brace-enclosed list of characters, or as a character and a count. When the characters come from a `string` or a character pointer, we can pass additional arguments to control whether we copy some or all of the characters from the argument.
+
+### 9.5.3. `string` Search Operations
+
+ ![image-20220722111632413](images/image-20220722111632413.png)
+
+Each of these search operations returns a `string::size_type` value that is the index of where the match occurred. If there is no match, the function returns a `static` member named `string::npos`. The library defines `npos` as a `const string::size_type` initialized with the value `-1`. Because `npos` is an unsigned type, this initializer means `npos` is equal to the largest possible size any string could have.
+
+> The `string` search functions return `string::size_type`, which is an unsigned type. As a result, it is a bad idea to use an `int`, or other signed type, to hold the return from these functions
+
+```c++
+string numbers("0123456789"), name("r2d2"), dept("03714p3");
+// locate the first digit within name
+// returns 1, i.e., the index of the first digit in name
+auto pos = name.find_first_of(numbers);
+// locate the first nonnumeric character
+// returns 5, which is the index to the character 'p'
+auto pos = dept.find_first_not_of(numbers);
+```
+
+#### ⭐Specifying Where to Start the Search
+
+We can pass an optional starting position to the find operations. One common programming pattern uses this optional argument to loop through a `string` finding all occurrences:
+
+```c++
+string::size_type pos = 0;
+while( (pos = name.find_first_of(numbers, pos)) != string::npos ){
+    cout << "found number at index: " << pos
+        	<< " element is " << name[pos] << endl;
+    ++pos;
+}
+```
+
+#### Searching Backward
+
+The `find` operations we’ve used so far execute left to right. The library provides analogous operations that search from right to left.
+
+* The `rfind` member searches for the last—that is, right-most—occurrence of the indicated substring
+* `find_last_of` searches for the last character that matches any element of the search `string`
+* `find_last_not_of` searches for the last character that does not match any element of the search `string`.
+
+### 9.5.4. The `compare` Functions
+
+In addition to the relational operators, the `string` library provides a set of `compare` functions that are similar to the C library `strcmp` function
+
+Like `strcmp`, `s.compare` returns zero or a positive or negative value depending on whether `s` is equal to, greater than, or less than the `string` formed from the given arguments.
+
+The arguments vary based on whether we are comparing two `string`s or a `string` and a character array.
+
+ ![image-20220722113323802](images/image-20220722113323802.png)
+
+### ⭐9.5.5. Numeric Conversions
+
+The new standard introduced several functions that convert between numeric data and library `string`s:
+
+ ![image-20220722113430801](images/image-20220722113430801.png)
+
+```c++
+int i = 42;
+string s = to_string(i);
+double d = stod(s);
+```
+
+**<font color='red'>The first non-whitespace character in the `string` we convert to numeric value must be a character that can appear in a number</font>**
+
+```c++
+string s2 = "pi = 3.14";
+// convert the first substring in s that starts with a digit, d = 3.14
+d = stod(s2.substr(s2.find_first_of("+-.0123456789")));
+```
+
+The first non-whitespace character in the `string` must be a sign (`+` or `-`) or a digit. The string can begin with `0x` or `0X` to indicate hexadecimal. For the functions that convert to floating-point the string may also start with a decimal point (`.`) and may contain an `e` or `E` to designate the exponent.
+
+## 9.6. Container Adaptors
+
+In addition to the sequential containers, the library defines three sequential container adaptors: `stack`, `queue`, and `priority_queue`.
+
+An adaptor is a general concept in the library. There are container, iterator, and function adaptors. Essentially, **<font color='red'>an adaptor is a mechanism for making one thing act like another.</font>** A container adaptor takes an existing container type and makes it act like a different type. 
+
+Table below lists the operations and types that are common to all the container adaptors.
+
+ ![image-20220722114135465](images/image-20220722114135465.png)
+
+#### Defining an Adaptor
+
+Each adaptor defines two constructors: the default constructor that creates an empty object, and a constructor that takes a container and initializes the adaptor by copying the given container.
+
+```c++
+// deq is a deque<int>,
+stack<int> stk(deq);	// copies elements from deq into stk
+```
+
+By default both `stack` and `queue` are implemented in terms of `deque`, and a `priority_queue` is implemented on a `vector`. We can override the default container type by naming a sequential container as a second type argument when we create the adaptor:
+
+```c++
+// empty stack implemented on top of vector
+stack<string, vector<string>> str_stk;
+// str_stk2 is implemented on top of vector and initially holds a copy of svec
+stack<string, vector<string>> str_stk2(svec);
+```
+
+There are constraints on which containers can be used for a given adaptor. All of the adaptors require the ability to add and remove elements. As a result, they cannot be built on an `array`. Similarly, we cannot use `forward_list`, because all of the adaptors require operations that add, remove, or access the last element in the container.
+
+* A `stack` requires only `push_back`, `pop_back`, and `back` operations, so we can use any of the remaining container types for a `stack`. 
+* The queue adaptor requires `back`, `push_back`, `front`, and `push_front`, so it can be built on a `list` or `deque` but not on a `vector`. 
+* A `priority_queue` requires random access in addition to the `front`, `push_back`, and `pop_back` operations; it can be built on a `vector` or a `deque` but not on a `list`.
+
+#### Stack Adaptor
+
+The operations provided by a `stack` are listed in the table below:
+
+ ![image-20220722133401392](images/image-20220722133401392.png)
+
+#### The Queue Adaptors
+
+The `queue` and `priority_queue` adaptors are defined in the `queue` header. Table below lists the operations supported by these types.
+
+ ![image-20220722133811815](images/image-20220722133811815.png)
+
+The library `queue` uses a first-in, first-out (FIFO) storage and retrieval policy. Objects entering the queue are placed in the back and objects leaving the queue are removed from the front.
+
+A `priority_queue` lets us establish a priority among the elements held in the queue. Newly added elements are placed ahead of all the elements with a lower priority. By default, the library uses the `<` operator on the element type to determine relative priorities.
+
+# Chapter 10. Generic Algorithms 泛型算法
+
+Rather than define each of useful operations as members of each container type, the standard library defines a set of **<font color='blue'>generic algorithms</font>**:
+
+* “algorithms” because they implement common classical algorithms such as sorting and searching
+* “generic” because they operate on elements of differing type and across multiple container types—not only library types such as `vector` or `list`, but also the built-in array type—and, as we shall see, over other kinds of sequences as well.
+
+## 10.1. Overview
+
+In general, the algorithms do not work directly on a container. Instead, they operate by traversing a range of elements bounded by two iterators. As the algorithm traverses the range, it does something with each element.
+
+```c++
+int val = 42;
+auto result = find(vec.begin(), vec.end(), val);
+cout << "The value " << val
+    	<< (result == vec.end() ? " is not present" : " is present") << endl;
+```
+
+The first two arguments to `find` are iterators denoting a range of elements, and the third argument is a value. It returns an iterator to the first element that is equal to that value. If there is no match, `find` returns its second iterator to indicate failure.
+
+Because `find` operates in terms of iterators, we can use the same `find` function to look for values in any type of container
+
+```c++
+stirng val = "a value";
+auto result = find(lst.cbegin(), lst.cend(), val);
+```
+
+Similarly, because pointers act like iterators on built-in arrays, **<font color='red'>we can use `find` to look in an array:</font>**
+
+```c++
+int ia[] = {27, 210, 12, 47, 109, 83};
+int val = 83;
+int *result = find(begin(ia), end(ia), val);
+// search the elements starting from ia[1] up to but not including ia[4]
+auto result = find(ia + 1, ia + 4, val);
+```
+
+#### How the Algorithms Work
+
+Conceptually, we can list the steps `find` must take:
+
+1. It accesses the first element in the sequence.
+2. It compares that element to the value we want.
+3. If this element matches the one we want, `find` returns a value that identifies this element.
+4. Otherwise, `find` advances to the next element and repeats steps 2 and 3.
+5. `find` must stop when it has reached the end of the sequence.
+6. If `find` gets to the end of the sequence, it needs to return a value indicating that the element was not found. This value and the one returned from step 3 must have compatible types.
+
+None of these operations depends on the type of the container that holds the elements. All but the second step in the `find` function can be handled by iterator operations. 
+
+Although iterators make the algorithms **<font color='red'>container independent</font>**, most of the algorithms use one (or more) operation(s) on the element type. That is, **<font color='red'>algorithms do depend on element-type Operations</font>**. For example, step 2, uses the element type’s `==` operator to compare each element to the given value.
+
+> **Key Concept: Algorithms Never Execute Container Operations**
+> The generic algorithms do not themselves execute container operations. They operate solely in terms of iterators and iterator operations. The fact that the algorithms operate in terms of iterators and not container operations has a perhaps surprising but essential implication: **<font color='red'>Algorithms never change the size of the underlying container.</font>** 
+> As we’ll see in § 10.4.1, there is a special class of iterator, the inserters, that do more than traverse the sequence to which they are bound. When we assign to these iterators, they execute insert operations on the underlying container. When an algorithm operates on one of these iterators, the iterator may have the effect of adding elements to the container. The algorithm itself, however, never does so.
