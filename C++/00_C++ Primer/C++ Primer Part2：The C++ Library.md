@@ -1124,7 +1124,7 @@ int *result = find(begin(ia), end(ia), val);
 auto result = find(ia + 1, ia + 4, val);
 ```
 
-#### How the Algorithms Work
+### How the Algorithms Work
 
 Conceptually, we can list the steps `find` must take:
 
@@ -1142,3 +1142,560 @@ Although iterators make the algorithms **<font color='red'>container independent
 > **Key Concept: Algorithms Never Execute Container Operations**
 > The generic algorithms do not themselves execute container operations. They operate solely in terms of iterators and iterator operations. The fact that the algorithms operate in terms of iterators and not container operations has a perhaps surprising but essential implication: **<font color='red'>Algorithms never change the size of the underlying container.</font>** 
 > As we’ll see in § 10.4.1, there is a special class of iterator, the inserters, that do more than traverse the sequence to which they are bound. When we assign to these iterators, they execute insert operations on the underlying container. When an algorithm operates on one of these iterators, the iterator may have the effect of adding elements to the container. The algorithm itself, however, never does so.
+
+## 10.2. A First Look at the Algorithms
+
+### 10.2.1. Read-Only Algorithms
+
+#### Algorithms and Element Types
+
+The `accumulate` function takes three arguments.  The first two specify a range of elements to sum. The third is an initial value for the sum:
+
+```c++
+// sum the elements in vec starting the summation with the value 0
+int sum = accumulate(vec.begin(), vec.end(), 0);
+```
+
+The fact that `accumulate` uses its third argument as the starting point for the summation has an important implication: **<font color='red'>It must be possible to add the element type to the type of the sum.</font>**
+
+For example, because `string` has a `+` operator, we can concatenate the elements of a `vector` of `string`s by calling `accumulate`:
+
+```c++
+string sum = accumulate(v,cbegin(), v.cend(), string(""));
+```
+
+This call concatenates each element in `v` onto a `string` that starts out as the empty string.
+
+Note that we explicitly create a string as the third parameter. **<font color='red'>Passing the empty string as a string literal would be a compile-time error</font>**:
+
+```c++
+// error: no + on const char*
+string sum = accumulate(v.cbegin(), v.cend(), "");
+```
+
+Had we passed a string literal, the type of the object used to hold the sum would be `const char*`. That type determines which `+` operator is used. Because there is no `+` operator for type `const char*`, this call will not compile.
+
+#### Algorithms That Operate on Two Sequences
+
+Another read-only algorithm is `equal`, which lets us determine whether two sequences hold the same values. The algorithm takes three iterators: The first two (as usual) denote the range of elements in the first sequence; the third denotes the first element in the second sequence:
+
+```c++
+// roster2 should have at least as many elements as roster1
+equal(roster1.cbegin(), roster1.cend(), roster2.cbegin());
+```
+
+Because `equal` operates in terms of iterators, we can call `equal` to compare elements in containers of different types. Moreover, the element types also need not be the same so long as we can use `==` to compare the element types. For example, `roster1` could be a `vector<string>` and `roster2` a `list<const char*>`.
+
+### 10.2.2. Algorithms That Write Container Elements
+
+Remember, **<font color='red'>algorithms do not perform container operations, so they have no way themselves to change the size of a container.</font>** So when we use an algorithm that assigns to elements, we must take care to ensure that the sequence into which the algorithm writes is at least as large as the number of elements we ask the algorithm to write.
+
+As one example, the `fill` algorithm takes a pair of iterators that denote a range and a third argument that is a value. `fill` assigns the given value to each element in the input sequence:
+
+```c++
+fill(vec.begin(), vec.end(), 0);	// reset each element to 0
+```
+
+#### Algorithms Do Not Check Write Operations
+
+Some algorithms take an iterator that denotes a separate destination. For example, the `fill_n` function takes a single iterator, a count, and a value. It assigns the given value to the specified number of elements starting at the element denoted to by the iterator. We might use fill_n to
+assign a new value to the elements in a vector:
+
+```c++
+fill_n(dest, n, val);
+```
+
+`fill_n` assumes that `dest` refers to an element and that there are at least `n` elements in the sequence starting from `dest`. It's an error  to call `fill_n` (or similar algorithms that write to elements) on a container that has no elements:
+
+```c++
+vector<int> vec; // empty vector
+// disaster: attempts to write to ten (nonexistent) elements in vec
+fill_n(vec.begin(), 10, 0);
+```
+
+#### Introducing `back_inserter`
+
+An **<font color='blue'>insert iterator</font>** is an iterator that adds elements to a container. When we assign through an insert iterator, a new element equal to the right-hand value is added to the container.
+
+`back_inserter` is a function defined in the `iterator` header. `back_inserter` takes a reference to a container and returns an insert iterator bound to that container. When we assign through that iterator, the assignment calls `push_back` to add an element with the given value to the container
+
+```c++
+vector<int> vec;
+auto it = back_inserter(vec);	// assigning through it adds elements to vec
+*it = 42;						// vec now has one element with value 42
+```
+
+We frequently use `back_inserter` to create an iterator to use as the destination of an algorithm. For example:
+
+```c++
+vector<int> vec; 					// empty vector
+// ok: back_inserter creates an insert iterator that adds elements to vec
+fill_n(back_inserter(vec), 10, 0); 	// appends ten elements to vec
+```
+
+#### Copy Algorithms
+
+This algorithm takes three iterators. The first two denote an input range; the third denotes the beginning of the destination sequence.
+
+```c++
+int a1[] = {0,1,2,3,4,5,6,7,8,9};
+int a2[sizeof(a1) / sizeof(*a1)];
+auto ret = copy(begin(a1), end(a1), a2);
+```
+
+The value returned by `copy` is the (incremented) value of its destination iterator. That is, `ret` will point just past the last element copied into a2.
+
+#### Replace Algorithms
+
+This algorithm reads a sequence and replaces every instance of a given value with another value. This algorithm takes four parameters: two iterators denoting the input range, and two values. It replaces each element that is equal to the first value with the second:
+
+```c++
+// replace any element with the value 0 with 42
+replace(ilist.begin(), ilist.end(), 0, 42);
+```
+
+If we want to leave the original sequence unchanged, we can call `replace_copy`. That algorithm takes a third iterator argument denoting a destination in which to write the adjusted sequence:
+
+```c++
+// use back_inserter to grow destination as needed
+replace(ilist.begin(), ilist.end(), back_inserter(ivec) 0, 42);
+```
+
+After this call, `ilst` is unchanged, and `ivec` contains a copy of `ilst` with the exception that every element in `ilst` with the value `0` has the value `42` in `ivec`.
+
+### 10.2.3. Algorithms That Reorder Container Elements
+
+A call to `sort` arranges the elements in the input range into sorted order using the element type’s `<` operator.
+
+As an example, suppose we want to reduce a `vector<string>` so that each word appears only once:
+
+```c++
+the quick red fox jumps over the slow red turtle
+```
+
+Given this input, our program should produce the following vector:
+
+ ![image-20220724095625788](images/image-20220724095625788.png)
+
+#### Eliminating Duplicates
+
+```c++
+void elimDups(vector<string> &words){
+    sort(words.begin(), words.end());
+    auto end_unique = unique(words.begin(), words.end());
+    words.erase(end_unique, words.end());
+}
+```
+
+1. The `sort` algorithm takes two iterators denoting the range of elements to sort. In this call, we sort the entire `vector`. After the call to `sort`, `words` is ordered as
+
+    ![image-20220724095922578](images/image-20220724095922578.png)
+
+2. Once `words` is sorted, we want to keep only one copy of each word. The `unique` algorithm rearranges the input range to “eliminate” adjacent duplicated entries, and returns an iterator that denotes the end of the range of the unique values. After the call to `unique`, the `vector` holds
+
+    ![image-20220724100144357](images/image-20220724100144357.png)
+
+   The size of `words` is unchanged; it still has ten elements. The order of those elements is changed—the adjacent duplicates have been “removed.” We put remove in quotes because `unique` doesn’t remove any elements. Instead, it overwrites adjacent duplicates so that **<font color='red'>the unique elements appear at the front of the sequence.</font>**
+
+3. To actually remove the unused elements, we must use a container operation, which we do in the call to `erase`
+
+## 10.3. Customizing Operations
+
+Many of the algorithms compare elements in the input sequence. By default, such algorithms use either the element type’s `<` or `==` operator. The library also defines versions of these algorithms that let us supply our own operation to use in place of the default operator.
+
+### 10.3.1. Passing a Function to an Algorithm
+
+#### Predicates
+
+A **<font color='blue'>predicate </font>**is an expression that can be called and that returns a value that can be used as a condition. 
+
+**<font color='red'>The predicates used by library algorithms are either unary predicates (meaning they have a single parameter) or binary predicates (meaning they have two parameters). </font>**
+
+As one example, assume that we want to print the `vector` after we call `elimDups`. However, we’ll also assume that we want to see the words ordered by
+their size, and then alphabetically within each size. We can use the version of `sort` that takes a binary predicate. It uses the given predicate in place of `<` to compare elements:
+
+```c++
+bool isShorter(const string &s1, const string &s2){
+    return s1.size() < s2.size()l;
+}
+sort(words.begin(), words.end(), isShorter);
+```
+
+#### Sorting Algorithms
+
+When we sort `words` by size, we also want to maintain alphabetic order among the elements that have the same length. To keep the words of the same length in alphabetical order we can use the `stable_sort` algorithm. **<font color='red'>A stable sort maintains the original order among equal elements.</font>**
+
+Ordinarily, we don’t care about the relative order of equal elements in a sorted sequence. After all, they’re equal. **<font color='red'>However, in this case, we have defined “equal” to mean “have the same length.” Elements that have the same length still differ from one another when we view their contents.</font>** By calling `stable_sort`, we can maintain alphabetical order among those elements that have the same length
+
+```c++
+elimDups(words); 	// put words in alphabetical order and remove duplicates
+// resort by length, maintaining alphabetical order among words of the same length
+stable_sort(words.begin(), words.end(), isShorter);
+```
+
+### ⭐10.3.2. Lambda Expressions
+
+The predicates we pass to an algorithm must have exactly one or two parameters, depending on whether the algorithm takes a unary or binary predicate, respectively. However, sometimes we want to do processing that requires more arguments than the algorithm’s predicate allows.
+
+Suppose we want to find the first element in the `vector` that has the given size. We can use the library `find_if` algorithm to find an element that has a particular size. The third argument to `find_if` is a predicate. **<font color='red'>The `find_if` algorithm calls the given predicate on each element in the input range.</font>** It returns the first element for which the predicate returns a nonzero value, or its end iterator if no such element is found.
+
+It would be easy to write a function that takes a `string` and a size and returns a bool indicating whether the size of a given `string` is greater than the given size. However `find_if` takes a unary predicate—any function we pass to find_if must have exactly one parameter that can be called with an element from the input sequence. There is no way to pass a second argument representing the size.
+
+#### Introducing Lambdas
+
+We can pass any kind of callable object to an algorithm. An object or expression is callable if we can apply the call operator  to it.
+
+There are four callable objects:
+
+* functions
+* function pointers
+* classes that overloader the function-call operator
+* lambda expressions
+
+A lambda expression represents a callable unit of code. **<font color='red'>It can be thought of as an unnamed, inline function:</font>**
+
+```c++
+[capture list](parameter list) -> return type { function body }
+```
+
+**<font color='blue'>capture list</font>** is an (often empty) list of local variables defined in the enclosing function
+
+We can omit either or both of the parameter list and return type but **<font color='red'>must always include the capture list and function body</font>**:
+
+* Omitting the parentheses and the parameter list in a lambda is equivalent to specifying an empty parameter list.
+* If we omit the return type, **<font color='red'>the lambda has an inferred return type that depends on the code in the function body.</font>** If the function body is just a return statement, the return type is inferred from the type of the expression that is returned. Otherwise, the return type is void.
+
+```c++
+auto f = [] { return 42; }
+cout << f() << endl;		// prints 42
+```
+
+#### Passing Arguments to a Lambda
+
+As with an ordinary function call, the arguments in a call to a lambda are used to initialize the lambda’s parameters. Unlike ordinary functions, a lambda may not have default arguments. 
+
+We can rewrite our call to `stable_sort` to use this lambda as follows:
+
+```c++
+stable_sort(words.begin(), words.end(),
+            	[](const string &s1, const string &s2)
+            		{ return s1.size() < s2.size(); });
+```
+
+When `stable_sort` needs to compare two elements, it will call the given lambda expression.
+
+#### Using the Capture List
+
+We’re now ready to solve our original problem, We want an expression that will compare the length of each string in the input sequence with the value of the `sz` parameter in the `biggies` function:
+
+```c++
+void biggies(vector<string> &words, vector<string>::size_type sz){
+	// ...
+}
+```
+
+A lambda specifies the variables it will use by including those local variables in its capture list. In this case, our lambda will capture `sz` and will have a single `string` parameter. The body of our lambda will compare the given `string`’s size with the captured value of `sz`:
+
+```c++
+auto f = [sz](const string &s) { return s.size() >= sz; }
+```
+
+#### Calling `find_if`
+
+Using this lambda, we can find the first element whose size is at least as big as `sz`:
+
+```c++
+void biggies(vector<string> &words, vector<string>::size_type sz){
+	auto wc = find_if(words.begin(), words.end(), 
+                     [sz](const string &s) { return s.size() >= sz; });
+}
+```
+
+#### ⭐The `for_each` Algorithm
+
+This algorithm takes a callable object and calls that object on each element in the input range:
+
+```c++
+void biggies(vector<string> &words, vector<string>::size_type sz){
+	auto wc = find_if(words.begin(), words.end(), 
+                     [sz](const string &s) { return s.size() >= sz; });
+    for_each(wc, words.end(),
+    					[](const string &s) { cout << s << " "; });
+    cout << endl;
+}
+```
+
+Note that the capture list in this lambda is empty, yet the body uses `cout`. 
+
+The capture list is empty, because **<font color='red'>we use the capture list only for (nonstatic) variables defined in the surrounding function</font>**. A lambda can use names that are defined outside the function in which the lambda appears.
+
+> The capture list is used for local non`static` variables only; lambdas can use local `static`s and variables declared outside the function directly.
+
+### 10.3.3. Lambda Captures and Returns
+
+**<font color='red'>When we define a lambda, the compiler generates a new (unnamed) class type that corresponds to that lambda</font>**. When we pass a lambda to a function, we are defining both a new type and an object of that type: The argument is an unnamed object of this compiler-generated class type. Similarly, when we use `auto` to define a variable initialized by a lambda, we are defining an object of the type generated from that lambda.
+
+By default, the class generated from a lambda contains a data member corresponding to the variables captured by the lambda.
+
+#### Capture by Value
+
+The table below covers the various ways we can form a capture list.
+
+ ![image-20220724110340835](images/image-20220724110340835.png)
+
+**<font color='red'>Unlike parameters, the value of a captured variable is copied when the lambda is created, not when it is called</font>**
+
+```c++
+void fcn1()
+{
+	size_t v1 = 42; // local variable
+	// copies v1 into the callable object named f
+	auto f = [v1] { return v1; };
+	v1 = 0;
+	auto j = f(); // j is 42; f stored a copy of v1 when we created it
+}
+```
+
+#### Capture by Reference
+
+```c++
+void fcn2()
+{
+	size_t v1 = 42; // local variable
+	// the object f2 contains a reference to v1
+	auto f2 = [&v1] { return v1; };
+	v1 = 0;
+	auto j = f2(); // j is 0; f2 refers to v1; it doesn't store it
+}
+```
+
+Reference captures are sometimes necessary. For example, we might want our `biggies` function to take a reference to an `ostream` on which to write and a character to use as the separator:
+
+```c++
+void biggies(vector<string> &words, vector<string>::size_type sz, ostream &os = cout, char c = ' '){
+    for_each(words.begin(), words.end(), [&os, c](const string &s) { os << s <<  c; });
+    cout << endl;
+}
+```
+
+> Waining
+>
+> When we capture a variable by reference, we must ensure that the variable exists at the time that the lambda executes.
+
+#### Implicit Captures
+
+Rather than explicitly listing the variables we want to use from the enclosing function, we can let the compiler infer which variables we use from the code in the lambda’s body.
+
+To direct the compiler to infer the capture list, we use an `&` or `=` in the capture list. The `&` tells the compiler to capture by reference, and the `=` says the values are captured by value.
+
+```c++
+auto wc = find_if(words.begin(), words.end(), [=](const string &s) { return s.size() >= sz; });
+```
+
+If we want to capture some variables by value and others by reference, we can mix implicit and explicit captures:
+
+```C++
+// os implicitly captured by reference; c explicitly captured by value
+for_each(words.begin(), words.end(),
+			[&, c](const string &s) { os << s << c; });
+// os explicitly captured by reference; c implicitly captured by value
+for_each(words.begin(), words.end(),
+			[=, &os](const string &s) { os << s << c; });
+```
+
+#### Mutable Lambdas
+
+By default,**<font color='red'> a lambda may not change the value of a variable that it copies by value in its body</font>**. If we want to be able to change the value of a captured variable, we must follow the parameter list with the keyword `mutable`. Lambdas that are mutable may not omit the parameter list:
+
+```c++
+void fcn3(){
+    size_t v1 = 42;
+    auto f = [v1]() { return ++v1; };
+    v1 = 0;
+    auto j = f();		// j is 43
+}
+```
+
+Whether a variable captured by reference can be changed (as usual) depends only on whether that reference refers to a `const` or non`const` type:
+
+```c++
+void fcn4(){
+	size_t v1 = 42;
+	auto f2 = [&v1] { return ++v1; };
+	v1 = 0;
+	auto j = f2(); // j is 1
+}
+```
+
+#### Specifying the Lambda Return Type
+
+**<font color='red'>By default, if a lambda body contains any statements other than a `return`, that lambda is assumed to return `void`.</font>**
+
+As a simple example, we might use the library `transform` algorithm and a lambda to replace each negative value in a sequence with its absolute value:
+
+```c++
+transform(ivec.begin(), ivec.end(), ivec.begin(), [](int i){ return i > 0 ? i : -i });
+```
+
+The lambda body is a single `return` statement. We need not specify the return type, because that type can be inferred from the type of the conditional operator.
+
+However, if we write the seemingly equivalent program using an `if` statement, our code won’t compile:
+
+```c++
+transform(ivec.begin(), ivec.end(), ivec.begin(),
+          	[](int i){
+            	if(i > 0)
+                    return i;
+                else
+                    return -i;
+            });
+```
+
+This version of our lambda infers the return type as `void` but we returned a value. When we need to define a return type for a lambda, we must use a trailing return type.
+
+```c++
+transform(ivec.begin(), ivec.end(), ivec.begin(),
+          	[](int i) -> int{
+            	if(i > 0)
+                    return i;
+                else
+                    return -i;
+            });
+```
+
+### 10.3.4. Binding Arguments
+
+Lambda expressions are most useful for simple operations that we do not need to use in more than one or two places. If we need to do the same operation in many places, we should usually define a function rather than writing the same lambda expression multiple times. 
+
+However, it is not so easy to write a function to replace a lambda that captures local variables. For example, the lambda that we used in the call to `find_if` compared a `string` with a given size. We can easily write a function to do the same work:
+
+```c++
+bool check_size(const string &s, string::size_type sz)
+{
+	return s.size() >= sz;
+}
+```
+
+However, we can’t use this function as an argument to `find_if`. As we’ve seen, `find_if` takes a unary predicate, so the callable passed to `find_if` must take a single `argument`.
+
+#### The Library `bind` Function
+
+The `bind` function can be thought of as a general-purpose function adaptor. It takes a callable object and generates a new callable that “adapts” the parameter list of the original object:
+
+```c++
+auto newCallable = bind(callable, arg_list);
+```
+
+When we call `newCallable`, `newCallable` calls `callable`, passing the arguments in `arg_list`.
+
+The arguments in `arg_list` may include names of the form `_n`, where `n` is an integer. These arguments are “placeholders” representing the parameters of `newCallable`. They stand “in place of” the arguments that will be passed to `newCallable`. The number `n` is the position of the parameter in the generated callable: `_1` is the first parameter in `newCallable`, `_2` is the second, and so forth.
+
+#### Binding the `sz` Parameter of `check_size`
+
+```c++
+// check6 is a callable object that takes one argument of type string
+// and calls check_size on its given string and the value 6
+auto check6 = bind(check_size, _1, 6);
+string s = "hello";
+check6(s);	// check6(s) calls check_size(s, 6);
+```
+
+1. This call to `bind` has only one placeholder, which means that `check6` takes a single argument.
+2. The placeholder appears first in `arg_list`, which means that the parameter in `check6` corresponds to the first parameter of `check_size`. That parameter is a `const string&`, which means that the parameter in `check6` is also a `const string&`.
+3. The second argument in `arg_list` (i.e., the third argument to bind) is the value `6`. That value is bound to the second parameter of `check_size`.
+
+Using `bind`, we can replace our original lambda-based call to `find_if`
+
+```c++
+auto wc = find_if(words.begin(), words.end(), 
+                     [sz](const string &s) { return s.size() >= sz; });
+```
+
+with a version that uses `check_size`:
+
+```c++
+auto wc = find_if(words.begin(), words.end(), bind(check_size, _1, sz));
+```
+
+#### Using placeholders Names
+
+The `_n` names are defined in a namespace named `placeholders`. That namespace is itself defined inside the `std` namespace. To use these names, we
+must supply the names of both namespaces.
+
+```c++
+using std::placeholders::_1;
+using std::placeholders::_2;
+```
+
+Rather than separately declaring each placeholder, we can use a different form of `using`
+
+```c++
+using namespcae std::placeholders;
+```
+
+makes all the names defined by `placeholders` usable.
+
+#### Arguments to bind
+
+More generally, we can use `bind` to bind or rearrange the parameters in the given callable.
+
+```c++
+auto g = bind(f, a, b, _2, c, _1);
+```
+
+generates a new callable that takes two arguments. The first argument to `g` is bound to `_1`, and the second argument is bound to `_2`. Thus, when
+we call `g`, the first argument to `g` will be passed as the last argument to `f`; the second argument to `g` will be passed as `f`’s third argument.
+
+For example, calling `g(X, Y)` calls
+
+```c++
+f(a, b, Y, c, X)l
+```
+
+#### Using to bind to Reorder Parameters
+
+As a more concrete example of using `bind` to reorder arguments, we can use `bind` to invert the meaning of `isShorter` by writing
+
+```c++
+// sort on word length, shortest to longest
+sort(words.begin(), words.end(), isShorter);
+// sort on word length, longest to shortest
+sort(words.begin(), words.end(), bind(isShorter, _2, _1));
+```
+
+#### Binding Reference Parameters
+
+By default, the arguments to `bind` that are not placeholders are copied into the callable object that `bind` returns. However, as with lambdas, sometimes we have arguments that we want to bind but that we want to pass by reference.
+
+For example, to replace the lambda that captured an `ostream` by reference:
+
+```c++
+for_each(words.begin(), words.end(),
+			[&os, c](const string &s) { os << s << c; });
+```
+
+We can easily write a function to do the same job:
+
+```c++
+ostream &print(ostream &os, const string &s, char c)
+{
+	return os << s << c;
+}
+```
+
+However, we can’t use `bind` directly to replace the capture of `os`:
+
+```c++
+// error: cannot copy os
+for_each(words.begin(), words.end(),
+			bind(print, os, _1, c));
+```
+
+**<font color='red'>If we want to pass an object to bind without copying it, we must use the library `ref` function:</font>**
+
+```c++
+for_each(words.begin(), words.end(),
+			bind(print, ref(os), _1, c));
+```
+
+There is also a `cref` function that generates a class that holds a reference to `const`. 
