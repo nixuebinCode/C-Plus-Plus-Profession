@@ -2012,3 +2012,548 @@ The generic versions of the other algorithms that the `list` types define can be
 #### The List-Specific Operations Do Change the Containers
 
 A crucially important difference between the list-specific and the generic versions is that the list versions change the underlying container. For example, the list version of `remove` removes the indicated elements. The list version of `unique` removes the second and subsequent duplicate elements.
+
+# Chapter 11. Associative Containers
+
+The library provides eight associative containers: 
+
+ ![image-20220726184233332](images/image-20220726184233332.png)
+
+These eight differ along three dimensions: Each container is (1) a `set` or a `map`, (2) requires unique keys or allows multiple keys, and (3) stores the elements in order or not.
+
+## 11.1. Using an Associative Container
+
+A `map` is a collection of key–value pairs. Values in a `map` are found by a key rather than by their position.
+
+A `set` is simply a collection of keys. A `set` is most useful when we simply want to know whether a value is present.
+
+#### Using a `map`
+
+A classic example that relies on associative arrays is a word-counting program:
+
+```c++
+map<string, size_t> word_count;
+string word;
+while(cin >> word)
+    ++word_count[]
+for(const auto &w : word_count)
+    cout << w.first << " occurs " << w.second << " time(s)" << endl;
+```
+
+The `while` loop reads the standard input one word at a time. It uses each word to subscript `word_count`. **<font color='red'>If `word` is not already in the `map`, the subscript operator creates a new element whose key is `word` and whose value is `0`.</font>**
+
+When we fetch an element from a `map`, we get an object of type `pair`. Briefly, a `pair` is a template type that holds two (public) data elements named
+`first` and `second`. The `pair`s used by `map` have a `first` member that is the key and a `second` member that is the corresponding value.
+
+#### Using a set
+
+We’ll use a `set` to hold the words we want to ignore and count only those words that are not in this set:
+
+```c++
+// count the number of times each word occurs in the input
+map<string, size_t> word_count; 
+set<string> exclude = {"The", "But", "And", "Or", "An", "A", "the", "but", "and", "or", "an", "a"};
+string word;
+while (cin >> word)
+// count only words that are not in exclude
+if (exclude.find(word) == exclude.end())
+	++word_count[word];
+```
+
+In the `if`, the call to `find` returns an iterator. If the given key is in the `set`, the iterator refers to that key. If the element is not found, `find` returns the off-the-end iterator.
+
+## 11.2. Overview of the Associative Containers
+
+### 11.2.1. Defining an Associative Container
+
+Each of the associative containers defines a default constructor, which creates an empty container of the specified type. 
+
+We can also initialize an associative container as a copy of another container of the same type or from a range of values, so long as those values can be converted to the type of the container. 
+
+Under the new standard, we can also list initialize the elements:
+
+```c++
+map<string, size_t> word_count;									// empty
+set<string> exclude = {"the", "but", "and", "or", "an", "a",
+						"The", "But", "And", "Or", "An", "A"};	// list initialization
+map<string, string> authors = { {"Joyce", "James"},
+                               		{"Austen", "Jane"},
+                               		{"Dickens", "Charles"} };
+```
+
+#### Initializing a multimap or multiset
+
+The keys in a `map` or a `set` must be unique; there can be only one element with a given key. The multimap and multiset containers have no such restriction; there can be several elements with the same key.
+
+```c++
+// define a vector with 20 elements, holding two copies of each number from 0 to 9
+vector<int> ivec;
+for (vector<int>::size_type i = 0; i != 10; ++i) {
+	ivec.push_back(i);
+	ivec.push_back(i); // duplicate copies of each number
+}
+// iset holds unique elements from ivec; miset holds all 20 elements
+set<int> iset(ivec.cbegin(), ivec.cend());
+multiset<int> miset(ivec.cbegin(), ivec.cend());
+cout << ivec.size() << endl; 	// prints 20
+cout << iset.size() << endl; 	// prints 10
+cout << miset.size() << endl; 	// prints 20
+```
+
+Even though we initialized `iset` from the entire `ivec` container, `iset` has only ten elements: one for each distinct element in `ivec`.
+
+### 11.2.2. Requirements on Key Type
+
+For the ordered containers—`map`, `multimap`, `set`, and `multiset`—the key type must define a way to compare the elements. By default, the library uses the `<` operator for the key type to compare the keys.
+
+#### Key Types for Ordered Containers
+
+Just as we can provide our own comparison operation to an algorithm, we can also supply our own operation to use in place of the `<` operator on keys. The specified operation must define a **<font color='blue'>strict weak ordering</font>**（严格弱序） over the key type.
+
+#### Using a Comparison Function for the Key Type
+
+The type of the operation that a container uses to organize its elements is part of the type of that container. 
+
+* The operation type is specified following the element type inside the angle brackets.
+* We supply a particular comparison operation (that must have the same type as we specified inside the angle brackets) **<font color='red'>as a constructor argument </font>**when we create a container.
+
+For example, we can’t directly define a `multiset` of `Sales_data` because `Sales_data` doesn’t have a `<` operator. However, we can use the `compareIsbn` function to define a `multiset`:
+
+```c++
+bool compareIsbn(const Sales_data &lhs, const Sales_data &rhs){
+    return lhs.isbn() < rhs.isbn();
+}
+```
+
+To use our own operation, we must define the `multiset` with two types: the key type, `Sales_data`, and the comparison type, which is a function pointer type that can point to `compareIsbn`:
+
+```c++
+multiset<Sales_data, decltype(compareIsbn)*> bookstore(compareIsbn);
+```
+
+### 11.2.3. The `pair` Type
+
+`pair` is a template from which we generate specific types. We must supply two type names when we create a `pair`.
+
+```c++
+pair<string, string> anon;
+pair<string, size_t> word_count;
+pair<stringm vector<int>> line;
+```
+
+The default `pair` constructor **<font color='red'>value initializes</font>** the data members. We can also provide initializers for each member
+
+```c++
+pair<string, string> author{"James", "Joyce"}
+```
+
+Unlike other library types, the data members of `pair` are `public` . These members are named `first` and `second`, respectively.
+
+The library defines only a limited number of operations on `pair`s
+
+ ![image-20220726195846867](images/image-20220726195846867.png)
+
+#### A Function to Create `pair` Objects
+
+Imagine we have a function that needs to return a `pair`. Under the new standard we can list initialize the return value
+
+```c++
+pair<string, int> process(vector<string> &v){
+    if(!v.empty())
+        return {v.back(), v.back().size()};	// list initialize
+    else
+        return pair<string int>();			// explicitly constructed return value
+}
+```
+
+Under earlier versions of C++, we couldn’t use braced initializers to return a type like `pair`. Instead, we might have written both returns to explicitly construct the return value:
+
+```c++
+if(!v.empty())
+	return pair<string int>(v.back(), v.back().size());
+```
+
+Alternatively, we could have used `make_pair` to generate a new `pair` of the appropriate type from its two arguments:
+
+```c++
+if(!v.empty())
+	return make_pair(v.back(), v.back().size());
+```
+
+## 11.3. Operations on Associative Containers
+
+The associative containers define additional types:
+
+ ![image-20220726200804207](images/image-20220726200804207.png)
+
+1. For the `set` types, the `key_type` and the `value_type` are the same. The values held in a `set` are the keys
+2. In a `map`, the elements are key–value pairs. That is, each element is a `pair` object containing a key and a associated value. Because we cannot change an element’s key, the key part of these `pair`s is `const`
+
+```C
+set<string>::value_type v1; 			// v1 is a string
+set<string>::key_type v2; 				// v2 is a string
+map<string, int>::value_type v3; 		// v3 is a pair<const string, int>
+map<string, int>::key_type v4; 			// v4 is a string
+map<string, int>::mapped_type v5; 		// v5 is an int
+```
+
+### 11.3.1. Associative Container Iterators
+
+**<font color='red'>When we dereference an iterator, we get a reference to a value of the container’s `value_type`</font>**. In the case of `map`, the `value_type` is a `pair` in which `first` holds the `const` key and second holds the value:
+
+```c++
+auto map_it = word_count.begin();
+// *map_it is a reference to a pair<const string, size_t> object
+cout << map_it->first;				// prints the key for this element
+cout << " " << map_it->second;		// prints the value of the element
+map_it->first = "new key"; 			// error: key is const
+++map_it->second; 					// ok: we can change the value through an iterator
+```
+
+#### Iterators for `set`s Are `const`
+
+Although the `set` types define both the `iterator` and `const_iterator` types, both types of iterators give us read-only access to the elements in the `set`. **<font color='red'>Just as we cannot change the key part of a `map` element, the keys in a `set` are also `const`. </font>**
+
+```c++
+set<int> iset = {0,1,2,3,4,5,6,7,8,9};
+set<int>::iterator set_it = iset.begin();
+if (set_it != iset.end()) {
+	*set_it = 42; 				// error: keys in a set are read-only
+	cout << *set_it << endl; 	// ok: can read the key
+}
+```
+
+#### Iterating across an Associative Container
+
+We can use the `begin` and `end` operations to obtain iterators that we can use to traverse the container.
+
+```c++
+// get an iterator positioned on the first element
+auto map_it = word_count.cbegin();
+// compare the current iterator to the off-the-end iterator
+while (map_it != word_count.cend()) {
+	// dereference the iterator to print the element key--value pairs
+	cout << map_it->first << " occurs "
+			<< map_it->second << " times" << endl;
+	++map_it; // increment the iterator to denote the next element
+}
+```
+
+When we use an iterator to traverse a `map`, `multimap`, `set`, or `multiset`, the iterators yield elements in ascending key order.
+
+#### Associative Containers and Algorithms
+
+The fact that the keys are `const` means that we cannot pass associative container iterators to algorithms that write to or reorder container elements.
+
+Associative containers can be used with the algorithms that read elements. However, many of these algorithms search the sequence. Because elements in an associative container can be found (quickly) by their key,**<font color='red'> it is almost always a bad idea to use a generic search algorithm.</font>**  For example, the associative containers define a member named `find`, which directly fetches the element with a given key. We could use the generic `find` algorithm to look for an element, but that algorithm does a sequential search. It is much faster to use the `find` member defined by the container than to call the generic version.
+
+### 11.3.2. Adding Elements
+
+The insert members add one element or a range of elements. Because `map` and `set` (and the corresponding unordered types) contain unique keys, **<font color='red'>inserting an element that is already present has no effect:</font>**
+
+ ![image-20220726205033384](images/image-20220726205033384.png)
+
+```c++
+vector<int> ivec = {2,4,6,8,2,4,6,8};		// ivec has eight elements
+set<int> set2;								// empty set
+set2.insert(ivec.cbegin(), ivec.cend());	// set2 has four elements
+set2.insert({1,3,5,7,1,3,5,7});				// set2 now has eight elements
+```
+
+#### Adding Elements to a `map`
+
+When we insert into a `map`, we must remember that the element type is a `pair`. Often, we don’t have a `pair` object that we want to insert. Instead, we create a `pair` in the argument list to `insert`:
+
+```c++
+word_count.insert({word, 1});
+word_count.insert(make_pair(word, 1));
+word_count.insert(pair<string, size_t>(word, 1));
+word_count.insert(word_count::value_type(word, 1));
+```
+
+#### Testing the Return from `insert`
+
+The value returned by `insert` (or `emplace`) depends on the container type and the parameters:
+
+**<font color='red'>For the containers that have unique keys, the versions of `insert` and `emplace` that add a single element return a `pair` that lets us know whether the insertion happened. </font>**
+
+* The `first` member of the `pair` is an iterator to the element with the given key
+* The `second` is a `bool` indicating whether that element was inserted, or was already there.
+
+```c++
+map<string, size_t> word_count;
+string word;
+while(cin >> word){
+    // inserts an element with key equal to word and value 1;
+	// if word is already in word_count, insert does nothing
+    auto ret = word_count.insert({word, 1});
+    if(!ret.second)				// word was already in word_count
+        ++ret.first->second		// increment the counter
+}
+```
+
+The statement that increments the counter in this version of the word-counting program can be hard to understand. It will be easier to understand that expression by first parenthesizing it to reflect the precedence of the operators:
+
+```c++
+++((ret.first)->second); // equivalent expression
+```
+
+* `ret` holds the value returned by `insert`, which is a `pair`.
+* `ret.first` is the `first` member of that `pair`, which is a `map` iterator referring to the element with the given key.
+* `ret.first->` dereferences that iterator to fetch that element. Elements in the `map` are also `pair`s.
+* `ret.first->second` is the value part of the `map` element `pair`.
+* `++ret.first->second` increments that value.
+
+#### Adding Elements to `multiset` or `multimap`
+
+Sometimes, we want to be able to add additional elements with the same key. For example, we might want to map authors to titles of the books they have written. In this case, there might be multiple entries for each author, so we’d use a `multimap` rather than a `map`. 
+
+Because keys in a multi container need not be unique, insert on these types always inserts an element:
+
+```c++
+multimap<string, string> authors;
+// adds the first element with the key Barth, John
+authors.insert({"Barth, John", "Sot-Weed Factor"});
+// ok: adds the second element with the key Barth, John
+authors.insert({"Barth, John", "Lost in the Funhouse"});
+```
+
+**<font color='red'>For the containers that allow multiple keys, the `insert` operation that takes a single element returns an iterator to the new element.</font>** There is no need to return a `bool`, because `insert` always adds a new element in these types.
+
+### 11.3.3. Erasing Elements
+
+ ![image-20220727102743419](images/image-20220727102743419.png)
+
+The associative containers supply an additional `erase` operation that takes a `key_type` argument. This version removes all the elements, if any, with the given key and returns a count of how many elements were removed.
+
+```c++
+if(word_count.erase(removal_word))
+    cout << "ok: " << removal_word << " removed\n";
+else 
+    cout << "oops: " << removal_word << " not found!\n";
+```
+
+### 11.3.4. Subscripting a `map`
+
+The `map` and `unordered_map` containers provide the subscript operator and a corresponding `at` function. 
+
+The `set` types do not support subscripting because there is no “value” associated with a key in a `set`.
+
+We cannot subscript a `multimap` or an `unordered_multimap` because there may be more than one value associated with a given key.
+
+ ![image-20220727103253188](images/image-20220727103253188.png)
+
+**<font color='red'>Unlike other subscript operators, if the key is not already present, a new element is created and inserted into the `map` for that key. The associated value is value initialized.</font>**
+
+Because the subscript operator might insert an element, **<font color='red'>we may use subscript only on a `map` that is not `const`.</font>**
+
+#### Using the Value Returned from a Subscript Operation
+
+Ordinarily, the type returned by dereferencing an iterator and the type returned by the subscript operator are the same. Not so for `map`s: when we
+subscript a `map`, we get a `mapped_type` object; when we dereference a `map` iterator, we get a `value_type` object
+
+### 11.3.5. Accessing Elements
+
+ ![image-20220727103729147](images/image-20220727103729147.png)
+
+#### Using `find` Instead of Subscript for `map`s
+
+Using a subscript has an important side effect: If that key is not already in the `map`, then subscript inserts an element with that key. Sometimes, we want to know if an element with a given key is present without changing the `map`. In such cases, we should use `find`:
+
+```c++
+if (word_count.find("foobar") == word_count.end())
+	cout << "foobar is not in the map" << endl;
+```
+
+#### Finding Elements in a `multimap` or `multiset`
+
+When a `multimap` or `multiset` has multiple elements of a given key, those elements will be adjacent within the container.
+
+For example, given our `map` from author to titles, we might want to print all the books by a particular author. We can solve this problem in three different ways. The most obvious way uses `find` and `count`:
+
+```c++
+string search_item("Alain de Botton"); 			// author we'll look for
+auto entries = authors.count(search_item); 		// number of elements
+auto iter = authors.find(search_item); 			// first entry for this author
+
+// loop through the number of entries there are for this author
+while(entries) {
+	cout << iter->second << endl; 		// print each title
+	++iter; 							// advance to the next title
+	--entries; 							// keep track of how many we've printed
+}
+```
+
+#### A Different, Iterator-Oriented Solution
+
+Alternatively, we can solve our problem using `lower_bound` and `upper_bound`. Each of these operations take a key and returns an iterator. 
+
+* If the key is in the container, the iterator returned from `lower_bound` will refer to the first instance of that key and the iterator returned by `upper_bound` will refer just after the last instance of the key.
+* If the element is not in the multimap, then `lower_bound` and `upper_bound` will return equal iterators; both will refer to the point at which the key
+  can be inserted without disrupting the order. 
+
+**<font color='red'>Thus, calling `lower_bound` and `upper_bound` on the same key yields an iterator range that denotes all the elements with that key.</font>**
+
+```c++
+for (auto beg = authors.lower_bound(search_item),
+		end = authors.upper_bound(search_item); beg != end; ++beg)
+	cout << beg->second << endl; // print each title
+```
+
+#### The `equal_range` Function
+
+This function takes a key and returns a `pair` of iterators. 
+
+* If the key is present, then the first iterator refers to the first instance of the key and the second iterator refers one past the last instance of the key. 
+* If no matching element is found, then both the first and second iterators refer to the position where this key can be inserted.
+
+```c++
+for(auto pos = authors.equal_range(search+item); pos.first != pos.second; ++pos.first){
+    cout << pos.first->second << endl; // print each title
+}
+```
+
+### 11.3.6. A Word Transformation Map
+
+We’ll write a program that, given one `string`, transforms it into another. The input to our program is two files. The first file contains rules that we will
+use to transform the text in the second file. Each rule consists of a word that might be in the input file and a phrase to use in its place. 
+
+If the contents of the word-transformation file are
+
+```tex
+brb be right back
+k okay?
+y why
+r are
+u you
+pic picture
+thk thanks!
+l8r later
+```
+
+and the text we are given to transform is
+
+```tex
+where r u
+y dont u send me a pic
+k thk l8r
+```
+
+then the program should generate the following output:
+
+```tex
+where are you
+why dont you send me a picture
+okay? thanks! later
+```
+
+```c++
+void word_transform(ifstream &map_file, ifstream &input)
+{
+	auto trans_map = buildMap(map_file); 			// store the transformations
+	string text; 									// hold each line from the input
+	while (getline(input, text)) { 					// read a line of input
+		istringstream stream(text); 				// read each word
+		string word;
+		bool firstword = true; 						// controls whether a space is printed
+		while (stream >> word) {
+			if (firstword)
+				firstword = false;
+			else
+				cout << " "; 						// print a space between words
+			// transform returns its first argument or its transformation
+			cout << transform(word, trans_map); // print the output
+		}
+		cout << endl; // done with this line of input
+	}
+}
+```
+
+```c++
+map<string, string> buildMap(ifstream &map_file){
+    map<string, string> trans_map();
+    string word, trasform;
+    while(map_file >> word && getline(map_file, transform)){
+    	if(transform.size() > 1)
+        	trans_map[word] = transform.substr(1);	// skip leading space
+        else
+           	throw runtime_error("no rule for: " + word);
+   	}
+    return trans_map;
+}
+```
+
+```c++
+string transform(const string &word, const map<string, string> &trans_map){
+     auto iter = trans_map.find(word);
+     if(iter == trans_map.cend()){
+         return word;
+     }
+     else{
+         return iter->second;
+     }
+ }
+```
+
+## 11.4. The Unordered Containers
+
+Rather than using a comparison operation to organize their elements, these containers use a **<font color='blue'>hash function </font>**and the key type’s `==` operator.
+
+An unordered container is most useful when we have a key type for which there is no obvious ordering relationship among the elements. These containers are also useful for applications in which the cost of maintaining the elements in order is prohibitive.
+
+#### Using an Unordered Container
+
+Aside from operations that manage the hashing, the unordered containers provide the same operations (`find`, `insert`, and so on) as the ordered containers.
+
+As a result, we can usually use an unordered container in place of the corresponding ordered container, and vice versa.
+
+However, because the elements are not stored in order, the output of a program that uses an unordered container will (ordinarily) differ from the same program using an ordered container.
+
+#### Managing the Buckets
+
+The unordered containers are organized as a collection of buckets, each of which holds zero or more elements. These containers use a hash function to map elements to buckets.
+
+To access an element
+
+* The container first computes the element’s hash code, which tells which bucket to search. The container puts all of its elements with a given hash value into the same bucket. As a result, the performance of an unordered container depends on the quality of its hash function and on the number and size of its buckets.
+* A hash function is allowed to map elements with differing keys to the same bucket. When a bucket holds several elements, those elements are searched sequentially to find the one we want.
+
+The unordered containers provide a set of functions that let us manage the buckets.
+
+ ![image-20220727114931189](images/image-20220727114931189.png)
+
+#### Requirements on Key Type for Unordered Containers
+
+By default, the unordered containers use the `==` operator on the key type to compare elements. They also use an object of type `hash<key_type>` to generate the hash code for each element. The library supplies versions of the `hash` template for the built-in types, including pointers. It also defines `hash` for some of the library types, including `string`s and the smart pointer types.
+
+* **<font color='red'>We can directly define unordered containers whose key is one of the built-in types (including pointer types), or a `string`, or a smart pointer.</font>**
+
+* We cannot directly define an unordered container that uses a our own class types for its key type. Unlike the containers, we cannot use the `hash` template directly. Instead, **<font color='red'>we must supply our own version of the hash template.</font>**
+
+Instead of using the default `hash`, we can use a strategy similar to the one we used to override the default comparison operation on keys for the ordered containers. 
+
+To use `Sales_data` as the key, we’ll need to supply functions to replace both the `==` operator and to calculate a hash code:
+
+```c++
+size_t hasher(const Sales_data &sd)
+{
+	return hash<string>()(sd.isbn());	// hash<string>() creates a temporary hash<string> object
+    									// hash<string>()(sd.isbn()) invokes its function-call operator
+}
+bool eqOp(const Sales_data &lhs, const Sales_data &rhs)
+{
+	return lhs.isbn() == rhs.isbn();
+}
+
+using SD_multiset = unordered_multiset<Sales_data, decltype(hasher)*, decltype(eqOp)*>;
+// arguments are the bucket size and pointers to the hash function and equality operator
+SD_multiset bookstore(42, hasher, eqOp);
+```
+
+If our class has its own `==` operator we can override just the hash function:
+
+```c++
+// use FooHash to generate the hash code; Foo must have an == operator
+unordered_set<Foo, decltype(FooHash)*> fooSet(10, FooHash);
+```
+
