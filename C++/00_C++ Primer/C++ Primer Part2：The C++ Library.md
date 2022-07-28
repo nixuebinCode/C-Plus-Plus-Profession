@@ -2761,7 +2761,7 @@ Each constructor uses its constructor initializer list to initialize its `data` 
 allocates an empty `vector`:
 
 ```c++
-StrBlob::StrBlob(): data(make_shared<vector<int>>()) { }
+StrBlob::StrBlob(): data(make_shared<vector<string>>()) { }
 StrBlob::StrBlob(initializer_list<string> il):
                     data(make_shared<vector<string>>(il)) { }
 ```
@@ -3275,3 +3275,373 @@ class StrBlob{
 ```
 
 ## 12.2. Dynamic Arrays
+
+The language and library provide two ways to allocate an array of objects at once:
+
+* The language defines a second kind of `new` expression that allocates and initializes an array of objects. 
+* The library includes a template class named `allocator` that lets us separate allocation from initialization. Using an allocator generally provides better performance and more flexible memory management.
+
+Many, perhaps even most, applications have no direct need for dynamic arrays. When an application needs a varying number of objects, it is almost always easier, faster, and safer to do as we did with `StrBlob`: use a `vector` (or other library container).
+
+### 12.2.1. `new` and Arrays
+
+We ask `new` to allocate an array of objects by specifying the number of objects to allocate in a pair of square brackets after a type name:
+
+```c++
+int *pia = new int[get_size()];
+```
+
+`new` allocates the requested number of objects and (assuming the allocation succeeds) returns a pointer to the first one.
+
+**<font color='red'>The size inside the brackets must have integral type but need not be a constant.</font>**
+
+#### Allocating an Array Yields a Pointer to the Element Type
+
+When we use `new` to allocate an array, we do not get an object with an array type. Instead, we get a pointer to the element type of the array.
+
+Because the allocated memory does not have an array type, we cannot call `begin` or `end` on a dynamic array. For the same reasons, we also cannot use a range `for` to process the elements in a (so-called) dynamic array.
+
+#### Initializing an Array of Dynamically Allocated Objects
+
+By default, objects allocated by `new`—whether allocated as a single object or in an array—are default initialized. We can value initialize the elements in
+an array by following the size with an empty pair of parentheses.
+
+```c++
+int *pia = new int[10];			// block of ten uninitialized ints
+int *pia2 = new int[10]();		// block of ten ints value initialized to 0
+
+string *psa = new string[10]; 		// block of ten empty strings
+string *psa2 = new string[10](); 	// block of ten empty strings
+```
+
+Under the new standard, we can also provide a braced list of element initializers. If there are fewer initializers than elements, the remaining elements are value initialized:
+
+```c++
+int *pia3 = new int[10]{0,1,2,3,4,5,6,7,8,9};
+string *psa3 = new string[10]{"a", "an", "the", string(3, "x")};	// // remaining elements are value initialized
+```
+
+Although we can use empty parentheses to value initialize the elements of an array, **<font color='red'>we cannot supply an element initializer inside the parentheses</font>**, which means that we cannot use `auto` to allocate an array.
+
+#### It Is Legal to Dynamically Allocate an Empty Array
+
+We can use an arbitrary expression to determine the number of objects to allocate:
+
+```c++
+size_t n = get_size();
+int *p = new int[n];
+for(int *q = p; q != p + n; ++q)
+    // process the array
+```
+
+Calling `new int[n]` with `n` equal to `0` is legal even though we cannot create an array variable of size `0`:
+
+```c++
+char arry[0];						// error
+char *cp = new char[0];				// ok: but cp can't be dereferenced
+```
+
+When we use `new` to allocate an array of size zero, `new` returns a **<font color='red'>valid, nonzero pointer</font>**. That pointer is guaranteed to be distinct from any other pointer returned by `new`. This pointer acts as the off-the-end pointer for a zero-element array. The pointer can be compared as in the loop above. The pointer cannot be dereferenced—after all, it points to no element.
+
+#### Freeing Dynamic Arrays
+
+To free a dynamic array, we use a special form of `delete` that includes an empty pair of square brackets:
+
+```c++
+delete [] pa;
+```
+
+The statement destroys the elements in the array to which `pa` points and frees the corresponding memory. Elements in an array are destroyed in reverse order. That is, the last element is destroyed first, then the second to last, and so on.
+
+#### ⭐Smart Pointers and Dynamic Arrays
+
+The library provides a version of `unique_ptr` that can manage arrays allocated by `new`. To use a `unique_ptr` to manage a dynamic array, we must include a pair of empty brackets after the object type:
+
+```c++
+unique_ptr<int[]> up(new int[10]);
+up.release();		// automatically uses delete[] to destroy its pointer
+```
+
+`unqiue_ptr`s that point to arrays provide slightly different operations
+
+ ![image-20220728095046118](images/image-20220728095046118.png)
+
+We can use the subscript operator to access the elements in the array:
+
+```c++
+for(size_t i = 0; i != 10; ++i)
+    up[i] = i;
+```
+
+**<font color='red'>Unlike `unique_ptr`, `shared_ptr`s provide no direct support for managing a dynamic array. If we want to use a `shared_ptr` to manage a dynamic array, we must provide our own deleter:</font>**
+
+```c++
+shared_ptr<int> sp(new int[10], [](int *p){ delete [] p; });
+sp.reset();		// uses the lambda we supplied that uses delete[] to free the array
+```
+
+The fact that `shared_ptr` does not directly support managing arrays affects how we access the elements in the array:
+
+* There is no subscript operator for `shared_ptr`s
+* The smart pointer types do not support pointer arithmetic. As a result, to access the elements in the array, we must use `get` to obtain a built-in pointer, which we can then use in normal ways
+
+```c++
+for(size_t i = 0; i != 10; ++i)
+    *(sp.get() + i) = i;
+```
+
+### 12.2.2. The `allocator` Class
+
+An aspect of `new` that limits its flexibility is that `new` combines allocating memory with constructing object(s) in that memory. Combining initialization with allocation is usually what we want when we allocate a single object. In that case, we almost certainly know the value the object should have.
+
+When we allocate a block of memory, we often plan to construct objects in that memory as needed. In this case, we want to allocate memory in large chunks and pay the overhead of constructing the objects only when we actually need to create them.
+
+In general, coupling allocation and construction can be wasteful. For example:
+
+```c++
+string *const p = new string[n];	// construct n empty trings
+string s;
+string *q = p;
+while(cin >> s && q != p + n)
+    *q++ = s;
+...
+delete[] p;
+```
+
+This `new` expression allocates and initializes `n` `string`s. However, we might not need `n` `string`s; a smaller number might suffice. As a result:
+
+* We may have created objects that are never used. 
+* Moreover, for those objects we do use, we immediately assign new values over the previously initialized `string`s. The elements that are used
+  are written twice: first when the elements are default initialized, and subsequently when we assign to them.
+
+#### The `allocator` Class
+
+The library `allocator` class, which is defined in the `memory` header, lets us **<font color='red'>separate allocation from construction</font>**. It provides type-aware allocation of raw, unconstructed, memory.
+
+ ![image-20220728100855940](images/image-20220728100855940.png)
+
+When an `allocator` object allocates memory, it allocates memory that is appropriately sized and aligned to hold objects of the given type:
+
+```c++
+allocator<string> alloc;			// object that can allocate strings
+auto const p = alloc.allocate(n);	// allocate n unconstructed strings
+```
+
+#### `allocator`s Allocate Unconstructed Memory
+
+The memory an `allocator` allocates is unconstructed. We use this memory by constructing objects in that memory.
+
+The `construct` member takes a pointer and zero or more additional arguments; it constructs an element at the given location. The additional arguments are used to initialize the object being constructed:
+
+```c++
+auto q = p;
+alloc.construct(q++);			// *q is the empty string
+alloc.construct(q++, 10, 'c');	// *q is cccccccccc
+alloc.construct(q++, "hi");		// *q is hi!
+```
+
+When we’re finished using the objects, we must destroy the elements we constructed, which we do by calling `destroy` on each constructed element. The
+`destroy` function takes a pointer and runs the destructor on the pointed-to object:
+
+```c++
+while(q != p){
+    alloc.destroy(--q);		// free the strings we actually allocated
+}
+```
+
+Once the elements have been destroyed, we can either reuse the memory to hold other `string`s or return the memory to the system. We free the memory by calling `deallocate`:
+
+```c++
+alloc.deallocate(p, n);
+```
+
+The pointer we pass to `deallocate` cannot be null; it must point to memory allocated by `allocate`. Moreover, the size argument passed to `deallocate` must be the same size as used in the call to `allocate`.
+
+#### Algorithms to Copy and Fill Uninitialized Memory
+
+As a companion to the `allocator` class, the library also defines two algorithms that can construct objects in uninitialized memory
+
+ ![image-20220728102059184](images/image-20220728102059184.png)
+
+As an example, assume we have a `vector` of `int`s that we want to copy into dynamic memory. We’ll allocate memory for twice as many `int`s as are in the `vector`. We’ll construct the first half of the newly allocated memory by copying elements from the original `vector`. We’ll construct elements in the second half by filling them with a given value:
+
+```c++
+allocator<int> alloc;
+auto p = alloc.allocate(vi.size() * 2);
+auto q = uninitialized_copy(vi.begin(), vi.end(), p);
+uninitialized_fill_n(1, vi.size(), 42);
+```
+
+Unlike `copy`, `uninitialized_copy` **constructs** elements in its destination. Like `copy`, `uninitialized_copy` returns a pointer positioned one element past the last constructed element.
+
+## 12.3. Using the Library: A Text-Query Program
+
+We’ll implement a simple text-query program. Our program will let a user search a given file for words that might occur in it. The result of a query will be the number of times the word occurs and a list of lines on which that word appears. If a word occurs more than once on the same line, we’ll display that line only once.
+
+For example, we might  look for the word `element`. The output may be
+
+```c++
+element occurs 112 times
+	(line 36) A set element contains only a key;
+	(line 158) operator creates a new element
+	(line 160) Regardless of whether the element
+	(line 168) When we fetch an element from a map, we
+	(line 214) If the element is not found, find returns
+    ...
+```
+
+### 12.3.1. Design of the Query Program
+
+**<font color='red'>A good way to start the design of a program is to list the program’s operations</font>**. Knowing what operations we need can help us see what data structures we’ll need.
+
+* When it reads the input, the program must remember the line(s) in which each word appears. Hence, the program will need to read the input a line at a time and break up the lines from the input file into its separate words
+* When it generates output
+  * The program must be able to fetch the line numbers associated with a given word
+  * The line numbers must appear in ascending order with no duplicates
+  * The program must be able to print the text appearing in the input file at a given line number
+
+These requirements can be met quite neatly by using various library facilities:
+
+* We’ll use a `vector<string>` to store a copy of the entire input file. Each line in the input file will be an element in this `vector`. When we want to print a line, we can fetch the line using its line number as the index.
+* We’ll use an `istringstream` to break each line into words.
+* We’ll use a `set` to hold the line numbers on which each word in the input appears. Using a `set` guarantees that each line will appear only once and that the line numbers will be stored in ascending order.
+* We’ll use a `map` to associate each word with the set of line numbers on which the word appears.
+
+#### Data Structures
+
+We’ll start by designing a class to hold the input file in a way that makes querying the file easy. This class, which we’ll name `TextQuery`, will hold a `vector` and a `map`. The `vector` will hold the text of the input file; the map will associate each word in that file to the set of line numbers on which that word appears. This class will have a constructor that reads a given input file and an operation to perform the queries.
+
+Once we know that a word was found, we need to know how often it occurred, the line numbers on which it occurred, and the corresponding text for each of those line numbers. The easiest way to return all those data is to define a second class, which we’ll name `QueryResult`, to hold the results of a query. This class will have a `print` function to print the results in a `QueryResult`.
+
+#### ⭐Sharing Data between Classes
+
+Our `QueryResult` class is intended to represent the results of a query. Those results include the set of line numbers associated with the given word and the corresponding lines of text from the input file. These data are stored in objects of type `TextQuery`.
+
+Because the data that a `QueryResult` needs are stored in a `TextQuery` object, we have to decide how to access them. We could copy the `set` of line numbers and the `vector` of input file, but that will be an expensive operation.
+
+We could avoid making copies by returning iterators (or pointers) into the `TextQuery` object. However, this approach opens up a pitfall: What happens if the `TextQuery` object is destroyed before a corresponding `QueryResult`? In that case, the `QueryResult` would refer to data in an object that no longer exists.
+
+Given that these two classes conceptually “share” data, we’ll use `shared_ptr`sto reflect that sharing.
+
+#### Using the `TextQuery` Class
+
+When we design a class, it can be helpful to write programs using the class before actually implementing the members：
+
+```c++
+void runQueries(ifstream &infile) {
+	TextQuery tq(infile);
+	while (true) {
+		cout << "enter word to look for, or q to quit: ";
+		string s;
+		if (!(cin >> s) || s == "q")
+			break;
+		printQResult(cout, tq.query(s)) << endl;
+	}
+}
+```
+
+### 12.3.2. Defining the Query Program Classes
+
+#### `TextQuery` class
+
+* The user will create objects of this class by supplying an `istream` from which to read the input file. 
+* This class also provides the query operation that will take a `string` and return a `QueryResult` representing the lines on which that `string` appears.
+
+The `QueryResult` class will share the `vector` representing the input file and the `set`s that hold the line numbers associated with each word in the input. Hence, our class has two data members: 
+
+* A `shared_ptr` to a dynamically allocated `vector` that holds the input file
+* A `map` from `string` to `shared_ptr<set>`. 
+
+```c++
+class QueryResult;
+
+class TextQuery {
+public:
+	using line_no = vector<string>::size_type;
+	TextQuery(ifstream&);
+	QueryResult query(const string&);
+private:
+	shared_ptr<vector<string>> file;			// input file
+	map<string, shared_ptr<set<line_no>>> wm;	// map of each word to the set of the lines in which it appears
+};
+```
+
+#### The `TextQuery` Constructor
+
+```c++
+TextQuery::TextQuery(ifstream &is):
+	file(new vector<string>)
+{
+	string text;
+	while (getline(is, text)) {
+		file->push_back(text);
+		line_no n = file->size() - 1;	// current line number
+		istringstream line(text);
+		string word;
+		while (line >> word) {
+			// if word isn't already in wm, subscripting adds a new entry
+			auto &lines = wm[word];		// lines is a shared_ptr<set<line_no>>
+			if (!lines)					// the first time we see word
+				lines.reset(new set<line_no>);	// dynamically allocate a new set
+			lines->insert(n);
+		}
+	}
+}
+```
+
+The constructor initializer list allocates a new `vector` to hold the text from the input file.
+
+Inside the inner `while`, we use the `map` subscript operator to fetch the `shared_ptr<set>` and bind `lines` to that pointer：
+
+* If `word` wasn’t in the `map`, the subscript operator adds `word` to `wm`. The element associated with `word` is value initialized, which means that **<font color='red'>`lines`
+  will be a null pointer if the subscript operator added `word` to `wm`.</font>** If `lines` is null, we allocate a new `set` and call `reset` to update the `shared_ptr` to point to this newly allocated `set`.
+* Regardless of whether we created a new `set`, we call `insert` to add the current line number.
+
+#### The `QueryResult` Class
+
+The `QueryResult` class has three data members:
+
+* A `string` that is the word which we query
+* a `shared_ptr` to the `vector` containing the input file
+* a `shared_ptr` to the `set` of line numbers on which this word appears
+
+Its only member function is a constructor that initializes these three members:
+
+```c++
+class QueryResult {
+friend ostream& printQResult(ostream&, const QueryResult&);
+public:	
+	QueryResult(string s, shared_ptr<set<TextQuery::line_no>> p, shared_ptr<vector<string>> f):
+		sought(s), lines(p), file(f) { }
+private:
+	string sought;
+	shared_ptr<set<TextQuery::line_no>> lines;
+	shared_ptr<vector<string>> file;
+};
+
+// non member function that print the result
+ostream& printQResult(ostream&, const QueryResult&);
+```
+
+#### The `query` Function
+
+The `query` function takes a `string`, which it uses to locate the corresponding `set` of line numbers in the `map`.
+
+If the `string` is found, the `query` function constructs a `QueryResult` from the given `string`, the TextQuery `file` member, and the `set` that was fetched from `wm`.
+
+The only question is: What should we return if the given `string` is not found? In this case, there is no `set` to return. We’ll solve this problem by defining a local `static` object that is a `shared_ptr` to an empty `set` of line numbers. When the word is not found, we’ll return a copy of this `shared_ptr`:
+
+#### Printing the Results
+
+The `print` function prints its given `QueryResult` object on its given stream:
+
+```c++
+ostream& printQResult(ostream &os, const QueryResult &qr) {
+	os << qr.sought << " occurs " << qr.lines->size() << " time(s)" << endl;
+	for (auto num : *qr.lines)
+		cout << "\t(line " << num + 1 << ") "
+		<< (*qr.file)[num] << endl;
+	return os;
+}
+```
+
