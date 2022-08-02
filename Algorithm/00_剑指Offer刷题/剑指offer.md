@@ -4184,3 +4184,48 @@ void PrintProbability(int n){
 }
 ```
 
+## 面试题61：扑克牌中的顺子
+
+### 题目
+
+从扑克牌中随机抽 5 张牌，判断是不是一个顺子，即这 5 张牌是不是连续的。2~10 为数字本身，A 为 1，J 为 11，Q 为 12，K 为 13，而大、小王可以看成任意数字。
+
+### 解题思路
+
+我们把 5 张牌看成由 5 个数字组成的数组，大、小王是特殊的数字，我们不妨把它们都定义为 0。接下来我们来判断这 5 个数字是否为连续的：
+
+* 首先将该数组排序，由于 0，即大、小王可以替代任意数字，如果排序之后的数组不是连续的，即相邻的两个数字相隔若干个数字，那么只要我们有足够的 0 可以补满这两个数之间的空缺，这个数组实际上还是连续的。比如，数组排序之后为 {0，1，3，4，5}，0 可以填补 1 和 3 之间的空缺，因此数组是连续的。
+* 因此我们需要做三件事：
+  * 排序数组
+  * 统计数组中 0 的个数
+  * 统计数组中相邻数字之间空缺总数，如果其小于等于 0 的个数，则数组就是连续的
+* 另外需要注意，数组中除了 0 以外，不能有重复的数字出现，否则无法构成顺子
+
+### 代码实现
+
+```c++
+bool IsContinuous(int *numbers, int length){
+    if(numbers ==  nullptr || length < 1)
+        return false;
+    vector<int> ivec(numbers, numbers + length);
+    sort(ivec.begin(), ivec.end());
+    int zeroCnt = 0;
+    int blankCnt = 0;
+    for(int i = 0; i != length - 1; i++){
+        int currNum = ivec[i];
+        int nextNum = ivec[i + 1];
+        if(currNum == 0){
+            ++zeroCnt;
+        }
+        else{
+            if(currNum == nextNum)
+                return false;
+            blankCnt += nextNum - currNum - 1;
+        }
+    }
+    if(ivec[length - 1] == 0)
+        ++zeroCnt;
+    return blankCnt <= zeroCnt;
+}
+```
+
