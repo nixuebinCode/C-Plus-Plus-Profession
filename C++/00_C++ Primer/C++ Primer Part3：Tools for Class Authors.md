@@ -716,3 +716,387 @@ void StrVec::reallocate() {
 4. What remains is to update the pointers to address the newly allocated and initialized array. 
 
 ## 13.6. Moving Objects
+
+As we’ve just seen, during `reallocation` of our `StrVec` class, there is no need to copy—rather than move—the elements from the old memory to the new. A second reason to move rather than copy occurs in classes such as the IO or `unique_ptr` classes. These classes have a resource (such as a pointer or an IO buffer) that may not be shared. Hence, objects of these types can’t be copied but can be moved.
+
+### 13.6.1. Rvalue References
+
+An rvalue reference is a reference that must be bound to an rvalue. An rvalue reference is obtained by using `&&` rather than `&`. They may be bound only to an object that is about to be destroyed. As a result, we are free to “move” resources from an rvalue reference to another object.
+
+Recall that lvalue and rvalue are properties of an expression. An lvalue expression refers to an object’s identity whereas an rvalue expression refers to an object’s value.
+
+Like any reference, an rvalue reference is just another name for an object. As we know, we cannot bind regular references to expressions that require
+a conversion, to literals, or to expressions that return an rvalue. We can bind an rvalue reference to these kinds of expressions, but we cannot directly bind an rvalue reference to an lvalue:
+
+```c++
+int i = 42;
+int &r = i;					// ok: r refers to i
+int &&r = i;				// error: cannot bind an rvalue reference to an lvalue
+int &r2 = i * 42;			// error: i * 42 is an rvalue
+const int &r3 = i * 42;		// ok: we can bind a reference to const to an rvalue
+int &rr2 = i * 42;			// ok: bind rr2 to the result of the multiplication
+```
+
+#### Lvalues Persist; Rvalues Are Ephemeral
+
+Lvalues have persistent state, whereas rvalues are either literals or temporary objects created in the course of evaluating expressions:
+
+Because rvalue references can only be bound to temporaries, we know that
+
+* The referred-to object is about to be destroyed
+* There can be no other users of that object
+
+Hence, we can “steal” state from an object bound to an rvalue reference.
+
+#### Variables Are Lvalues
+
+A variable is an expression with one operand and no operator. Like any other expression, a variable expression has the lvalue/rvalue property. Variable expressions are lvalues. Hence we cannot bind an rvalue reference to a variable defined as an rvalue reference type:
+
+```c++
+int &&rr1 = 42;		// ok: literals are rvalues
+int &&rr2 = rr1;	// error: the expression rr1 is an lvalue!
+```
+
+#### ⭐The Library `move` Function
+
+We can obtain an rvalue reference bound to an lvalue by calling a new library function named `move`. The `move` function uses facilities that we’ll describe in § 16.2.6 to return an rvalue reference to its given object:
+
+```c++
+int &&rr3 = std::move(rr1);		// ok
+```
+
+**<font color='red'>Calling move tells the compiler that we have an lvalue that we want to treat as if it were an rvalue.</font>** It is essential to realize that the call to `move` promises that we do not intend to use `rr1` again except to assign to it or to destroy it. After a call to `move`, we cannot make any assumptions about the value of the moved-from object.
+
+> We can destroy a moved-from object and can assign a new value to it, but we cannot use the value of a moved-from object.
+>
+> Code that uses `move` should use `std::move`, not `move`. Doing so avoids potential name collisions.
+
+### 13.6.2. Move Constructor and Move Assignment
+
+To enable move operations for our own types, we define a move constructor and a move-assignment operator. These members are similar to the corresponding copy operations, but they “steal” resources from their given object rather than copy them.
+
+#### Move Constructor
+
+The move constructor has an initial parameter that is an rvalue reference to the class type. As in the copy constructor, any additional parameters must all have default arguments.
+
+**<font color='red'>In addition to moving resources, the move constructor must ensure that the moved-from object is left in a state such that destroying that object will be harmless.</font>** In particular, once its resources are moved, **<font color='red'>the original object must no longer point to those moved resources</font>**—responsibility for those resources has been assumed by the newly created object.
+
+```c++
+StrVec::StrVec(const StrVec &&s) noexcept
+    // member initializers take over the resources in s
+    : elements(s.elements), first_free(s.first_free), cap(s.cap)
+{
+    // leave s in a state in which it is safe to run the destructor
+	s.elements = s.first_free= s.cap = nullptr;        
+}
+```
+
+Unlike the copy constructor, the move constructor does not allocate any new memory; it takes over the memory in the given `StrVec`. 
+
+Having taken over the memory from its argument, the constructor body sets the pointers in the given object to `nullptr`. After an object is moved from, that object continues to exist. Eventually, the moved-from object will be destroyed, meaning that the destructor will be run on that object. The `StrVec` destructor calls `deallocate` on `first_free`. If we neglected to change `s.first_free`, then destroying the moved-from object would delete the memory we just moved.
+
+#### Move Operations, Library Containers, and Exceptions
+
+Because a move operation executes by “stealing” resources, it ordinarily does not itself allocate any resources. As a result, move operations ordinarily will not throw any exceptions.
+
+When we write a move operation that cannot throw, we should inform the library of that fact. Otherwise it will do extra work to cater to the possibliity that moving an object of our class type might throw.
+
+One way inform the library is to specify `noexcept` on our constructor. We specify `noexcept` on a function after its parameter list. In a constructor, `noexcept` appears between the parameter list and the `:` that begins the constructor initializer list. We must specify `noexcept` on both the declaration in the class header and on the definition if that definition appears outside the class:
+
+```c++
+class StrVec {
+public:
+    StrVec(StrVec&&) noexcept; // move constructor
+	// other members as before
+};
+
+StrVec::StrVec(StrVec &&s) noexcept : /* member initializers */
+{ /* constructor body */ }
+```
+
+The library containers provide guarantees as to what they do if an exception happens. As one example, `vector` guarantees that if an exception happens when we call `push_back`, the `vector` itself will be left unchanged.
+
+`push_back` on a `vector` might require that the `vector` be reallocated. When a `vector` is reallocated, it moves the elements from its old space to new memory. As we’ve just seen, moving an object generally changes the value of the moved-from object. If reallocation uses a move constructor and that constructor throws an exception after moving some but not all of the elements, the moved-from elements in the old space would have been changed, and the unconstructed elements in the new space would not yet exist. In this case, `vector` would be unable to meet its requirement that the `vector` is left unchanged.
+
+On the other hand, if `vector` uses the copy constructor and an exception happens, it can easily meet this requirement. If an exception happens, `vector` can free the space it allocated (but could not successfully construct) and return. The original vector elements still exist.
+
+To avoid this potential problem, `vector` must use a copy constructor instead of a move constructor during reallocation unless it knows that the element type’s move constructor cannot throw an exception. 
+
+**<font color='red'>If we want objects of our type to be moved rather than copied in circumstances such as `vector` reallocation, we must explicity tell the library that our move constructor is safe to use.</font>** We do so by marking the move constructor (and move-assignment operator) `noexcept`.
+
+#### Move-Assignment Operator
+
+The move-assignment operator does the same work as the destructor and the move constructor.
+
+```c++
+StrPtr& StrPtr::operator=(StrPtr &&rhs) noexcept{
+    // direct test for self-assignment
+    if(this != &rhs){
+        // free existing elements
+        free();		
+        // take over resources from rhs
+        elements = rhs.elements;
+        first_free = rhs.first_free;
+		cap = rhs.cap;
+        // leave rhs in a destructible state
+		rhs.elements = rhs.first_free = rhs.cap = nullptr;
+    }
+    return *this;
+}
+```
+
+If the right- and left-hand operands doesn't refer to the same object:
+
+* Free the memory that the left-hand operand had used
+* Take over the memory from the given object. 
+* As in the move constructor, set the pointers in `rhs` to `nullptr`.
+
+#### A Moved-from Object Must Be Destructible and Valid
+
+Moving from an object does not destroy that object: Sometime after the move operation completes, the moved-from object will be destroyed. Therefore, when we write a move operation, we must ensure that the moved-from object is in a state in which the destructor can be run.
+
+In addition to leaving the moved-from object in a state that is safe to destroy,**<font color='red'> move operations must guarantee that the object remains valid</font>**----It can safely be given a new value or used in other ways that do not depend on its current value.
+
+For example, when we move from a library `string` or container object, we know that the moved-from object remains valid. As a result, we can run operations such as `empty` or `size` on moved-from objects. However, we don’t know what result we’ll get. We might expect a moved-from object to be empty, but that is not guaranteed.
+
+#### The Synthesized Move Operations
+
+As it does for the copy constructor and copy-assignment operator, the compiler will synthesize the move constructor and move-assignment operator.
+
+The compiler will synthesize a move constructor or a move-assignment operator only if the class doesn’t define any of its own copy-control members and if every non`static` data member of the class can be moved. The compiler can move members of **built-in type**. It can also move members of a class type if the member’s **class has the corresponding move operation**:
+
+```c++
+// the compiler will synthesize the move operations for X and hasX
+struct X{
+    int i;			// built-in types can be moved
+    string s;		// string defines its own move operations
+};
+struct hasX{
+    X mem;			// X has synthesized move operations
+};
+X x, x2 = std:::move(x);		// uses the synthesized move constructor
+hasX hx, hx2 = std::move(hx);	// uses the synthesized move constructor
+```
+
+There is one final interaction between move operations and the synthesized copy-control members: **<font color='red'>If the class defines either a move constructor and/or a move-assignment operator, then the synthesized copy constructor and copy-assignment operator for that class will be defined as deleted.</font>**
+
+ #### Rvalues Are Moved, Lvalues Are Copied ...
+
+When a class has both a move constructor and a copy constructor, the compiler uses ordinary function matching to determine which constructor to use. Similarly for assignment. For example, in our `StrVec` class:
+
+```c++
+class StrVec{
+public:
+    StrVec(const StrVec&);
+    StrVec(StrVec&&);
+    StrVec& operator=(const StrVec&);
+    StrVec& operator=(StrVec&&);
+    ...
+};
+```
+
+The copy versions take a reference to `const StrVec`. As a result, they can be used on any type that can be converted to `StrVec`. The move versions take a `StrVec&&` and can be used only when the argument is a (nonc`onst`) rvalue:
+
+```c++
+StrVec v1, v2;
+v1 = v2; 					// v2 is an lvalue; copy assignment
+StrVec getVec(istream &); 	// getVec returns an rvalue
+v2 = getVec(cin); 			// getVec(cin) is an rvalue; move assignment
+```
+
+In the second assignment, we assign from an rvalue. In this case, both assignment operators are viable—we can bind the result of `getVec` to either operator’s parameter. Calling the copy-assignment operator requires a conversion to `const`, whereas `StrVec&&` is an exact match. Hence, the second assignment uses the move-assignment operator.
+
+#### ...But Rvalues Are Copied If There Is No Move Constructor
+
+If a class has a copy constructor but does not define a move constructor, the compiler will not synthesize the move constructor. In this case, the class
+has a copy constructor but no move constructor. Function matching ensures that objects of that type are copied, even if we attempt to move them by calling `move`:
+
+```c++
+class Foo{
+public:
+    Foo() = default;
+    Foo(const Foo&);
+};
+Foo x;
+Foo y(x);				// copy constructor; x is an lvalue
+Foo z(std::move(x));	// copy constructor, because there is no move constructor
+```
+
+The call to `move(x)` in the initialization of `z` returns a `Foo&&` bound to `x`. The copy constructor for `Foo` is viable because we can convert a `Foo&&` to a `const Foo&`. Thus, the initialization of `z` uses the copy constructor for `Foo`.
+
+#### ⭐Copy-and-Swap Assignment Operators and Move
+
+Recall the version of our `HasPtr` class that defined a copy-and-swap assignment operator. If we add a move constructor to this class, it will effectively get
+a move assignment operator as well:
+
+```c++
+class HasPtr {
+public:
+    HasPtr(const HasPtr &rhs): ps(new string(*rhs.ps)), i(rhs.i) { }	// copy constructor
+	HasPtr(HasPtr &&p) noexcept : ps(p.ps), i(p.i) {p.ps = 0;}			// move constructor
+	// assignment operator is both the move- and copy-assignment operator
+	HasPtr& operator=(HasPtr rhs){
+        swap(*this, rhs);
+        return *this;
+    }
+...
+};
+```
+
+The assignment operator has a nonreference parameter, which means the parameter is copy initialized. Depending on the type of the argument, copy initialization uses either the copy constructor or the move constructor; lvalues are copied and rvalues are moved. 
+
+As a result, this single assignment operator acts as both the copy-assignment and move-assignment operator:
+
+```c++
+hp = hp2;				// copy constructor used to copy hp2
+hp = std::move(hp2);	// move constructor moves hp2
+```
+
+In the first assignment, the right-hand operand is an lvalue, the copy constructor will be used to initialize `rhs`. The copy constructor will allocate a new `string` and copy the `string` to which `hp2` points.
+
+In the second assignment, we invoke `std::move` to bind an rvalue reference to `hp2`. The move constructor copies the pointer from `hp2`. It does not
+allocate any memory.
+
+#### Move Iterators
+
+The `reallocate` member of `StrVec` used a `for` loop to call construct to copy the elements from the old memory to the new：
+
+```c++
+auto dest = alloc.allocate(newcapacity);
+for (size_t i = 0; i != size(); ++i)
+		alloc.construct(dest++, std::move(*src++));
+```
+
+As an alternative to writing that loop, it would be easier if we could call `uninitialized_copy` to construct the newly allocated space. However, `uninitialized_copy` does what it says: It **copies** the elements.
+
+Instead, the new library defines a **<font color='blue'>move iterator</font>** adaptor. A move iterator adapts its given iterator by changing the behavior of the iterator’s dereference
+operator: **<font color='red'>the dereference operator of a move iterator yields an rvalue reference.</font>**
+
+We transform an ordinary iterator to a move iterator by calling the library `make_move_iterator` function：
+
+```c++
+auto dest = alloc.allocate(newcapacity);
+uninitialized_copy(make_move_iterator(begin()), make_move_iterator(end()), first);
+```
+
+`uninitialized_copy` calls `construct` on each element in the input sequence to “copy” that element into the destination. That algorithm uses the iterator dereference operator to fetch elements from the input sequence. Because we passed move iterators, the dereference operator yields an rvalue reference, which means construct will use the move constructor to construct the elements.
+
+### 13.6.3. Rvalue References and Member Functions
+
+Member functions other than constructors and assignment can benefit from providing both copy and move versions. For example, the library containers that define `push_back` provide two versions:
+
+```c++
+void push_back(const X&);	// copy: binds to any kind of X
+void push_back(X&&);		// move: binds only to modifiable rvalues of type X
+```
+
+Ordinarily, there is no need to define versions of the operation that take a `const X&&` or a (plain) `X&`:
+
+*  Usually, we pass an rvalue reference when we want to “steal” from the argument. In order to do so, the argument must not be `const`. 
+* Similarly, copying from an object should not change the object being copied. As a result, there is usually no need to define a version that take a (plain) `X&` parameter.
+
+As a more concrete example, we’ll give our `StrVec` class a second version of `push_back`:
+
+```c++
+class StrVec {
+public:
+	void push_back(const std::string&); // copy the element
+	void push_back(std::string&&); 		// move the element
+    // other members as before
+};
+void StrVec::push_back(const string& s)
+{
+	chk_n_alloc();
+	alloc.construct(first_free++, s);
+}
+void StrVec::push_back(string &&s)
+{
+	chk_n_alloc();
+	alloc.construct(first_free++, std::move(s));
+}
+```
+
+As we’ve seen, the `construct` function uses the type of its second and subsequent arguments to determine which constructor to use. Because `move` returns an rvalue reference, the type of the argument to `construct` is `string&&`. Therefore, the `string` move constructor will be used to construct a new last element.
+
+#### Rvalue and Lvalue Reference Member Functions
+
+Ordinarily, we can call a member function on an object, regardless of whether that object is an lvalue or an rvalue:
+
+```c++
+s1 + s2 = "wow!";
+```
+
+Here we assign to the rvalue result of concatentating these `string`s. such usage can be surprising.
+
+In order to maintain backward compatability, the library classes continue to allow assignment to rvalues, However, we might want to prevent such usage in our own classes. **<font color='red'>In this case, we’d like to force the left-hand operand (i.e., the object to which `this` points) to be an lvalue.</font>**
+
+We indicate the lvalue/rvalue property of `this` in the same way that we define `const` member functions; we place a reference qualifier after the
+parameter list. The reference qualifier can be either `&` or `&&`, indicating that `this` may point to an rvalue or lvalue, respectively.:
+
+```c++
+class Foo{
+public:
+    Foo& operatpr=(const Foo&) &;	// may assign only to modifiable lvalues
+    ...
+};
+Foo& Foo::operator=(const Foo &rhs) &{
+    ...
+    return *this;
+}
+```
+
+We may run a function qualified by `&` only on an lvalue and may run a function qualified by `&&` only on an rvalue:
+
+```c++
+Foo &retFoo(); 		// returns a reference; a call to retFoo is an lvalue
+Foo retVal(); 		// returns by value; a call to retVal is an rvalue
+Foo i, j; 			// i and j are lvalues
+
+i = j; 				// ok: i is an lvalue
+retFoo() = j; 		// ok: retFoo() returns an lvalue
+retVal() = j; 		// error: retVal() returns an rvalue
+i = retVal(); 		// ok: we can pass an rvalue as the right-hand operand to assignment
+```
+
+A function can be both `const` and reference qualified. In such cases, the reference qualifier must follow the `const` qualifier:
+
+```c++
+class Foo{
+public:
+    Foo someMem() const &;	// may assign only to modifiable lvalues
+    ...
+};
+```
+
+#### Overloading and Reference Functions
+
+Just as we can overload a member function based on whether it is `const`, we can also overload a function based on its reference qualifier:
+
+```c++
+class Foo {
+public:
+	Foo sorted() &&; 			// may run on modifiable rvalues
+	Foo sorted() const &; 		// may run on lvalues
+	// other members of Foo
+private:
+	vector<int> data;
+};
+```
+
+Overload resolution uses the lvalue/rvalue property of the object that calls `sorted` to determine which version is used:
+
+```c++
+retVal().sorted(); 	// retVal() is an rvalue, calls Foo::sorted() &&
+retFoo().sorted(); 	// retFoo() is an lvalue, calls Foo::sorted() const &
+```
+
+In overload member functions, if a member function has a reference qualifier, all the versions of that member with the same parameter list must have reference qualifiers:
+
+```c++
+class Foo {
+public:
+	Foo sorted() &&;
+	Foo sorted() const; // error: must have reference qualifier
+};
+```
+
