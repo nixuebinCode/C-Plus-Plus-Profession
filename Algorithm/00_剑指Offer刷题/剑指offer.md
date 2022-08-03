@@ -1,5 +1,93 @@
 # 剑指offer
 
+## 面试题1：赋值运算符函数
+
+### 题目
+
+如下为类型 CMyString 的声明，请为该类型添加赋值运算符函数。
+
+```c++
+class CMyString{
+public:
+	CMyString(char* pData = nullptr);
+	CMyString(const CMyString& str);
+	~CM yString(void);
+private:
+	char* m_pData,
+} ;
+```
+
+### 解题思路
+
+当定义一个赋值运算符函数时，需要注意：
+
+* 为了能够连续赋值，需要把返回值类型声明为该类型的引用，并在函数结束前返回 `*this`
+* 把传入的参数类型声明为常量引用
+* 释放实例自身已有的内存
+* 判断传入的参数和当前的实例是不是同一个实例
+
+解决这四个问题可以写出一下代码：
+
+```c++
+CMyString& CMyString::operator=(const CMyString &rhs){
+    if(this != &rhs){
+        delete[] m_pData;
+        m_pData = nullptr;
+        
+        m_pData = new char[strlen(rhs.m_pData) + 1];
+        strcpy(m_pData, rhs.m_pData);
+    }
+	return *this
+}
+```
+
+这里存在的一个问题是，在我们释放完自身已有的内存之后，调用 new 分配新的内存时，可能会抛出异常，此时原本的 CMyString 的实例不再保持有效的状态，这就违背了安全性原则，一个通常的做法是：**<font color='red'>copy and swap</font>**
+
+### 代码实现
+
+```c++
+class CMyString{
+public:
+	CMyString(char* pData = nullptr);
+	CMyString(const CMyString& str);
+    // copy-assignment operator
+    CMyString& operator=(const CMyString&);
+	~CMyString(void);
+private:
+	char* m_pData,
+} ;
+
+CMyString& CMyString::operator=(const CMyString &rhs){
+    if(this != &rhs){
+        CMyString strTemp(rhs);
+        char *pTemp strTemp.m_pData;
+        strTemp.m_pData = m_pData;
+        m_pData = pTemp;
+    }
+	return *this
+}
+
+CMyString& CMyString::operator=(CMyString rhs){
+    using std::swap;
+    swap(m_pDate, rhs.m_pData);
+	return *this
+}
+```
+
+## 面试题2：实现 Singleton 模式
+
+### 题目
+
+设计一个类，我们只能生成该类的一个实例
+
+### 解题思路
+
+## 面试题3：数组中重复的数字
+
+### 题目
+
+在一个长度为 n 的数组里的所有数字都在 0 ~ n-1 的范围内。数组中某些数字是重复的，但不知道有几个数字重复了，也不知道每个数字重复了几次。请找出数组中任意一个重复的数字。例如，如果输入长度为 7 的数组 {2, 3, 1, 0, 2, 5, 3}, 那么对应的输出是重复的数字 2 或者 3。
+
 ## 面试题4：二维数组中的查找
 
 ### 题目
@@ -4226,6 +4314,88 @@ bool IsContinuous(int *numbers, int length){
     if(ivec[length - 1] == 0)
         ++zeroCnt;
     return blankCnt <= zeroCnt;
+}
+```
+
+## 面试题62：圆圈中最后剩下的数字（约瑟夫环问题）
+
+### 题目
+
+0, 1, ..., n - 1 这 n 个数字排成一个圆圈，从数字 0 开始，每次从这个圆圈里删除第 m 个数字。求出这个圆圈里剩下的最后一个数字。例如，0，1，2，3，4  这 5 个数字组成一个圆圈，从数字 0 开始每次删除第 3 个数字，则删除的前 4 个数字依次是 2，0，4，1，因此最后剩下的数字是 3。
+
+ ![image-20220803150338230](images/image-20220803150338230.png)
+
+### 解题思路一：用环形链表模拟圆圈
+
+我们可以模板库中的 `list` 来模拟一个环形链表。注意 `list` 本身不是一个环形链表，我们需要在迭代器扫描到链表尾部时，把迭代器移到链表的头部。
+
+### 代码实现
+
+```c++
+int LastRemaining(unsigned n, unsigned m){
+    if(n < 1 || m < 1)
+        throw runtime_error("Invalid Input");
+    list<int> lst;
+    for(unsigned i = 0; i != n; ++i)
+        lst.push_back(i);
+    auto iter = lst.begin();
+    int iterCnt = 0;
+    while(lst.size() != 1){
+        iterCnt = m;
+        while(--iterCnt){
+            ++iter;
+            if(iter == lst.end())
+                iter = lst.begin();
+        }
+        iter = lst.erase(iter);
+        // 如果上一步删除的是最后一个元素，iter 将指向 end()，此时也需要将其重置为 begin()
+        if(iter == lst.end())
+                iter = lst.begin();
+    }
+    return lst.front();
+}
+```
+
+### 解题思路二：数学方法
+
+首先我们定义一个关于 n 和 m 的方程 $$f(n,m)$$，表示每次在 n 个数字 0，1，...，n - 1 中删除第 m 个数字最后剩下的数字。
+
+在这 n 个数字中，第一个被删除的数字是 **(m - 1) % n**，我们将其记为 k。那么删除 k 之后剩下的数字为：0，1，...，k - 1，k + 1，...，n - 1。并且下一次删除从数字 k + 1 开始计数。**<font color='red'>相当于在剩下的序列中，k + 1 排在最前面，从而形成 k + 1，...，n - 1，0，1，...，k - 1</font>**。由于这个序列和最初的序列不一样（最初的序列是从 0 开始的连续序列），因此我们令方程 $g(n-1,m)$ 表示最后剩下的数字。则有：$f(n,m) = g(n-1, m)$
+
+接下来我们把序列 k + 1，...，n - 1，0，1，...，k - 1 映射成 0~n - 2 的序列：
+
+k + 1 → 0
+
+k + 2 → 1
+
+...
+
+k - 2 → n - 1
+
+k - 1 → n - 2
+
+可以得到映射方程为 $y = (x-k-1)\%n$，其逆映射为 $x = (y+k+1)\%n$
+
+由于映射之后的序列和最初的序列具有同样的形式，因此对这 n - 1个数的序列每次删除第 m 个数字最后剩下的数字为 $$f(n-1,m)$$ 。利用逆映射将其变换回去则为：$ x = (f(n-1,m)+k+1)\%n $，因此有：$f(n,m) = g(n-1,m) = (f(n-1,m)+k+1)\%n$ 。代入 $k=(m - 1) \% n$，最终得到：
+
+$f(n,m) = (f(n-1,m)+m)\%n$
+
+有了以上递推公式，并且当 n = 1 时，序列中只有一个元素 0，最终留下来的元素一定是 0。可以用递归或者循环解决。
+
+用循环来解决：记 $h(n,m)=(f(n-1,m)+m)\%n$
+
+$f(n,m) = (f(n-1,m)+m)\%n = ((f(n-2,m)+m)\%n + m)\%n =... $
+
+### 代码实现
+
+```c++
+int LastRemaining2(unsigned n, unsigned m){
+    if(n < 1 || m < 1)
+        throw runtime_error("Invalid Input");
+    unsigned last = 0;
+    for(unsigned i = 2; i != n + 1; ++i)
+        last = (last + m) % i;
+    return last;
 }
 ```
 
