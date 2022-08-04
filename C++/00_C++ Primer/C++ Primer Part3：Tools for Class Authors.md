@@ -1100,3 +1100,337 @@ public:
 };
 ```
 
+# Chapter 14. Overloaded Operations and Conversions
+
+## 14.1. Basic Concepts
+
+Overloaded operators are functions with special names: the keyword operator followed by the symbol for the operator being defined. 
+
+An overloaded operator function has the same number of parameters as the operator has operands. A unary operator has one parameter; a binary operator has two:
+
+* In a binary operator, the left-hand operand is passed to the first parameter and the right-hand operand to the second.
+
+* **<font color='red'>If an operator function is a member function, the first (left-hand) operand is bound to the implicit this pointer.</font>** 
+
+  Because the first operand is implicitly bound to `this`, **<font color='red'>a member operator function has one less (explicit) parameter than the operator has operands.</font>**
+
+An operator function must either be a member of a class or have at least one parameter of class type:
+
+```c++
+// error: cannot redefine the built-in operator for ints
+int operator+(int, int);
+```
+
+#### Calling an Overloaded Operator Function Directly
+
+Ordinarily, we “call” an overloaded operator function indirectly by using the operator on arguments of the appropriate type. However, we can also call an overloaded operator function directly in the same way that we call an ordinary function:
+
+```c++
+// Both call the nonmember function operator+, passing data1 as the first argument and data2 as the second.
+data1 + data2;
+operator+(data1, data2);
+```
+
+We call a member operator function explicitly in the same way that we call any other member function:
+
+```c++
+data1 += data2;
+data1.operator+=(data2);
+```
+
+Each of these statements calls the member function `operator+=`, binding `this` to the address of `data1` and passing `data2` as an argument.
+
+#### Some Operators Shouldn’t Be Overloaded
+
+Some operators guarantee the order in which operands are evaluated and support short-circuit evaluation. Because the overloaded versions of these operators do not preserve these properties, it is usually a bad idea to overload them.
+
+Ordinarily, the comma, address-of, logical `AND`, and logical `OR` operators should not be overloaded.
+
+#### Use Definitions That Are Consistent with the Built-in Meaning
+
+Operator overloading is most useful when there is a logical mapping of a built-in operator to an operation on our type. Using overloaded operators
+rather than inventing named operations can make our programs more natural and intuitive.
+
+* If the class does IO, define the shift operators to be consistent with how IO is done for the built-in types.
+* If the class has an operation to test for equality, define `operator==`. If the class has `operator==`, it should usually have `operator!=` as well.
+* If the class has a single, natural ordering operation, define `operator<`. If the class has `operator<`, it should probably have all of the relational operators.
+* The return type of an overloaded operator usually should be compatible with the return from the built-in version of the operator: 
+  * The logical and relational operators should return `bool`
+  * The arithmetic operators should return a value of the class type, and assignment and compound assignment should return a reference to the left-hand operand.
+
+#### ⭐Choosing Member or Nonmember Implementation
+
+The following guidelines can be of help in deciding whether to make an operator a member or an ordinary nonmember function:
+
+* The assignment (`=`), subscript (`[]`), call (`()`), and member access arrow (`->`) operators must be defined as members.
+
+* The compound-assignment operators ordinarily ought to be members. However, unlike assignment, they are not required to be members.
+
+* Operators that change the state of their object or that are closely tied to their given type—such as increment, decrement, and dereference—usually should be members.
+
+* **<font color='red'>Symmetric operators</font>**—those that might convert either operand, such as the arithmetic, equality, relational, and bitwise operators—usually should be defined as ordinary nonmember functions.
+
+  Programmers expect to be able to use symmetric operators in expressions with mixed types. If we want to provide similar mixed-type expressions involving class objects, then the operator must be defined as a nonmember function.
+
+  When we define an operator as a member function, then the left-hand operand must be an object of the class. For example:
+
+  ```c++
+  string s = "world";
+  string t = s + "!";		// ok: we can add a const char* to a string
+  string u = "hi" + s;	// would be an error if + were a member of string
+  ```
+
+  If `operator+` were a member of the `string` class, `"hi" + s` would be equivalent to `"hi".operator+(s)`. However, the type of `"hi"` is `const char*`, and that is a built-in type; it does not even have member functions.
+
+  On the other hand, because `string` defines `+` as an ordinary nonmember function, `"hi" + s` is equivalent to `operator+("hi", s)`. As with any function call, either of the arguments can be converted to the type of the parameter. The only requirements are that at least one of the operands has a class type, and that both operands can be converted (unambiguously) to `string`.
+
+## 14.2. Input and Output Operators
+
+As we’ve seen, the IO library uses `>>` and `<<` for input and output, respectively. The IO library itself defines versions of these operators to read and write the built-in types. Classes that support IO ordinarily define versions of these operators for objects of the class type.
+
+### 14.2.1. Overloading the Output Operator `<<`
+
+1. Ordinarily, the first parameter of an output operator is a reference to a non`const` `ostream` object. The `ostream` is non`const` because writing to the stream changes its state. The parameter is a reference because we cannot copy an `ostream` object.
+
+2. The second parameter ordinarily should be a reference to `const` of the class type we want to print.
+
+3. To be consistent with other output operators, `operator<<` normally returns its `ostream` parameter.
+
+#### The `Sales_data` Output Operator
+
+```c++
+ostream &operator<<(ostream &os, const Sales_data &item) {
+	os << item.isbn() << " " << item.units_sold << " "
+		<< item.revenue << " " << item.avg_price();
+	return os;
+}
+```
+
+#### Output Operators Usually Do Minimal Formatting
+
+The output operators for the built-in types do little if any formatting. In particular, they do not print newlines. Users expect class output operators to behave similarly. An output operator that does minimal formatting lets users control the details of their output.
+
+#### IO Operators Must Be Nonmember Functions
+
+ If IO operators were member functions, then the left-hand operand would have to be an object of our class type:
+
+```c++
+Sales_data data;
+data << cout;
+```
+
+If these operators are members of any class, they would have to be members of `istream` or `ostream`. However, those classes are part of the standard library, and we cannot add members to a class in the library.
+
+### 14.2.2. Overloading the Input Operator `>>`
+
+Ordinarily the first parameter of an input operator is a reference to the stream from which it is to read, and the second parameter is a reference to the (non`const`) object into which to read.
+
+The operator usually returns a reference to its given stream.
+
+#### The `Sales_data` Input Operator
+
+```c++
+istream &operator>>(istream &is, Sales_data &item){
+	double price = 0;
+	is >> item.bookNo >> item.units_sold >> price;
+	if (is)
+		item.revenue = item.units_sold * price;
+	else
+		item = Sales_data();	// input failed: give the object the default state
+	return is;
+}
+```
+
+If an IO error occurs, the operator resets its given object to the empty `Sales_data`. That way, the object is guaranteed to be in a consistent state.
+
+**<font color='red'>Input operators must deal with the possibility that the input might fail</font>**; output operators generally don’t bother.
+
+#### Errors during Input
+
+Rather than checking each read, we check once after reading all the data and before using those data.
+
+Putting the object into a valid state is especially important if the object might have been partially changed before the error occurred. For example, in this input operator, we might encounter an error after successfully reading a new `bookNo`. An error after reading `bookNo` would mean that the `units_sold` and `revenue` members of the old object were unchanged. The effect would be to associate a different `bookNo` with those data.
+
+#### Indicating Errors
+
+Some input operators need to do additional data verification. For example, our input operator might check that the `bookNo` we read is in an appropriate format. In such cases, the input operator might need to set the stream’s condition state to indicate failure, even though technically speaking the actual IO was successful.
+
+Usually an input operator should set only the `failbit`. Setting `eofbit` would imply that the file was exhausted, and setting `badbit` would indicate that the stream was corrupted. These errors are best left to the IO library itself to indicate.
+
+## 14.3. Arithmetic and Relational Operators
+
+1. Ordinarily, we define the arithmetic and relational operators as nonmember functions in order to allow conversions for either the left- or right-hand operand.
+
+2. These operators shouldn’t need to change the state of either operand, so the parameters are ordinarily references to `const`.
+
+3. An arithmetic operator usually generates a new value that is the result of a computation on its two operands. That value is distinct from either operand and is calculated in a **local variabl**e. The operation returns a copy of this local as its result.
+
+4. Classes that define an arithmetic operator generally define the corresponding compound assignment operator as well. When a class has both operators, it is usually more efficient to define the arithmetic operator to use compound assignment:
+
+   ```c++
+   Sales_data operator+(const Sales_data &lhs, const Sales_data &rhs){
+       Sales_data sum = lhs;
+       sum += rhs;
+       return sum;
+   }
+   ```
+
+### 14.3.1. Equality Operators
+
+Ordinarily, classes in C++ define the equality operator to test whether two objects are equivalent. That is, they usually compare every data member and treat two objects as equal if and only if all the corresponding members are equal.
+
+1. If a class defines `operator==`, it should also define `operator!=`. Users will expect that if they can use `==` then they can also use `!=`, and vice versa.
+2. One of the equality or inequality operators should delegate the work to the other. That is, one of these operators should do the real work to compare objects. The other should call the one that does the real work.
+
+```c++
+bool operator==(const Sales_data &lhs, const Sales_data &rhs) {
+	return lhs.isbn() == rhs.isbn()
+		&& lhs.units_sold == rhs.units_sold
+		&& lhs.revenue == rhs.revenue;
+}
+
+bool operator!=(const Sales_data &lhs, const Sales_data &rhs) {
+	return !(lhs == rhs);
+}
+```
+
+### 14.3.2. Relational Operators
+
+Ordinarily the relational operators should
+
+1. Define an ordering relation that is consistent with the requirements for use as a key to an associative container
+2. Define a relation that is consistent with `==` if the class has both operators. In particular, if two objects are `!=`, then one object should be `<` the other.
+
+If the class also has `==`, define `<` only if the definitions of `<` and `==` yield consistent results. For example, the `Sales_data` `==` operator treats two transactions with the same `ISBN` as unequal if they have different `revenue` or `units_sold` members. If we defined the `<` operator to compare only the `ISBN` member, then two objects with the same `ISBN` but different `units_sold` or `revenue` would compare as unequal, but neither object would be less than the other. 
+
+## 14.4. Assignment Operators
+
+In addition to the copy- and move-assignment operators that assign one object of the class type to another object of the same type, a class can define additional assignment operators that allow other types as the right-hand operand.
+
+As one example, the library `vector` class defines a assignment operator that takes a braced list of elements：
+
+```c++
+vector<string> v;
+v = {"a", "an", "the"};
+```
+
+We can add this operator to our `StrVec` class as well:
+
+```c++
+StrVec& StrVec::operator=(initializer_list<string> il) {
+	auto newdata = alloc_n_copy(il.begin(), il.end());
+	free();
+	elements = newdata.first;
+	first_free = cap = newdata.second;
+	return *this;
+}
+```
+
+#### Compound-Assignment Operators
+
+Compound assignment operators are not required to be members. However, we prefer to define all assignments, including compound assignments, in the class.
+
+For consistency with the built-in compound assignment, these operators should return a reference to their left-hand operand:
+
+```c++
+Sales_data& Sales_data::operator+=(const Sales_data &rhs){
+    units_sold += rhs.units_sold;
+    revenue += rhs.revenue;
+    return *this;
+}
+```
+
+## 14.5. Subscript Operator
+
+1. Classes that represent containers from which elements can be retrieved by position often define the subscript operator, `operator[]`.
+
+2. The subscript operator must be a member function.
+
+3. To be compatible with the ordinary meaning of subscript, the subscript operator usually returns a reference to the element that is fetched.
+
+4. If a class has a subscript operator, **<font color='red'>it usually should define two versions: one that returns a plain reference and the other that is a `const` member and returns a reference to `const`.</font>**
+
+```c++
+class StrVec{
+public:
+    string& operator[](size_t n){ return elements[n]; }
+	const string& operator[](size_t n) const{ return elements[n]; }
+    ...
+};
+```
+
+## 14.6. Increment and Decrement Operators
+
+1. There is no language requirement that these operators be members of the class. However, because these operators change the state of the object on which they operate, our preference is to make them members.
+2. We can define both the prefix and postfix instances of these operators for our own classes as well.
+
+#### Defining Prefix Increment/Decrement Operators
+
+To be consistent with the built-in operators, the prefix operators should return a reference to the incremented or decremented object.
+
+We’ll define these operators for our `StrBlobPtr` class (§ 12.1.6):
+
+```c++
+class StrBlobPtr{
+public:
+    StrBlobPtr& operator++();
+    StrBlobPtr& operator--();
+    ...
+};
+
+StrBlobPtr& StrBlobPtr::operator++()
+{
+	// if curr already points past the end of the container, can't increment it
+	check(curr, "increment past end of StrBlobPtr");
+	++curr; // advance the current state
+	return *this;
+}
+StrBlobPtr& StrBlobPtr::operator--()
+{
+	// if curr is zero, decrementing it will yield an invalid subscript
+	--curr; // move the current state back one element
+	check(curr, "decrement past begin of StrBlobPtr");
+	return *this;
+}
+```
+
+The decrement operator decrements `curr` before calling `check`. That way, if `curr`(which is an unsigned number) is already zero, the value that we pass to `check` will be a large positive value representing an invalid subscript.
+
+#### Differentiating Prefix and Postfix Operators
+
+To distinguish a postfix function from the prefix version, **<font color='red'>the postfix versions take an extra (unused) parameter of type `int`</font>**. When we use a postfix operator, the compiler supplies 0 as the argument for this parameter. Although the postfix function can use this extra parameter, it usually should not.
+
+To be consistent with the built-in operators, **<font color='red'>the postfix operators should return the old (unincremented or undecremented) value. That value is returned as a value, not a reference.</font>** Thus the postfix versions have to remember the current state of the object before incrementing the object.
+
+When implement the postfix operator, it should call its own prefix version to do the actual work:
+
+```c++
+class StrBlobPtr{
+public:
+    // postfix operators
+    StrBlobPtr operator++(int);
+    StrBlobPtr operator--(int);
+};
+
+StrBlobPtr StrBlobPtr::operator++(int){
+    auto ret = *this;
+    ++*this;
+    return ret;
+}
+StrBlobPtr StrBlobPtr::operator--(int){
+    auto ret = *this;
+    --*this;
+    return ret;
+}
+```
+
+#### Calling the Postfix Operators Explicitly
+
+ If we want to call the postfix version using a function call, then we must pass a value for the integer argument:
+
+```c++
+StrBlobPtr ptr;
+ptr.operator++(0);	// call postfix operator++
+ptr.operator++();	// call prefix operator++
+```
+
