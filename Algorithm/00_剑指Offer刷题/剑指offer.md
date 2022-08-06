@@ -4399,3 +4399,35 @@ int LastRemaining2(unsigned n, unsigned m){
 }
 ```
 
+## 面试题63：股票的最大利润
+
+### 题目
+
+假设把某股票的价格按照时间先后顺序存储在数组中，请问买卖该股票一次可能获得的最大利润是多少？例如，一只股票在某些时间节点的价格为 {9，11，8，5，7，12，16，14}。如果我们能在价格为 5 的时候买入并在价格为 16时卖出，则能收获最大的利润 11。
+
+### 解题思路
+
+我们可以依次计算在某个时间点卖出该股票时能够获得的最大利润，在卖出价固定时，买入价越低获得的利润越大。也就是说，在我们遍历该数组时，需要用一个变量去记录之前的元素中的最小值。
+
+### 代码实现
+
+```c++
+int MaxDiff(const int* numbers, unsigned length){
+    if(numbers == nullptr || length < 2)
+        return 0;
+    int minPrice = numbers[0];
+    int maxProfit = numbers[1] - numbers[0];
+    for(unsigned i = 2; i != length; ++i){
+        // update the min price
+        if(numbers[i - 1] < minPrice)
+            minPrice = numbers[i - 1];
+        int curProfit = numbers[i] - minPrice;
+        if(curProfit > maxProfit)
+            maxProfit = curProfit;
+    }
+    return maxProfit;
+}
+```
+
+
+
