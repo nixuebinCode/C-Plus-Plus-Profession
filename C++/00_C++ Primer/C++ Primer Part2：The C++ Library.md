@@ -1510,7 +1510,7 @@ By default,**<font color='red'> a lambda may not change the value of a variable 
 ```c++
 void fcn3(){
     size_t v1 = 42;
-    auto f = [v1]() { return ++v1; };
+    auto f = [v1]() mutable { return ++v1; };
     v1 = 0;
     auto j = f();		// j is 43
 }

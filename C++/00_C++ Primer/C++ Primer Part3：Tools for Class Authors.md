@@ -1373,9 +1373,17 @@ We’ll define these operators for our `StrBlobPtr` class (§ 12.1.6):
 ```c++
 class StrBlobPtr{
 public:
+    StrBlobPtr(): curr(0) { }
+    StrBlobPtr(StrBlob &a, size_t sz = 0):
+    	wptr(a.data), curr(sz) { }
     StrBlobPtr& operator++();
     StrBlobPtr& operator--();
     ...
+private:
+    // check returns a shared_ptr to the vector if the check succeeds
+    shared_ptr<vector<string>> check(size_t, const string&) const;
+    weak_ptr<vector<string>> wptr;
+    size_t curr;			// current position within the array
 };
 
 StrBlobPtr& StrBlobPtr::operator++()
@@ -1434,3 +1442,524 @@ ptr.operator++(0);	// call postfix operator++
 ptr.operator++();	// call prefix operator++
 ```
 
+## 14.7. Member Access Operators
+
+1. Operator arrow must be a member. The dereference operator is not required to be a member but usually should be a member as well.
+2. These operators should be defined as `const` members. Fetching an element doesn’t change the state of a class.
+
+We can logically add the dereference(`*`) and arrow(`->`) operators to our `StrBlobPtr` class as well:
+
+```c++
+class StrBlobPtr{
+public:
+    string& operator*() const{
+        auto p = check(curr, "dereference past end");
+        return (*p)[curr];	// (*p) is the vector to which this object points
+    }
+    string* operator->() const{
+        // delegate the real work to the dereference operator
+        return & this->operator*();
+    }
+    ...
+};
+```
+
+We can use these operators the same way that we’ve used the corresponding operations on pointers or `vector` iterators:
+
+```c++
+StrBlob a1 = {"hi", "bye", "now"};
+StrBlobPtr p(a1);	// p points to the vector inside a1
+*p = "okay";		// assigns to the first element in a1
+cout << p->size();	// The overloaded arrow operator will be called and return a string*,
+					// the compiler will dereference that pointer and access the size member
+```
+
+#### ⭐Constraints on the Return from Operator Arrow
+
+When we overload arrow, we change the object from which arrow fetches the specified member. We cannot change the fact that arrow fetches a member. When we write `point->mem`, `point` must be a pointer to a class object or it must be an object of a class with an overloaded `operator->`. Depending on the type of `point`, writing `point->mem` is equivalent to
+
+```c++
+(*point).mem; 				// point is a built-in pointer type
+point.operator()->mem; 		// point is an object of class type
+```
+
+That is, `point->mem` executes as follows:
+
+* If `point` is a pointer, then the built-in arrow operator is applied, which means this expression is a synonym for `(*point).mem`. 
+* If `point` is an object of a class that defines `operator->`, then the result of `point.operator->()` is used to fetch mem. 
+  * If that result is a pointer, then step 1 is executed on that pointer.
+  *  If the result is an object that itself has an overloaded `operator->()`, then this step is repeated on that object. 
+
+> The overloaded arrow operator must return either a pointer to a class type or an object of a class type that defines its own operator arrow.
+
+## 14.8. Function-Call Operator
+
+Classes that overload the call operator allow **objects** of its type to **be used as if they were a function**. Because such classes can also store state, they can be more flexible than ordinary functions.
+
+The function-call operator must be a member function. A class may define multiple versions of the call operator, each of which must differ as to the
+number or types of their parameters.
+
+Objects of classes that define the call operator are referred to as **<font color='blue'>function objects</font>**.
+
+#### Function-Object Classes with State
+
+As an example, we’ll define a class that prints a `string` argument. By default, our class will write to `cout` and will print a space following each `string`:
+
+```c++
+class PrintString{
+public:
+    PrintString(ostream &o = cout, char c = ' '):
+    	os(o), sep(c) {}
+    void operator()(const string &s){
+        os << s << sep;
+    }
+private:
+    ostream &os;		// stream on which to write
+    char sep;			// character to print after each output
+}
+```
+
+When we define `PrintString` objects, we can use the defaults or supply our own values for the separator or output stream:
+
+```c++
+PrintString printer;
+printer(s);
+
+PrintString printer2(cerr, '\n');
+printer2(s);
+```
+
+**<font color='red'>Function objects are most often used as arguments to the generic algorithms.</font>** For example, we can use the library `for_each` algorithm and our
+`PrintString` class to print the contents of a container:
+
+```c++
+for_each(vs.begin(), vs.end(), PrintString(cerr, '\n'));
+```
+
+The third argument to `for_each` is a temporary object of type `PrintString` that we initialize from `cerr` and a newline character. The call to `for_each` will print each element in `vs` to `cerr` followed by a newline.
+
+### 14.8.1. Lambdas Are Function Objects
+
+When we write a lambda, the compiler translates that expression into an unnamed object of an unnamed class. The classes generated from a lambda contain an overloaded function-call operator.
+
+For example, the lambda that we passed as the last argument to `stable_sort`:
+
+```c++
+stable_sort(words.begin(), words.end(),
+           		[](const string &a, const string &b){
+                    return a.size() < b.size();
+                });
+```
+
+acts like an unnamed object of a class that would look something like:
+
+```c++
+class ShorterString{
+public:
+    bool operator()(const string &a, const string &b) const{
+        return a.size() < b.size();
+    }
+};
+stable_sort(words.begin(), words.end(), ShorterString());
+```
+
+By default, lambdas may not change their captured variables. As a result, by default, the function-call operator in a class generated from a lambda is a `const` member function. If the lambda is declared as `mutable`, then the call operator is not `const`.
+
+#### Classes Representing Lambdas with Captures
+
+When a lambda captures a variable by reference, the compiler is permitted to use the reference directly without storing that reference as a data member in the generated class.
+
+In contrast, variables that are captured by value are copied into the lambda. As a result, classes generated from lambdas that capture variables by value have data members corresponding to each such variable. These classes also have a constructor to initialize these data members from the value of the captured variables.
+
+Recall the following code:
+
+```c++
+auto wc = find_if(words.begin(), words.end(),
+                  	[sz](const string &a){
+                        return a.size() >= sz;
+                    });
+```
+
+would generate a class that looks something like
+
+```c++
+class SizeComp{
+public:
+    SizeComp(size_t n): sz(n) { }
+    bool operator()(const string &a) const{
+        return a.size() >= sz;
+    }
+private:
+    size_t sz;
+};
+```
+
+This synthesized class does not have a default constructor; to use this class, we must pass an argument:
+
+```c++
+auto wc = find_if(words.begin(), words.end(), SizeComp(sz));
+```
+
+### 14.8.2. Library-Defined Function Objects
+
+The standard library defines a set of classes that represent the arithmetic, relational, and logical operators. Each class defines a call operator that applies the named operation.
+
+For example, the `plus` class has a function-call operator that applies `+` to a pair of operands; the `modulus` class defines a call operator that applies the binary `%` operator; the `equal_to` class applies `==`; and so on.
+
+These classes are templates to which we supply a single type. That type specifies the parameter type for the call operator:
+
+ ![image-20220806145156147](images/image-20220806145156147.png)
+
+```c++
+plus<int> intAdd;			// function object that can add two int values
+int sum = intAdd(10, 20);	// equivalent to sum = 30
+```
+
+#### Using a Library Function Object with the Algorithms
+
+The function-object classes that represent operators are often used to override the default operator used by an algorithm.
+
+As we’ve seen, by default, the sorting algorithms use `operator<`. To sort into descending order, we can pass an object of type `greater`:
+
+```c++
+// svec is a vector<string>
+sort(svec.begin(), svec.end(), greater<string>());
+```
+
+The third argument is an unnamed object of type `greater<string>`. When `sort` compares elements, rather than applying the `<` operator for the element type, it will call the given `greater` function object. That object applies `>` to the `string` elements.
+
+One important aspect of these library function objects is that the library guarantees that they will work for pointers. Recall that **<font color='red'>comparing two unrelated pointers is undefined.</font>** However, we might want to sort a `vector` of pointers based on their addresses in memory. Although it would be undefined for us to do so directly, we can do so through one of the library function objects:
+
+```c++
+vector<string *> nameTable; // vector of pointers
+// error: the pointers in nameTable are unrelated, so < is undefined
+sort(nameTable.begin(), nameTable.end(), [](string *a, string *b) { return a < b; });
+// ok: library guarantees that less on pointer types is well defined
+sort(nameTable.begin(), nameTable.end(), less<string*>());
+```
+
+> The associative containers use `less<key_type>` to order their elements. As a result, we can define a `set` of pointers or use a pointer as the key in a `map` without specifying `less` directly.
+
+### 14.8.3. Callable Objects and function
+
+C++ has several kinds of callable objects: 
+
+* functions and pointers to functions
+* lambdas
+* objects created by `bind` 
+* classes that overload the function-call operator
+
+Two callable objects with different types may share the same **<font color='blue'>call signature</font>**（调用形式）. The call signature specifies the return type and argument type(s). For example:
+
+```c++
+int(int, int)
+```
+
+#### Different Types Can Have the Same Call Signature
+
+Consider the following different types of callable objects:
+
+```c++
+// oridinary function
+int add(int i, int j){ return i + j; }
+
+// lambda, which generates an unnamed function-object class
+auto mod = [](int i, int j){ return i % j; };
+
+// function-object class
+class div{
+public:
+    int operator()(int i, int j){
+        return i / j;
+    }
+};
+```
+
+Each of these callables share the same call signature: `int(int, int)`
+
+If we want to define a function table to store "pointers" which can point to these callables, we should use the library `function` type.
+
+#### The Library `function` Type
+
+`function` is a template. We must specify the **call signature** when we create a function type:
+
+```c++
+function<int(int, int)>
+```
+
+We can use this type to represent any of our callables:
+
+```c++
+function<int(int, int)> f1 = add; 				// function pointer
+function<int(int, int)> f2 = div(); 			// object of a function-object class
+function<int(int, int)> f3 = [](int i, int j) 	// lambda
+								{ return i * j; };
+cout << f1(4,2) << endl; // prints 6
+cout << f2(4,2) << endl; // prints 2
+cout << f3(4,2) << endl; // prints 8
+```
+
+We can now define our function table using this function type:
+
+```c++
+map<string, function<int(int, int)> table = { {"+", add}, {"%", mod}, {"/", div()} };
+```
+
+Although the underlying callable objects all have different types from one another, we can store each of these distinct types in the common `function<int(int, int)>` type.
+
+As usual, when we index a `map`, we get a reference to the associated value. When we index `table`, we get a reference to an object of type `function`. **<font color='red'>The `function` type overloads the call operator. That call operator takes its own arguments and passes them along to its stored callable object</font>**:
+
+```c++
+table["+"](10, 5);			// calls add(10, 5)
+table["%"](10, 5);			// calls the lambda function object
+table["/"](10, 5); 			// uses the call operator of the div object
+```
+
+#### Overloaded Functions and `function`
+
+We cannot (directly) store the name of an overloaded function in an object of type `function`:
+
+```c++
+// overloaded function add
+int add(int i, int j) { return i + j; }
+Sales_data add(const Sales_data&, const Sales_data&);
+
+map<string, function<int(int, int)>> binops;
+binops.insert( {"+", add} );		// error: which add?
+```
+
+We can slove this problem by using the function pointer or lambda:
+
+```C++
+int (*pf)(int, int) = add;	// pointer to the version of add that takes two ints
+binops.insert( {"+", pf} );	// ok: fp points to the right version of add
+// ok: use a lambda to disambiguate which version of add we want to use
+binops.insert( {"+", [](int i, int j){ return add(i, j); }} );
+```
+
+## 14.9. Overloading, Conversions, and Operators
+
+A non`explicit` constructor that can be called with one argument defines an implicit conversion. Such constructors convert an object from the argument’s type to the class type.
+
+We can also define a conversion from a class type by defining a conversion operator.
+
+Converting constructors and conversion operators define **<font color='blue'>class-type conversions</font>**.
+
+### 14.9.1. Conversion Operators
+
+A **<font color='blue'>conversion operator</font>** is a special kind of member function that converts a value of a class type to a value of some other type. A conversion function typically has the general form:
+
+```c++
+operator type() const;
+```
+
+where `type` represents a type. Conversion operators can be defined for any type (other than void) that can be a function return type. Conversions to
+an array or a function type are not permitted. Conversions to pointer types—both data and function pointers—and to reference types are allowed.
+
+A conversion function must be a member function, may not specify a return type, and must have an empty parameter list. The function usually should be
+`const`.
+
+Because conversion operators are implicitly applied, there is no way to pass arguments to these functions. Hence, conversion operators may not be defined to take parameters. Although a conversion function does not specify a return type, each conversion function must return a value of its corresponding type.
+
+#### Defining a Class with a Conversion Operator
+
+We’ll define a small class that represents an integer in the range of `0` to `255`:
+
+```c++
+class SmallInt{
+public:
+    SmallInt(int i = 0): val(i){
+        if(i < 0 || i > 255)
+            throw out_of_range("Bad SmallInt Value");
+    }
+    operator int() const { return val; }
+private:
+    size_t val;
+};
+```
+
+Our `SmallInt` class defines conversions to and from its type:
+
+* The constructor converts values of arithmetic type to a `SmallInt`.
+* The conversion operator converts `SmallInt` objects to `int`
+
+```c++
+SmallInt si;
+si = 4;			// implicitly converts 4 to SmallInt then calls SmallInt::operator=
+si + 3;			// implicitly converts si to int followed by integer addition
+
+SmallInt si = 3.14;	// the double argument is converted to int using the built-in conversion,
+					// and calls the SmallInt(int) constructor
+si + 3.14;			// the SmallInt conversion operator converts si to int,
+					// and that int is converted to double using the built-in conversion
+```
+
+#### Conversion Operators Can Yield Suprising Results
+
+Classes that define conversions to `bool` may be useful. However, because `bool` is an arithmetic type, a class-type object that is converted to `bool` can be used in any context where an arithmetic type is expected:
+
+```c++
+int i = 42;
+cin << i;
+```
+
+This program attempts to use the output operator on an input stream. There is no `<<` defined for `istream`, so the code is almost surely in error. However, this code could use the `bool` conversion operator to convert `cin` to `bool`. The resulting `bool` value would then be promoted to `int` and used as the left-hand operand to the built-in version of the left-shift operator. The promoted `bool` value (either `1` or `0`) would be shifted left `42` positions.
+
+#### `explicit` Conversion Operators
+
+To prevent such problems, the new standard introduced `explicit` conversion operators:
+
+```c++
+class SmallInt{
+public:
+    explicit operator int() const { return val; }
+};
+```
+
+As with an `explicit` constructor, the compiler won’t (generally) use an explicit conversion operator for implicit conversions:
+
+```c++
+SmallInt si = 3; 			// ok: the SmallInt constructor is not explicit
+si + 3; 					// error: implicit is conversion required, but operator int is explicit
+static_cast<int>(si) + 3; 	// ok: explicitly request the conversion
+```
+
+If the conversion operator is `explicit`, we can still do the conversion. However, with one exception, we must do so explicitly through a cast.The exception is that**<font color='red'> the compiler will apply an explicit conversion to an expression used as a condition.</font>**
+
+That is, an `explicit` conversion will be used implicitly to convert an expression used as
+
+* The condition of an `if`, `while`, or `do` statement
+* The condition expression in a `for` statement header
+* An operand to the logical `NOT (!)`, `OR (||)`, or `AND (&&)` operators
+* The condition expression in a conditional (`?:`) operator
+
+#### Conversion to `bool`
+
+Under the new standard, the IO library defines an `explicit` conversion to `bool`.Whenever we use a stream object in a condition, we use the `operator bool` that is defined for the IO types. For example,
+
+```c++
+while(cin >> value)
+```
+
+The condition in the `while` executes the input operator, which reads into `value` and returns `cin`. To evaluate the condition, **<font color='red'>`cin` is implicitly converted by the `istream` `operator bool` conversion function.</font>** That function returns `true` if the condition state of `cin` is `good`, and `false` otherwise.
+
+### 14.9.2. Avoiding Ambiguous Conversions
+
+There are two ways that multiple conversion paths can occur:
+
+* The first happens when two classes provide **mutual conversions**. For example, mutual conversions exist when a class `A` defines a converting constructor that takes an object of class `B` and `B` itself defines a conversion operator to type `A`.
+* The second happens when we define multiple conversions from or to types that are themselves related by conversions. The most obvious instance is the built-in arithmetic types. A given class ordinarily ought to define at most one conversion to or from an arithmetic type.
+
+#### Argument Matching and Mutual Conversions
+
+Consider the following code:
+
+```c++
+struct B;
+struct A{
+	A() = default;
+    A(const B&);
+};
+struct B{
+    operator A() const;
+};
+A f(const A&);
+B b;
+A a = f(b);		// error
+```
+
+We’ve defined two ways to obtain an `A` from a `B`: either by using `B`’s conversion operator or by using the `A` constructor that takes a `B`. Because there are two ways to obtain an `A` from a `B`, the compiler doesn’t know which conversion to run; the call to `f` is ambiguous.
+
+If we want to make this call, we have to explicitly call the conversion operator or the constructor:
+
+```c++
+A a = f(b.operator A());	// ok: use B's conversion operator
+A a = f(A(b));				// ok: use A's constructor
+```
+
+#### Ambiguities and Multiple Conversions to Built-in Types
+
+The following class has converting constructors from two different arithmetic types, and conversion operators to two different arithmetic types:
+
+```c++
+struct A{
+    A(int = 0);
+    A(double);
+    operator int() const;
+    operator double() const;
+};
+
+void f2(long double);
+A a;
+f2(a);		// error
+long lg;
+A a2(lg);	// error
+```
+
+In the call to `f2`, neither conversion is an exact match to `long double`. However, either conversion can be used and neither conversion is better than the other, thus the call is ambiguous.
+
+We encounter the same problem when we try to initialize `a2` from a `long`. Neither constructor is an exact match for `long`. Each would require that the argument be converted before using the constructor. The conversion sequences are indistinguishable, so the call is ambiguous.
+
+> Caution: Conversions and Operators
+>
+> With the exception of an explicit conversion to `bool`, avoid defining conversion functions and limit non`explicit` constructors to those that are “obviously right.”
+
+#### Overloaded Functions and User-Defined Conversion
+
+In a call to an overloaded function, if two (or more) user-defined conversions provide a viable match, the conversions are considered equally good:
+
+```c++
+struct C {
+	C(int);
+	// other members
+};
+struct E {
+	E(double);
+	// other members
+};
+
+void manip2(const C&);
+void manip2(const E&);
+// error ambiguous: two different user-defined conversions could be used
+manip2(10); 	// manip2(C(10) or manip2(E(double(10)))
+```
+
+In this case, `C` has a conversion from `int` and `E` has a conversion from `double`. For the call `manip2(10)`, both `manip2` functions are viable:
+
+* `manip2(const C&)` is viable because `C` has a converting constructor that takes an `int`. That constructor is an exact match for the argument.
+* `manip2(const E&)` is viable because `E` has a converting constructor that takes a `double` and we can use a standard conversion to convert the `int`
+  argument in order to use that converting constructor.
+
+Because calls to the overloaded functions require **different user-defined conversions** from one another, this call is ambiguous. Even though one of the calls requires a standard conversion and the other is an exact match, the compiler will still flag this call as an error.
+
+### 14.9.3. Function Matching and Overloaded Operators
+
+Overloaded operators are overloaded functions. Normal function matching is used to determine which operator—built-in or overloaded—to apply to a given expression. However, when an operator function is used in an expression, we cannot use the form of the call to distinquish whether we’re calling a nonmember or a member function:
+
+If `a` has a class type, the expression `a` sym `b` mignt be: `a.operator`sym`(b);`  or `operator`sym`(a, b);`
+
+Thus when we use an overloaded operator in an expression, there is nothing to indicate whether we’re using a member or nonmember function. **<font color='red'>Both
+member and nonmember versions must be considered.</font>**
+
+As an example, we’ll define an addition operator for our `SmallInt` class:
+
+```c++
+class SmallInt {
+friend SmallInt operator+(const SmallInt&, const SmallInt&);
+public:
+	SmallInt(int = 0); // conversion from int
+	operator int() const { return val; } // conversion to int
+private:
+	std::size_t val;
+};
+```
+
+We can use this class to add two `SmallInt`s, but we will run into ambiguity problems if we attempt to perform mixed-mode arithmetic:
+
+```c++
+SmallInt s1, s2;
+SmallInt s3 = s1 + s2;	// uses overloaded operator+
+int i = s3 + 0;			// error: ambiguous
+```
+
+The second addition is ambiguous, because we can convert `0` to a `SmallInt` and use the `SmallInt` version of `+`, or convert `s3` to `int` and use the built-in addition operator on `int`s.
