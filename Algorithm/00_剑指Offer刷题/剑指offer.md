@@ -4488,3 +4488,44 @@ int Add(int num1, int num2){
 }
 ```
 
+## 面试题66: 构建乘积数组
+
+### 题目
+
+给定一个数组 A[0,1,...,n-1]，请构建一个数组 B[0,1,...,n-1]，其中 B 中的元素 B[i] = A[0]×A[1]×...×A[i-1]×A[i+1]×...×A[n-1]。不能使用除法。
+
+### 解题思路
+
+如果可以使用除法，则可以直接使用利用 A[0]×A[1]×...×A[n-1] / A[i] 求得 B[i]。现在不能使用除法，最直观的做法是依次计算 B[i]，时间复杂度为 O(n^2)
+
+一种更高效的解法是将 B[i] 拆成两个部分计算：A[0]×A[1]×...×A[i-1] 和 A[i+1]×...×A[n-1]：
+
+不妨令 C[i] = A[0]×A[1]×...×A[i-1] ，C[0] = 1，C[1] = A[0] ，C[2] = A[0]×A[1]，...，C[n-1] = A[0]×A[1]×...×A[n-2]
+
+不妨令 D[i] = A[i+1]×...×A[n-1] ，D[0] = A[1]×...×A[n-1]，D[1] = A[2]×...×A[n-1]，...，D[n-1] = 1
+
+由于 C[i] 和 D[i] 都是连续的，可以分别从前到后和从后到前来求解。就避免了每次计算都需要遍历数组。
+
+### 代码实现
+
+```c++
+void BuildProductionArray(const vector<double>& input, vector<double>& output){
+    if(input.empty())
+        return;
+    int n = input.size();
+    vector<double> cVec(n);
+    vector<double> dVec(n);
+    cVec[0] = 1;
+    for(int i = 1; i != n; ++i ){
+        cVec[i] = cVec[i - 1] * input[i - 1];
+    }
+    dVec[n - 1] = 1;
+    for(int i = n - 2; i != -1; --i){
+        dVec[i] = dVec[i + 1] * input[i + 1];
+    }
+    for(int i = 0; i != n; ++i){
+        output.push_back(cVec[i] * dVec[i]);
+    }
+}
+```
+
