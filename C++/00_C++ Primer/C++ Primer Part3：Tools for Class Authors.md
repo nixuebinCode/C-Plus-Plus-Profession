@@ -1963,3 +1963,372 @@ int i = s3 + 0;			// error: ambiguous
 ```
 
 The second addition is ambiguous, because we can convert `0` to a `SmallInt` and use the `SmallInt` version of `+`, or convert `s3` to `int` and use the built-in addition operator on `int`s.
+
+# Chapter 15. Object-Oriented Programming
+
+Object-oriented programming is based on three fundamental concepts: data abstraction, inheritance and dynamic binding.
+
+Using data abstraction, we can define classes that separate interface from implementation.
+
+Through inheritance, we can define classes that model the relationships among similar types.
+
+Through dynamic binding, we can use objects of these types while ignoring the details of how they differ.
+
+## 15.1. OOP: An Overview
+
+#### Inheritance
+
+Typically there is a base class and several derived classes. The base class defines those members that are common to the types in the hierarchy. Each derived class defines those members that are specific to the derived class itself.
+
+For example, our bookstore might offer different pricing strategies for different books. To model our different kinds of pricing strategies, we’ll define a class named `Quote`, which will be the base class of our hierarchy. A `Quote` object will represent undiscounted books. From `Quote` we will inherit a second class, named `Bulk_quote`, to represent books that can be sold with a quantity discount.
+
+These classes will have the following two member functions:
+
+* `isbn()`, which will return the `ISBN`. This operation does not depend on the specifics of the inherited class(es); it will be defined only in class `Quote`.
+* `net_price(size_t)`, which will return the price for purchasing a specified number of copies of a book. This operation is type specific; both `Quote` and `Bulk_quote` will define their own version of this function.
+
+```c++
+class Quote {
+public:
+	string isbn() const;
+	virtual double net_price(size_t n) const;
+};
+
+class Bulk_quote : public Quote {
+public:
+	double net_price(size_t n) const override;
+};
+```
+
+#### Dynamic Binding
+
+Through dynamic binding, we can use the same code to process objects of either type `Quote` or `Bulk_quote` interchangeably:
+
+```c++
+double print_total(ostream &os, const Quote &item, size_t n)
+{
+	// depending on the type of the object bound to the item parameter
+	// calls either Quote::net_price or Bulk_quote::net_price
+	double ret = item.net_price(n);
+	os << "ISBN: " << item.isbn() // calls Quote::isbn
+		<< " # sold: " << n << " total due: " << ret << endl;
+	return ret;
+}
+```
+
+1. Because the `item` parameter is a reference to `Quote`, we can call this function on either a `Quote` object or a `Bulk_quote` object.
+2. Because `net_price` is a virtual function, and because `print_total` calls `net_price` through a reference, the version of `net_price` that is run will depend on the type of the object that we pass to `print_total`
+3. Because the decision as to which version to run depends on the type of the argument, that decision can’t be made until run time. Therefore, **<font color='red'>dynamic binding is sometimes known as run-time binding.</font>**
+
+> In C++, dynamic binding happens when a virtual function is called through a reference (or a pointer) to a base class.
+
+## 15.2. Defining Base and Derived Classes
+
+### 15.2.1. Defining a Base Class
+
+We’ll start by completing the definition of our `Quote` class:
+
+```c++
+class Quote {
+public:
+	Quote() = default;
+	Quote(string &book, double sales_price):
+		bookNo(book), price(sales_price) { }
+	string isbn() const { return bookNo; };
+	// returns the total sales price for the specified number of items
+	// derived classes will override and apply different discount algorithms
+	virtual double net_price(size_t n) const { return n * price; }
+	// dynamic binding for the destructor
+	virtual ~Quote() = default;
+private:
+	string bookNo;			// ISBN number of this item
+protected:
+	double price = 0.0;		// normal, undiscounted price
+};
+```
+
+#### Member Functions and Inheritance
+
+In C++, a base class must distinguish the functions it expects its derived classes to override from those that it expects its derived classes to inherit without change. The base class defines as `virtual` those functions it expects its derived classes to override. When we call a virtual function through a pointer or reference, the call will be dynamically bound.
+
+The `virtual` keyword appears only on the declaration inside the class and may not be used on a function definition that appears outside the class body.
+
+A function that is declared as `virtual` in the base class is implicitly `virtual` in the derived classes as well.
+
+Member functions that are not declared as `virtual` are resolved at compile time, not run time. 
+
+#### Access Control and Inheritance
+
+A derived class inherits the members defined in its base class. A derived class may access the `public` members of its base class but may not access the `private` members. However, sometimes a base class has members that it wants to let its derived classes use while still prohibiting access by other users. We specify such members after a `protected` access specifier.
+
+### 15.2.2. Defining a Derived Class
+
+```c++
+class Bulk_quote : public Quote {
+public:
+	Bulk_quote() = default;
+	Bulk_quote(const string&, double, size_t, double);
+    // overrides the base version in order to implement the bulk purchase discount policy
+	double net_price(size_t n) const override;
+private:
+	size_t min_qty = 0;		// minimum purchase for the discount to apply
+	double discount = 0.0;	// fractional discount to apply
+};
+```
+
+Our `Bulk_quote` class inherits the `isbn` function and the `bookNo` and `price` data members of its `Quote` base class.
+
+It defines its own version of `net_price` and has two additional data members, `min_qty` and `discount`.
+
+When the access specifier used in a derivation list is `public`, the `public` members of the base class become part of the interface of the derived class as well. In addition, we can bind an object of a publicly derived type to a pointer or reference to the base type.
+
+#### Virtual Functions in the Derived Class
+
+Derived classes frequently, but not always, override the virtual functions that they inherit. If a derived class does not override a virtual from its base, then, like any other member, the derived class inherits the version defined in its base class.
+
+The new standard lets a derived class explicitly note that it intends a member function to override a virtual that it inherits. It does so by specifying `override` after the parameter list.
+
+#### Derived-Class Objects and the Derived-to-Base Conversion
+
+A `Bulk_quote` object will contain four data elements: the `bookNo` and `price` data members that it inherits from `Quote`, and the `min_qty` and `discount` members, which are defined by `Bulk_quote`:
+
+ ![image-20220807095238267](images/image-20220807095238267.png)
+
+Because a derived object contains subparts corresponding to its base class(es), we can use an object of a derived type as if it were an object of its base type(s). In particular, we can bind a base-class reference or pointer to the base-class part of a derived object.
+
+```c++
+Quote item;
+Bulk_quote bulk;
+Quote *p = &item;
+p = *bulk;			// p points to the Quote part of bulk
+Quite &r = bulk;	// r bound to the Quote part of bulk
+```
+
+This conversion is often referred to as the **<font color='blue'>derived-to-base</font>** conversion：
+
+* We can use an object of derived type or a reference to a derived type when a reference to the base type is required. 
+* We can use a pointer to a derived type where a pointer to the base type is required.
+
+#### Derived-Class Constructors
+
+Although a derived object contains members that it inherits from its base, it cannot directly initialize those members.**<font color='red'> It must use a base-class constructor to initialize its base-class part.</font>**
+
+```c++
+Bulk_quote(const string &book, double p, size_t qty, double disc):
+		Quote(book, p), min_qty(qty), discount(disc) { }
+```
+
+* This constuctor passes its first two parameters (representing the `ISBN` and `price`) to the `Quote` constructor. That `Quote` constructor initializes the `Bulk_quote`’s base-class part.
+
+* When the (empty) `Quote` constructor body completes, the base-class part of the object being constructed will have been initialized. 
+
+* Next the direct members, `min_qty` and `discount`, are initialized. 
+
+* Finally, the (empty) function body of the `Bulk_quote` constructor is run.
+
+#### Using Members of the Base Class from the Derived Class
+
+A derived class may access the `public` and `protected` members of its base class:
+
+```c++
+double Bulk_quote::net_price(size_t cnt) const {
+	if (cnt >= min_qty)
+		return cnt * (1 - discount) * price;
+	else
+		return cnt * price;
+}
+```
+
+#### Inheritance and `static` Members
+
+If a base class defines a `static` member, there is only one such member defined for the entire hierarchy. Regardless of the number of classes derived
+from a base class, there exists a single instance of each `static` member.
+
+```c++
+class Base{
+public:
+    static void statmem();
+};
+
+class Derived : public Base{
+    void f(const Derived&);
+};
+```
+
+`static` members obey normal access control. If the member is `private` in the base class, then derived classes have no access to it. Assuming the member is accessible, we can use a `static` member through either the base or derived:
+
+```c++
+void Derived::f(const Derived &derived_obj){
+    Base::statmem();			// ok: Base defines statmem
+    Derived::statmem();			// ok: Derived inherits statmem
+    // ok: derived objects can be used to access static from base
+    derived_obj.statmem();		// accessed through a Derived object
+    statmem();					// accessed through this object
+}
+```
+
+#### Declarations of Derived Classes
+
+A derived class is declared like any other class. The declaration contains the class name but **<font color='red'>does not include its derivation list</font>**:
+
+```c++
+class Bulk_Quote : public Quote;	// error: derivation list can't appear here
+class Bulk_quote;					// ok: right way to declare a derived class
+```
+
+#### Classes Used as a Base Class
+
+**<font color='red'>A class must be defined, not just declared, before we can use it as a base class:</font>**
+
+```c++
+class Quote; // declared but not defined
+// error: Quote must be defined
+class Bulk_quote : public Quote { ... };
+```
+
+Each derived class contains, and may use, the members it inherits from its base class. To use those members, the derived class must know what they are. 
+
+One implication of this rule is that it is impossible to derive a class from itself.
+
+#### Preventing Inheritance
+
+Under the new standard, we can prevent a class from being used as a base by following the class name with `final`:
+
+```c++
+class NoDerived final { /* */ }; // NoDerived can't be a base class
+```
+
+### 15.2.3. Conversions and Inheritance
+
+The fact that we can bind a reference (or pointer) to a base-class type to a derived object has a crucially important implication: When we use a reference (or pointer) to a base-class type, we don’t know the actual type of the object to which the pointer or reference is bound.
+
+That object can be an object of the base class or it can be an object of a derived class.
+
+#### Static Type and Dynamic Type
+
+The **<font color='blue'>static type</font>** of an expression is always known at compile time—it is the type with which a variable is declared or that an expression yields.
+
+The **<font color='blue'>dynamic type</font>** is the type of the object in memory that the variable or expression represents. The dynamic type may not be known until run time.
+
+#### There Is No Implicit Conversion from Base to Derived ...
+
+The conversion from derived to base exists because every derived object contains a base-class part to which a pointer or reference of the base-class type can be bound. 
+
+On the other hand, a base object that is not part of a derived object has only the members defined by the base class; it doesn’t have the members defined by the derived class. Thus there is no automatic conversion from the base class to its derived class(s):
+
+```c++
+Quote base;
+Bulk_quote* bulkP = &base;		// error: can't convert base to derived
+Bulk_quote& bulkRef = base;		// error: can't convert base to derived
+```
+
+What is sometimes a bit surprising is that **<font color='red'>we cannot convert from base to derived even when a base pointer or reference is bound to a derived object</font>**:
+
+```c++
+Bulk_quote bulk;
+Quote *itemP = &bulk;		// ok: dynamic type is Bulk_quote
+Bulk_quote *bulkP = itemP;	// error: can't convert base to derived
+```
+
+The compiler (at compile time) looks only at the static types of the pointer or reference to determine whether a conversion is legal. If the base class has one or more virtual functions, we can use a `dynamic_cast` to request a conversion that is checked at run time. Alternatively, in those cases when we know that the conversion from base to derived is safe, we can use a `static_cast` to override the compiler.
+
+#### ⭐...and No Conversion between Objects
+
+The automatic derived-to-base conversion applies only for conversions to a reference or pointer type. **<font color='red'>There is no such conversion from a derived-class type to the baseclass type.</font>**
+
+Remember that when we initialize or assign an object of a class type, we are actually calling a function：
+
+* When we initialize, we’re calling a constructor
+* When we assign, we’re calling an assignment operator
+
+These members normally have a parameter that is a reference to the `const` version of the class type, so **<font color='red'>the derived-to-base conversion lets us pass a derived object to a base-class copy/move operation.</font>**
+
+These operations are not virtual. When we pass a derived object to a base-class constructor, **<font color='red'>the constructor that is run is defined in the base class</font>**. Similarly, if we assign a derived object to a base object, the assignment operator that is run is the one defined in the base class:
+
+```c++
+Bulk_quote bulk;	// object of derived type
+Quote item(bulk);	// uses the Quote::Quote(const Quote&) constructor
+item = bulk;		// calls Quote::operator=(const Quote&)
+```
+
+When `item` is constructed, the `Quote` copy constructor is run. That constructor knows only about the `bookNo` and `price` members. It copies those members from the `Quote` part of `bulk` and ignores the members that are part of the `Bulk_quote`.
+
+## 15.3. Virtual Functions
+
+As we’ve seen, in C++ dynamic binding happens when a virtual member function is called through a reference or a pointer to a base-class type. Because
+we don’t know which version of a function is called until run time, we must define every virtual function, regardless of whether it is used, because the compiler has no way to determine whether a virtual function is used.
+
+#### Calls to Virtual Functions *May Be* Resolved at Run Time
+
+It is crucial to understand that dynamic binding happens only when a virtual function is called through a pointer or a reference:
+
+```c++
+Quote base("0-201-82470-1", 50);
+Bulk_quote derived("0-201-82470-1", 50, 5, .19);
+base = dereived;		// copies the Quote part of derived into base
+base.net_price(20);		// calls Quote::net_price
+```
+
+#### Virtual Functions in a Derived Class
+
+When a derived class overrides（覆盖） a virtual function, it may, but is not required to, repeat the `virtual` keyword. Once a function is declared as `virtual`, it remains `virtual` in all the derived classes.
+
+A derived-class function that overrides an inherited virtual function must have exactly the same parameter type(s) as the base-class function that it overrides.
+
+With one exception, the return type of a virtual in the derived class also must match the return type of the function from the base class——virtuals
+that return a reference (or pointer) to types that are themselves related by inheritance:
+
+if `D` is derived from `B`, then a base class virtual can return a `B*` and the version in the derived can return a `D*`. 
+
+#### The `final` and `override` Specifiers
+
+As we’ll see in §15.6, it is legal for a derived class to define a function with the same name as a virtual in its base class but with a different parameter list. In such cases, the derived version does not override the version in the base class. 
+
+In practice, such declarations often are a mistake—the class author intended to override a virtual from the base class but made a mistake in specifying the parameter list. Finding such bugs can be surprisingly hard. Under the new standard we can specify `override` on a virtual function in a derived class.
+
+Doing so makes our intention clear and (more importantly) enlists the compiler in finding such problems for us. 
+
+```c++
+struct B {
+	virtual void f1(int) const;
+	virtual void f2();
+	void f3();
+};
+struct D1 : B {
+	void f1(int) const override; // ok: f1 matches f1 in the base
+	void f2(int) override; 		// error: B has no f2(int) function
+	void f3() override; 		// error: f3 not virtual
+	void f4() override; 		// error: B doesn't have a function named f4
+};
+```
+
+We can also designate a function as `final`. Any attempt to override a function that has been defined as `final` will be flagged as an error:
+
+```c++
+struct D2 : B {
+	// inherits f2() and f3() from B and overrides f1(int)
+	void f1(int) const final; // subsequent classes can't override f1(int)
+};
+struct D3 : D2 {
+	void f2(); 					// ok: overrides f2 inherited from the indirect base, B
+	void f1(int) const; 		// error: D2 declared f2 as final
+};
+```
+
+#### Virtual Functions and Default Arguments
+
+If a call to virtual function uses a default argument, the value that is used is **<font color='red'>the one defined by the static type</font>** through which the function is called.
+
+That is, when a call is made through a reference or pointer to base, the default argument(s) will be those defined in the base class. The base-class arguments will be used even when the derived version of the function is run.
+
+#### Circumventing（回避） the Virtual Mechanism
+
+In some cases, we want to prevent dynamic binding of a call to a virtual function; we want to force the call to use a particular version of that virtual. We can use the scope operator to do so：
+
+```c++
+// calls the version from the base class regardless of the dynamic type of baseP
+// This call will be resolved at compile time.
+double undiscounted = baseP->Quote::net_price(42);
+```
+
+Why might we wish to circumvent the virtual mechanism? The most common reason is when **<font color='red'>a derived-class virtual function calls the version from the base class</font>**. In such cases, the base-class version might do work common to all types in the hierarchy. The versions defined in the derived classes would do whatever additional work is particular to their own type.
