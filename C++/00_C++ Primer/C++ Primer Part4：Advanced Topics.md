@@ -880,8 +880,7 @@ It is worth noting that ordinarily, we do not put a `#include` inside the namesp
 
 #### Template Specializations
 
-Template specializations must be defined in the same namespace that contains the original template. As with any other namespace name, so long as we have declared the specialization inside the namespace, we can define it outside the
-namespace:
+**<font color='red'>Template specializations must be defined in the same namespace that contains the original template. </font>**As with any other namespace name, so long as we have declared the specialization inside the namespace, we can define it outside the namespace:
 
 ```c++
 // we must declare the specialization as a member of std
@@ -967,10 +966,9 @@ namespaces: for example, `cplusplus_primer::FourthEd::Query_base`.
 
 #### Unnamed Namespaces
 
-An unnamed namespace is the keyword `namespace` followed immediately by a block of declarations delimited by curly braces. Variables defined in an unnamed namespace have static lifetime: They are created before their first use and destroyed
-when the program ends.
+An unnamed namespace is the keyword `namespace` followed immediately by a block of declarations delimited by curly braces. Variables defined in an unnamed namespace have static lifetime: They are created before their first use and destroyed when the program ends.
 
-An unnamed namespace may be discontiguous within a given file but does not span files. Each file has its own unnamed namespace. If two files contain unnamed namespaces, those namespaces are unrelated.
+An unnamed namespace may be discontiguous within a given file but does not span files. Each file has its own unnamed namespace. **<font color='red'>If two files contain unnamed namespaces, those namespaces are unrelated.</font>**
 
 Names defined in an unnamed namespace are used directly; after all, there is no namespace name with which to qualify them.
 
@@ -986,3 +984,340 @@ i = 10;
 ```
 
 ### 18.2.2. Using Namespace Members
+
+Referring to namespace members as `namespace_name::member_name` is admittedly cumbersome, especially if the namespace name is long.
+
+#### Namespace Aliases
+
+A **<font color='blue'>namespace alias</font>** can be used to associate a shorter synonym with a namespace name. For example, a long namespace name such as
+
+```c++
+namespace cplusplus_primer { /* ... */ };
+```
+
+can be associated with a shorter synonym as follows:
+
+```c++
+namespace primer = cplusplus_primer;
+```
+
+#### `using` Declarations: A Recap
+
+A `using` declaration introduces only one namespace member at a time. It allows us to be very specific regarding which names are used in our programs:
+
+```c++
+using std::string;
+using std::cin;
+using std::endl;
+```
+
+Entities with the same name defined in an outer scope are hidden.
+
+#### `using` Directives （using 指示）
+
+A `using` directive, like a `using` declaration, allows us to use the unqualified form of a namespace name. Unlike a `using` declaration, we retain no control over which names are made visible—they all are.
+
+A `using` directive begins with the keyword `using`, followed by the keyword `namespace`, followed by a namespace name:
+
+```c++
+using namespace std;
+```
+
+A `using` directive may appear in global, local, or namespace scope. It may not appear in a class scope.
+
+These directives make all the names from a specific namespace visible without qualification. The short form names can be used from the point of the `using` directive to the end of the scope in which the `using` directive appears.
+
+#### `using` Directives and Scope
+
+As we’ve seen, a `using` declaration puts the name in the same scope as that of the `using` declaration itself. It is as if the `using` declaration declares a local alias for the namespace member.
+
+A `using` directive does not declare local aliases. Rather, it has the effect of lifting the namespace members into the nearest scope that contains both the namespace itself and the `using` directive. （它具有将命名空间成员提升到包含命名空间本身和 using 指示的最近作用域的能力）:
+
+```c++
+// namespace A and function f are defined at global scope
+namespace A {
+	int i, j;
+}
+void f()
+{
+	using namespace A; // injects the names from A into the global scope
+	cout << i * j << endl; // uses i and j from namespace A
+	// ...
+}
+```
+
+#### Headers and `using` Declarations or Directives
+
+A header that has a `using` directive or declaration at its top-level scope injects names into every file that includes the header. **<font color='red'>As a result, header files should not contain `using` directives or `using` declarations except inside functions or namespaces.</font>**
+
+### ⭐18.2.3. Classes, Namespaces, and Scope
+
+#### Argument-Dependent Lookup and Parameters of Class Type 
+
+Consider the following simple program:
+
+```c++
+std::string s;
+std::cin >> s;
+```
+
+As we know, this call is equivalent to:
+
+```c++
+operator>>(std::cin, s);
+```
+
+This `operator>>` function is defined by the `string` library, which in turn is defined in the `std` namespace. Yet we can we call `operator>>` without an `std::` qualifier and without a `using` declaration.
+
+**<font color='red'>When we pass an object of a class type to a function, the compiler searches the namespace in which the argument’s class is defined in addition to the normal scope lookup</font>**. This exception also applies for calls that pass pointers or references to a class type.
+
+In this example, when the compiler sees the “call” to `operator>>`, it looks for a matching function in the current scope, including the scopes enclosing the output statement. In addition, because the `>>` expression has parameters of class type, the compiler also looks in the namespace(s) in which the types of `cin` and `s` are defined. Thus, for this call, the compiler looks in the `std` namespace, which defines the `istream` and `string` types. When it searches `std`, the compiler finds the string output operator function.
+
+#### Lookup and `std::move` and `std::forward`
+
+Now consider the library `move` and `forward` functions. Both of these functions are template functions, and the library defines versions of them that have a single rvalue reference function parameter. As we’ve seen, in a function template, an rvalue reference parameter can match any type. If our application defines a function named `move` that takes a single parameter, then—no matter what type the parameter has—the application’s version of `move` will collide with the library version. Similarly for `forward`.
+
+As a result, name collisions with `move` (and `forward`) are more likely than collisions with other library functions. In addition, because `move` and `forward` do very specialized type manipulations, the chances that an application specifically wants to override the behavior of these functions are pretty small.
+
+This fact explains why we suggest always using the fully qualified versions of these names. So long as we write `std::move` rather than `move`, we know that we will get the version from the standard library.
+
+#### Lookup and `std::swap`
+
+ ![image-20220902133652147](images/image-20220902133652147.png)
+
+ ![image-20220902133712935](images/image-20220902133712935.png)
+
+
+
+ ![image-20220902133746258](images/image-20220902133746258.png)
+
+ ![image-20220902133807897](images/image-20220902133807897.png)
+
+### 18.2.4. Overloading and Namespaces
+
+Namespaces have two impacts on function matching. One of these should be obvious: A `using` declaration or directive can add functions to the
+candidate set. The other is much more subtle.
+
+#### Argument-Dependent Lookup and Overloading
+
+Each namespace that defines a class used as an function argument (and those that define its base classes) is searched for candidate functions. Any functions in those namespaces that have the same name as the called function are added to the candidate set. These functions are added even though they otherwise are not visible at the point of the call:
+
+```c++
+namespace NS{
+    class Quote { /* */ };
+    void display(const Quote&) { /* */ }
+}
+class Bulk_item : public NS::Quote { /* */ };
+int main(){
+    Bulk_item book1;
+    display(book1);
+    
+    return 0;
+}
+```
+
+The argument we passed to `display` has class type `Bulk_item`. The candidate functions for the call to `display` are not only the functions with declarations that are in scope where `display` is called, but also the functions in the namespace where `Bulk_item` and its base class, `Quote`, are declared. The function `display(const Quote&)` declared in namespace `NS` is added to the set of candidate functions.
+
+#### Overloading and `using` Declarations
+
+To understand the interaction between `using` declarations and overloading, it is important to remember that a `using` declaration declares a name, not a specific function:
+
+```c++
+using NS::print(int); // error: cannot specify a parameter list
+using NS::print; // ok: using declarations specify names only
+```
+
+When we write a `using` declaration for a function, all the versions of that function are brought into the current scope.
+
+If the `using` declaration introduces a function in a scope that already has a function of the same name with the same parameter list, then the `using` declaration is in error. Otherwise, the `using` declaration defines additional overloaded instances of the given name.
+
+#### Overloading and `using` Directives
+
+A `using` directive lifts the namespace members into the enclosing scope. If a namespace function has the same name as a function declared in the scope at which the namespace is placed, then the namespace member is added to the overload set:
+
+```c++
+namespace libs_R_us {
+	extern void print(int);
+	extern void print(double);
+}
+// ordinary declaration
+void print(const std::string &);
+// this using directive adds names to the candidate set for calls to print:
+using namespace libs_R_us;
+// the candidates for calls to print at this point in the program are:
+// print(int) from libs_R_us
+// print(double) from libs_R_us
+// print(const std::string &) declared explicitly
+```
+
+Differently from how `using` declarations work, it is not an error if a `using` directive introduces a function that has the same parameters as an existing function. As with other conflicts generated by `using` directives, there is no problem unless we try to call the function without specifying whether we want the one from the namespace or from the current scope.
+
+## 18.3. Multiple and Virtual Inheritance
+
+**<font color='blue'>Multiple inheritance</font>** is the ability to derive a class from more than one direct base class. A multiply derived class inherits the properties of all its parents.
+
+To explore multiple inheritance, we’ll use an example of a zoo animal hierarchy.
+
+We’ll define an abstract `ZooAnimal` class to hold information that is common to all the zoo animals and provides the most general interface. The `Bear` class will contain information that is unique to the `Bear` family, and so on.
+
+In addition to the `ZooAnimal` classes, our application will contain auxiliary classes. In our implementation of a `Panda` class, a Panda is multiply derived from `Bear` and `Endangered`.
+
+### 18.3.1. Multiple Inheritance
+
+The derivation list in a derived class can contain more than one base class:
+
+```c++
+class Bear : public ZooAnimal { /* */ };
+class Panda : public Bear, public Endangered { /* */ };
+```
+
+#### Multiply Derived Classes Inherit State from Each Base Class
+
+a `Panda` object has a `Bear` part (which itself contains a `ZooAnimal` part), an `Endangered` class part, and the non`static` data members, if any, declared within the `Panda` class.
+
+ ![image-20220902140755962](images/image-20220902140755962.png)
+
+#### Derived Constructors Initialize All Base Classes
+
+Constructing an object of derived type constructs and initializes all its base subobjects. And a derived type’s constructor initializer may initialize only its direct base classes:
+
+```c++
+// explicitly initialize both base classes
+Panda::Panda(std::string name, bool onExhibit)
+		: Bear(name, onExhibit, "Panda"), Endangered(Endangered::critical) { }
+// implicitly uses the Bear default constructor to initialize the Bear subobject
+Panda::Panda() : Endangered(Endangered::critical) { }
+```
+
+#### Destructors and Multiple Inheritance
+
+As usual, the destructor in a derived class is responsible for cleaning up resources allocated by that class only. Destructors are always invoked in the reverse order from which the constructors are run.
+
+#### Copy and Move Operations for Multiply Derived Classes
+
+As is the case for single inheritance, classes with multiple bases that define their own copy/move constructors and assignment operators must copy, move, or assign the whole object
+
+The base parts of a multiply derived class are automatically copied, moved, or assigned only if the derived class uses the synthesized versions of these members. In the synthesized copy-control members, each base class is implicitly constructed, assigned, or destroyed, using the corresponding member from that base class.
+
+### 18.3.2. Conversions and Multiple Base Classes
+
+A pointer or reference to any of an object’s (accessible) base classes can be used to point or refer to a derived object. For example, a pointer or reference to `ZooAnimal`, `Bear`, or `Endangered` can be bound to a `Panda` object:
+
+The compiler makes no attempt to distinguish between base classes in terms of a derived-class conversion. Converting to each base class is equally good. For example, if there was an overloaded version of `print`:
+
+```c++
+void print(const Bear&);
+void print(const Endangered&);
+```
+
+an unqualified call to `print` with a `Panda` object would be a compile-time error:
+
+```c++
+Panda ying_yang("ying_yang");
+print(ying_yang); // error: ambiguous
+```
+
+#### Lookup Based on Type of Pointer or Reference
+
+As with single inheritance, the static type of the object, pointer, or reference determines which members we can use.
+
+As an example, consider the following calls, which assume that our classes define the virtual functions listed in the following table:
+
+ ![image-20220902142451886](images/image-20220902142451886.png)
+
+```c++
+Bear *pb = new Panda("ying_yang");
+pb->print(); 		// ok: Panda::print()
+pb->cuddle(); 		// error: not part of the Bear interface
+pb->highlight(); 	// error: not part of the Bear interface
+delete pb; 			// ok: Panda::~Panda()
+```
+
+```c++
+Endangered *pe = new Panda("ying_yang");
+pe->print(); 		// ok: Panda::print()
+pe->toes(); 		// error: not part of the Endangered interface
+pe->cuddle(); 		// error: not part of the Endangered interface
+pe->highlight(); 	// ok: Panda::highlight()
+delete pe; 			// ok: Panda::~Panda()
+```
+
+### 18.3.3. Class Scope under Multiple Inheritance
+
+Under single inheritance, the scope of a derived class is nested within the scope of its direct and indirect base classes. Lookup happens by searching up the inheritance hierarchy until the given name is found. Names defined in a derived class hide uses of that name inside a base.
+
+Under multiple inheritance, this same lookup happens **<font color='red'>simultaneously </font>**among all the direct base classes. If a name is found through more than one base class, then use of that name is ambiguous.
+
+In our example, if we use a name through a `Panda` object, pointer, or reference, both the `Endangered` and the `Bear/ZooAnimal` subtrees are examined in **<font color='red'>parallel</font>**. If the name is found in more than one subtree, then the use of the name is ambiguous. If we want to use that name, we must specify which version we want to use.
+
+It might be more surprising to learn that **<font color='red'>an error would be generated even if the two inherited functions had different parameter lists.</font>** As always, name lookup happens before type checking (§ 6.4.1). When the compiler finds a function name in two different scopes, it generates an error noting that the call is ambiguous.
+
+### 18.3.4. Virtual Inheritance
+
+Although the derivation list of a class may not include the same base class more than once, a class can inherit from the same base class more than once.
+
+It might inherit the same base indirectly from two of its own direct base classes, or it might inherit a particular class directly and indirectly through another of its base classes.
+
+By default, a derived object contains a separate subpart corresponding to each class in its derivation chain. **<font color='red'>If the same base class appears more than once in the derivation, then the derived object will have more than one subobject of that type.</font>**
+
+We can avoid this rule by using **<font color='blue'>virtual inheritance</font>**. Regardless of how often the same virtual base appears in an inheritance hierarchy, the derived object contains only one, shared subobject for that virtual base class.
+
+#### A Different `Panda` Class
+
+As an example, we change `Panda` to inherit from both `Bear` and `Raccoon`. To avoid giving `Panda` two `ZooAnimal` base parts, we’ll define `Bear` and `Raccoon` to inherit virtually from `ZooAnimal`.
+
+ ![image-20220902145743311](images/image-20220902145743311.png)
+
+Virtual derivation affects the classes that subsequently derive from a class with a virtual base; it doesn’t affect the derived class itself.
+
+#### Using a Virtual Base Class
+
+We specify that a base class is virtual by including the keyword `virtual` in the derivation list:
+
+```c++
+// the order of the keywords public and virtual is not significant
+class Raccoon : public virtual ZooAnimal { /* ... */ };
+class Bear : virtual public ZooAnimal { /* ... */ };
+```
+
+We do nothing special to inherit from a class that has a virtual base:
+
+```c++
+class Panda : public Bear,
+				public Raccoon, public Endangered {
+};
+```
+
+Here `Panda` inherits `ZooAnimal` through both its `Raccoon` and `Bear` base classes. However, because those classes inherited virtually from `ZooAnimal`, `Panda` has only one `ZooAnimal` base subpart.
+
+#### 18.3.5. Constructors and Virtual Inheritance
+
+In a virtual derivation, **<font color='red'>the virtual base is initialized by the most derived constructor</font>**（虚基类是由最底层的派生类初始化的）. In our example, when we create a `Panda` object, the `Panda` constructor alone controls how the `ZooAnimal` base class is initialized. Even though `ZooAnimal` is not a direct base of `Panda`, the `Panda` constructor initializes `ZooAnimal`:
+
+```c++
+Panda::Panda(std::string name, bool onExhibit):
+				ZooAnimal(name, onExhibit, "Panda"),
+				Bear(name, onExhibit),
+				Raccoon(name, onExhibit),
+				Endangered(Endangered::critical),
+				sleeping flag(false) { }
+```
+
+#### How a Virtually Inherited Object Is Constructed
+
+The construction order for an object with a virtual base is slightly modified from the normal order: 
+
+The virtual base subparts of the object are initialized first, using initializers provided in the constructor for the most derived class. Once the virtual base
+subparts of the object are constructed, the direct base subparts are constructed in the order in which they appear in the derivation list.
+
+For example, when a `Panda` object is created:
+
+* The (virtual base class) `ZooAnimal` part is constructed first, using the initializers specified in the `Panda` constructor initializer list.
+* The `Bear` part is constructed next.
+* The `Raccoon` part is constructed next.
+* The third direct base, `Endangered`, is constructed next.
+* Finally, the `Panda` part is constructed.
+
+If the `Panda` constructor does not explicitly initialize the `ZooAnimal` base class, then the `ZooAnimal` default constructor is used.
+
+# Chapter 19. Specialized Tools and Techniques

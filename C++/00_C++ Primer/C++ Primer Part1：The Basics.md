@@ -3497,7 +3497,7 @@ For any given call to an overloaded function, there are three possible outcomes:
 
 ### ⭐6.4.1. Overloading and Scope
 
-Overloading has no special properties with respect to scope: As usual, if we declare a name in an inner scope, that name hides uses of that name declared in an outer scope. Names do not overload across scopes（在不同的作用域中无法重载函数名）:
+Overloading has no special properties with respect to scope: As usual, if we declare a name in an inner scope, that name hides uses of that name declared in an outer scope. **<font color='red'>Names do not overload across scopes</font>**（在不同的作用域中无法重载函数名）:
 
 ```c++
 string read();
