@@ -2761,7 +2761,7 @@ destructor for its own direct base, if any. And, so on up to the root of the hie
 #### Base Classes and Deleted Copy Control in the Derived
 
 * If the default constructor, copy constructor, copy-assignment operator, or destructor in the base class is deleted or **inaccessible**, then the
-  corresponding member in the derived class is defined as deleted, because the compiler can’t use the base-class member to construct, assign, or destroy the base-class part of the object.
+  corresponding member in the derived class is defined as `deleted`, because the compiler can’t use the base-class member to construct, assign, or destroy the base-class part of the object.
 * If the base class has an inaccessible or deleted destructor, then the synthesized default and copy constructors in the derived classes are defined as deleted, because there is no way to destroy the base part of the derived object.
 
 #### Move Operations and Inheritance
@@ -2893,3 +2893,1993 @@ public:
 ```
 
 ## 15.8. Containers and Inheritance
+
+#### Put (Smart) Pointers, Not Objects, in Containers
+
+When we need a container that holds objects related by inheritance, we typically define the container to hold **pointers** (preferably smart pointers) **to the**
+**base class**. As usual, the dynamic type of the object to which those pointers point might be the base-class type or a type derived from that base:
+
+```c++
+vector<shared_ptr<Quote>> basket;
+basket.push_back(make_shared<Quote>("0-201-82470-1", 50));
+basket.push_back(make_shared<Bulk_quote>("0-201-54848-8", 50, 10, .25));
+cout << basket.back()->net_price(15) << endl;
+```
+
+Just as we can convert an ordinary pointer to a derived type to a pointer to an base-class type, we can also convert a smart pointer to a derived type to a smart pointer to an base-class type.
+
+### 15.8.1. Writing a Basket Class
+
+We’ll start by defining a class to represent a `basket`:
+
+```c++
+class Basket{
+public:
+    void add_item(const shared_ptr<Quote> &sale){
+        items.insert(sale);
+    }
+    // prints the total price for each book and the overall total for all items in the basket
+    double total_receipt(ostream&) const;
+private:
+    // function to compare shared_ptrs needed by the multiset member
+    static bool compare(const shared_ptr<Quote> &lhs, const shared_ptr<Quote> &rhs){
+        return lhs->isbn() < rhs->isbn();
+    }
+    // multiset to hold multiple quotes, ordered by the compare member
+    multiset<shared_ptr<Quote>, decltype(compare)*> items{compare};
+};
+```
+
+The elements in our `multiset` are `shared_ptr`s and **<font color='red'>there is no less-than operator for `shared_ptr`. </font>**As a result, we must provide our own comparison operation to order the elements. 
+
+#### Defining the Members of Basket
+
+The `total_receipt` member, prints an itemized bill for the contents of the basket and returns the price for all the items in the basket:
+
+```c++
+double Basket::total_receipt(ostream &os) const{
+    double sum = 0.0;
+    // iter refers to the first element in a batch of elements with the same ISBN
+	// upper_bound returns an iterator to the element just past the end of that batch
+    for(auto iter = items.cbegin(); iter != items.cend(); iter = items.upper_bound(*iter)){
+        sum += print_total(os, **iter, items.count(*iter));
+    }
+    os << "Total Sale: " << sum << endl;
+    return sum;
+}
+```
+
+In our `for` loop, we advance `iter` to refer to the next key. We skip over all the elements that match the current key by calling `upper_bound`. The call to `upper_bound` returns the iterator that refers to the element just past the last one with the same key as in `iter`. The iterator we get back denotes
+either the end of the `set` or the next book.
+
+Inside the `for` loop, we call `print_total`  to print the details for each book in the basket. The arguments to `print_total` are an `ostream` on which to write, a reference to `Quote` object and a count. `**iter` is a `Quote` object (or an object of a type derived from `Quote`). 
+
+As we’ve seen, `print_total` makes a virtual call to `net_price`, so the resulting price depends on the dynamic type of `**iter`. The `print_total` function prints the total for the given book and returns the total price that it calculated.
+
+#### Hiding the Pointers
+
+Users of `Basket` still have to deal with dynamic memory, because `add_item` takes a `shared_ptr`. As a result, users have to write code such as:
+
+```c++
+Basket bsk;
+bsk.add_item(make_shared<Quote>("123", 45));
+bsk.add_item(make_shared<Bulk_quote>("345", 45, 3, .15));
+```
+
+Our next step will be to redefine `add_item` so that it takes a `Quote` object instead of a `shared_ptr`. We’ll define two versions, one that will copy its given object and the other that will move from it:
+
+```c++
+void add_item(const Quote &sale);
+void add_item(Quote &&sale);
+```
+
+The only problem is that **<font color='red'>`add_item` doesn’t know what type to allocate</font>**. When it does its memory allocation, `add_item` will copy (or move) its `sale` parameter. Somewhere there will be a `new` expression such as:
+```c++
+new Quote(sale);
+```
+
+Unfortunately, this expression won’t do the right thing: `new` allocates an object of the type we request. This expression allocates an object of type `Quote` and copies the `Quote` portion of `sale`. However, `sale` might refer to a `Bulk_quote` object, in which case, that object will be sliced down.
+
+#### ⭐Simulating Virtual Copy
+
+We’ll solve this problem by giving our `Quote` classes a `virtual` member that allocates a copy of itself.
+
+```c++
+class Quote{
+public:
+    virtual Quote* clone() const & { return new Quote(*this); }
+    virtual Quote* clone() && { return new Quote(std::move(*this)); }
+    ...
+};
+class Bulk_Quote : public Quote{
+    Bulk_Quote* clone() const & { return new Bulk_quote(*this); }
+    Bulk_Quote* clone() && { return new Bulk_quote(std::move(*this)); }
+    ...
+};
+```
+
+Because we have a copy and a move version of `add_item`, we defined lvalue and rvalue versions of `clone`. Using `clone`, it is easy to write our new versions of `add_item`:
+
+```c++
+class Basket{
+public:
+    void add_item(const Quote &sale){
+        items.insert(shared_ptr<Quote>(sale.clone()));
+    }
+    void add_item(Quote &&sale){
+        items.insert(shared_ptr<Quote>(std::move(sale).clone()));
+    }
+    ...
+private:
+   	...
+    multiset<shared_ptr<Quote>, decltype(compare)*> items{compare};
+};
+```
+
+Like `add_item` itself, `clone` is overloaded based on whether it is called on an lvalue or an rvalue. Thus, the first version of `add_item` calls the `const` lvalue version of `clone`, and the second version calls the rvalue reference version.
+
+**<font color='red'>Note that in the rvalue version, although the type of `sale` is an rvalue reference type, `sale` (like any other variable) is an lvalue. Therefore, we call `move` to bind an rvalue reference to `sale`.</font>**
+
+Our `clone` function is also virtual. Whether the `Quote` or `Bulk_quote` function is run, depends (as usual) on the dynamic type of `sale`. Regardless of whether we copy or move the data, `clone` returns a pointer to a newly allocated object, of its own type.
+
+## 15.9. Text Queries Revisited
+
+As a final example of inheritance, we’ll extend our text-query application from §12.3. We’d like to extend the system to support more complicated queries:
+
+* Word queries find all the lines that match a given `string`
+* Not queries, using the `~` operator, yield lines that don’t match the query
+* Or queries, using the `|` operator, return lines matching either of two queries
+* And queries, using the `&` operator, return lines matching both queries
+
+Moreover, we want to be able to combine these operations, as in
+
+```tex
+fiery & bird | wind
+```
+
+This query will match a line in which both `fiery` and `bird` appear or one in which `wind` appears.
+
+### 15.9.1. An Object-Oriented Solution
+
+We model our different kinds of queries as independent classes that share a common base class:
+
+```c++
+WordQuery 	// Daddy
+NotQuery 	// ~Alice
+OrQuery 	// hair | Alice
+AndQuery 	// hair & Alice
+```
+
+These classes will have only two operations:
+
+* `eval`, which takes a `TextQuery` object and returns a `QueryResult`. The `eval` function will use the given `TextQuery` object to find the query’s the
+  matching lines.
+* `rep`, which returns the `string` representation of the underlying query.
+
+#### Abstract Base Class
+
+We’ll name our abstract base class `Query_base`, indicating that its role is to serve as the root of our query hierarchy. Our `Query_base` class will define `eval` and `rep` as pure virtual functions. Each of our classes that represents a particular kind of query must override these functions.
+
+The `AndQuery` and `OrQuery` classes share one property that the other classes in our system do not: Each has two operands. To model this property, we’ll define another abstract base class, named `BinaryQuery`:
+
+ ![image-20220815165228768](images/image-20220815165228768.png)
+
+#### Hiding a Hierarchy in an Interface Class
+
+Our program will deal with evaluating queries, not with building them. However, we need to be able to create queries in order to run our program. The simplest way to do so is to write C++ expressions to create the queries. For example, we’d like to generate the compound query previously described by writing code such as:
+
+```c++
+Query q = Query("fiery") & Query("bird") | Query("wind"
+```
+
+This problem description implicitly suggests that user-level code won’t use the inherited classes directly. Instead, we’ll define an interface class named `Query`, which will **hide the hierarchy**.
+
+The `Query` class will store a pointer to `Query_base`. That pointer will be bound to an object of a type derived from `Query_base`. The `Query` class will provide the same operations as the `Query_base` classes: `eval` and `rep`.
+
+Users will create and manipulate `Query_base` objects only indirectly through operations on `Query` objects. We’ll define three overloaded operators on `Query` objects, along with a `Query` constructor that takes a `string`. Each of these functions will dynamically allocate a new object of a type derived from `Query_base`:
+
+* The `&` operator will generate a `Query` bound to a new `AndQuery`.
+* The `|` operator will generate a `Query` bound to a new `OrQuery`.
+* The `~` operator will generate a `Query` bound to a new `NotQuery`.
+* The `Query` constructor that takes a `string` will generate a new `WordQuery`.
+
+As an aid to understanding this design, we’ve summarized the classes used in this example in the table:
+
+ ![image-20220815165956726](images/image-20220815165956726.png)
+
+### 15.9.2. The `Query_base` and `Query` Classes
+
+#### The `Query_base` class
+
+We’ll start our implementation by defining the `Query_base` class:
+
+```c++
+class Query_base {
+	friend class Query;
+protected:
+	using line_no = TextQuery::line_no;
+	virtual ~Query_base() = default;
+private:
+	virtual QueryResult eval(const TextQuery&) const = 0;
+	virtual string rep() const = 0;
+};
+```
+
+Because we don’t intend users, or the derived classes, to use `Query_base` directly, `Query_base` has no `public` members. All use of `Query_base` will be through `Query` objects. We grant friendship to the `Query` class.
+
+#### The `Query` Class
+
+The `Query` class provides the interface to (and hides) the `Query_base` inheritance hierarchy. Each `Query` object will hold a `shared_ptr` to a corresponding `Query_base` object. Because `Query` is the only **interface** to the `Query_base` classes, `Query` must define its own versions of `eval` and `rep`.
+
+The `Query` constructor that takes a `string` will create a new `WordQuery` and bind its `shared_ptr` member to that newly created object. The `&`, `|`, and `~` operators will create `AndQuery`, `OrQuery`, and `NotQuery` objects, respectively. These operators will return a `Query` object bound to its newly generated object. 
+
+To support these operators, `Query` needs a constructor that takes a `shared_ptr` to a `Query_base` and stores its given pointer. We’ll make this constructor `private` because we don’t intend general user code to define `Query_base` objects. Because this constructor is `private`, we’ll need to make the operators friends.
+
+```c++
+class Query {
+	// these operators need access to the shared_ptr constructor
+	friend Query operator&(const Query&, const Query&);
+	friend Query operator|(const Query&, const Query&);
+	friend Query operator~(const Query&);
+public:
+	Query(const string&);
+	// interface functions: call the corresponding Query_base operations
+	QueryResult eval(const TextQuery &t) const { return q->eval(t); }
+	string rep() const { return q->rep(); }
+private:
+	Query(shared_ptr<Query_base> query): q(query){ }
+	shared_ptr<Query_base> q;
+};
+
+inline Query::Query(const string &s): q(new WordQuery(s)){ }
+```
+
+The `eval` and `rep` members represent the interface for `Query_base`. In each case, the `Query` operation uses its `Query_base` pointer to call the respective (**virtual**) `Query_base` operation. The actual version that is called is determined at run time and will depend on the type of the object to which `q` points.
+
+#### The `Query` Output Operator
+
+```c++
+ostream& operator<<(ostream &os, const Query &query) {
+	retutn os << query.rep();
+}
+```
+
+When we print a `Query`, the output operator calls the (`public`) `rep` member of class `Query`. That function makes a virtual call through its pointer member to the `rep` member of the object to which this `Query` points.
+
+### 15.9.3. The Derived Classes
+
+#### The `WordQuery` Class
+
+A `WordQuery` looks for a given `string`. It is **the only operation** that actually performs a query on the given `TextQuery` object:
+
+```c++
+class WordQuery : public Query_base {
+	friend class Query;	// Query uses the WordQuery constructor
+	QueryResult eval(const TextQuery &t) const override {
+		return t.query(query_word);
+	}
+	string rep() const override {
+		return query_word;
+	}
+	string query_word;
+};
+```
+
+#### The `NotQuery` Class and the `~` Operator
+
+A `NotQuery` has a single operand.**<font color='red'> The operand(s) can be an object of any of the concrete classes derived from `Query_base`</font>**: A `NotQuery` can be applied to a `WordQuery`, an `AndQuery`, an `OrQuery`, or another `NotQuery`. To allow this flexibility, the operands must be stored as pointers to `Query_base`. However, rather than storing a `Query_base` pointer, our classes will themselves use a `Query` object.
+
+```c++
+class NotQuery : public Query_base {
+	friend Query operator~(const Query&);
+	NotQuery(const Query &q): query(q){ }
+	QueryResult eval(const TextQuery &t) const override;
+	string rep() const override { return "~(" + query.rep() + ")"; }
+	Query query;
+};
+
+inline Query operator~(const Query &q) {
+	return shared_ptr<Query_base>(new NotQuery(q));
+}
+```
+
+It is worth noting that the call to `rep` in `NotQuery`’s own `rep` member: `query.rep()` is a nonvirtual call to the `rep` member of the `Query` class. `Query::rep` in turn calls `q->rep()`, which is a virtual call through its `Query_base` pointer.
+
+The `~` operator dynamically allocates a new `NotQuery` object. The return (implicitly) uses the `Query` constructor that takes a `shared_ptr<Query_base>`.
+#### The `BinaryQuery` Class
+
+The `BinaryQuery` class is an abstract base class that holds the data needed by the `query` types that operate on two operands. Similarly, the operands can be an object of any of the concrete classes derived from `Query_base`.
+
+```c++
+class BinaryQuery : public Query_base {
+	BinaryQuery(const Query &l, const Query &r, const string &s):
+		lhs(l), rhs(r), opSym(s) { }
+	// abstract class: BinaryQuery doesn't define eval
+	string rep() const override {
+		return "(" + lhs.rep() + " " + opSym + " " + rhs.rep() + ")";
+	}
+	Query lhs, rhs;
+	string opSym;
+};
+```
+
+To `rep` a `BinaryOperator`, we generate the parenthesized expression consisting of the representation of the left-hand operand, followed by the operator, followed by the representation of the right-hand operand.
+
+**<font color='red'>The `BinaryQuery` class does not define the `eval` function and so inherits a pure virtual. </font>**Thus, `BinaryQuery` is also an abstract base class, and we
+cannot create objects of `BinaryQuery` type.
+
+#### The `AndQuery` and `OrQuery` Classes and Associated Operators
+
+```c++
+class AndQuery : public BinaryQuery{
+	friend Query operator&(const Query &lhs, const Query &rhs);
+	AndQuery(const Query &l, const Query &r):
+		BinaryQuery(l, r, "&"){ }
+	QueryResult eval(const TextQuery&) const override;
+};
+inline Query operator&(const Query &lhs, const Query &rhs) {
+	return shared_ptr<Query_base>(new AndQuery(lhs, rhs));
+}
+```
+
+```c++
+class OrQuery : public BinaryQuery {
+	friend Query operator|(const Query &lhs, const Query &rhs);
+	OrQuery(const Query &l, const Query &r) :
+		BinaryQuery(l, r, "|") { }
+	QueryResult eval(const TextQuery&) const override;
+};
+inline Query operator|(const Query &lhs, const Query &rhs) {
+	return shared_ptr<Query_base>(new OrQuery(lhs, rhs));
+}
+```
+
+These classes make the respective operator a `friend` and define a constructor to create their `BinaryQuery` base part with the appropriate operator. **<font color='red'>They inherit the `BinaryQuery` definition of `rep`, but each overrides the `eval` function.</font>**
+
+### 15.9.4. The `eval` Functions
+
+#### `OrQuery::eval`
+
+An `OrQuery` represents the **union** of the results for its two operands, which we obtain by calling `eval` on each of its operands. Because these operands are `Query` objects, calling `eval` is a call to `Query::eval`, which in turn makes a virtual call to `eval` on the underlying `Query_base` object. Each of these calls yields a `QueryResult` representing the line numbers in which its operand appears. We’ll combine those line numbers into a new `set`:
+
+```c++
+QueryResult OrQuery::eval(const TextQuery &text) const{
+	auto right = rhs.eval(text), left = lhs.eval(text);
+	// copy the line numbers from the left-hand operand into the result set
+	auto ret_lines = make_shared<set<line_no>>(left.begin(), left.end());
+	// insert lines from the right-hand operand
+	ret_lines->insert(right.begin(), right.end());
+
+	return QueryResult(rep(), ret_lines, left.get_file());
+}
+```
+
+We initialize `ret_lines` using the `set` constructor that takes a pair of iterators. `ret_lines` is created by copying the elements from `left`’s `set`. We next call `insert` on `ret_lines` to insert the elements from `right`. After this call, `ret_lines` contains the line numbers that appear in either `left` or `right`.
+
+#### `AndQuery::eval`
+
+The `AndQuery` version of `eval` is similar to the `OrQuery` version, except that it calls a library algorithm to find the lines in common to both queries:
+
+```c++
+QueryResult AndQuery::eval(const TextQuery &text) const {
+	auto right = rhs.eval(text), left = lhs.eval(text);
+	auto ret_lines = make_shared<set<line_no>>();
+	// writes the intersection of two ranges to a destination iterator
+	// destination iterator in this call adds elements to ret
+	set_intersection(left.begin(), left.end(), right.begin(), right.end(),
+						inserter(*ret_lines, ret_lines->begin()));
+
+
+	return QueryResult(rep(), ret_lines, left.get_file());
+}
+```
+
+The `set_intersection` algorithm takes five iterators. It uses the first four to denote two input sequences. Its last argument denotes a destination. The algorithm writes the elements that appear in both input sequences into the destination.
+
+In this call we pass an insert iterator as the destination. When `set_intersection` writes to this iterator, the effect will be to insert a new element into `ret_lines`.
+
+#### `NotQuery::eval`
+
+`NotQuery` finds each line of the text within which the operand is not found:
+
+```c++
+QueryResult NotQuery::eval(const TextQuery &text) const {
+	auto result = query.eval(text);
+	auto ret_lines = make_shared<set<line_no>>();
+	auto beg = result.begin(), end = result.end();
+	// for each line in the input file, if that line is not in result,
+	// add that line number to ret_lines
+	auto sz = result.get_file()->size();
+	for (size_t n = 0; n != sz; ++n) {
+		if (beg == end || n != *beg)
+			ret_lines->insert(n);
+		else if (beg != end)
+			++beg;
+		return QueryResult(rep(), ret_lines, result.get_file());
+	}
+}
+```
+
+We want every line in the `file` that is not already in `result`. We generate that `set` by iterating through sequenital integers up to the size of the
+input file. We’ll put each number that is not in `result` into `ret_lines`.
+
+We position `beg` and `end` to denote the first and one past the last elements in `result`. That object is a `set`, so **<font color='red'>when we iterate through it, we’ll obtain the line numbers in ascending order.</font>**
+
+The loop body checks whether the current number is in `result`. If not, we add that number to `ret_lines`. If the number is in result, we increment `beg`, which is our iterator into `result`.
+
+# Chapter 16. Templates and Generic Programming
+Both object-oriented programming (OOP) and generic programming deal with types that are not known at the time the program is written. The distinction between the two is that **<font color='red'>OOP deals with types that are not known until run time, whereas in generic programming the types become known during compilation.</font>**
+
+Templates are the foundation for generic programming in C++. A template is a blueprint or formula for creating classes or functions.
+
+## 16.1. Defining a Template
+
+### 16.1.1. Function Templates
+
+A function template is a formula from which we can generate type-specific versions of that function.
+
+Imagine that we want to write a function to compare two values and indicate whether the first is less than, equal to, or greater than the second. The template version of `compare` looks like:
+
+```c++
+template<typename T>
+int compare(const T &v1, const T &v2){
+    if(v1 < v2) return -1;
+    if(v2 < v1) return 1;
+    return 0;
+}
+```
+
+A template definition starts with the keyword `template` followed by a **<font color='blue'>template parameter list</font>**, which is a comma-separated list of one or more **<font color='blue'>template parameters</font>** bracketed by the less-than (`<`) and greater-than (`>`) tokens.
+
+Template parameters represent types or values used in the definition of a class or function. When we use a template, we specify—either implicitly or explicitly—**<font color='blue'>template argument</font>**(s) to bind to the template parameter(s).
+
+#### Instantiating a Function Template
+
+When we call a function template, the compiler (ordinarily) uses the **arguments of the call** to deduce the **template argument**(s) for us. That is, when we call `compare`, the compiler uses the type of the arguments to determine what type to bind to the template parameter `T`.
+
+The compiler uses the deduced template parameter(s) to **<font color='blue'>instantiate </font>**a specific version of the function for us. When the compiler instantiates a template, it creates a new “instance” of the template using the actual template argument(s) in place of the corresponding template parameter(s)：
+
+```c++
+// instantiates int compare(const int&, const int&)
+cout << compare(1, 0) << endl; // T is int
+
+// instantiates int compare(const vector<int>&, const vector<int>&)
+vector<int> vec1{1, 2, 3}, vec2{4, 5, 6};
+cout << compare(vec1, vec2) << endl; // T is vector<int>
+```
+
+These compiler-generated functions are generally referred to as an **<font color='blue'>instantiation </font>**of the template.
+
+#### Template Type Parameters  模板类型参数
+
+In general, we can use a **<font color='blue'>type parameter</font>** as a type specifier in the same way that we use a built-in or class type specifier. In particular, a type parameter can be used to name the **return type** or a **function parameter type**, and for **variable declarations** or **casts** inside the function body.
+
+Each type parameter must be preceded by the keyword `class` or `typename`. These keywords have the same meaning and can be used interchangeably inside a template parameter list. A template parameter list can use both keywords:
+
+```c++
+template<typename T, class U>
+calc(const T&, const U&);
+```
+
+#### Nontype Template Parameters 非类型模板参数
+
+In addition to defining **<font color='blue'>type parameter</font>**s, we can define templates that take **<font color='blue'>nontype parameter</font>**s.
+
+A nontype parameter represents a value rather than a type. Nontype parameters are specified by using a specific type name instead of the `class` or `typename` keyword.
+
+When the template is instantiated, nontype parameters are replaced with a value supplied by the user or deduced by the compiler. These values must be constant expressions.
+
+As an example, we can write a version of `compare` that will handle string literals. Such literals are arrays of `const char`. Because we’d like to be able to compare literals of different lengths, we’ll give our template two nontype parameters. The first template parameter will represent the size of the first array, and the second parameter will represent the size of the second array:
+
+```c++
+template<unsigned N, unsigned M>
+int compare(const char (&p1)[N], const char (&p2)[M]){
+    return strcmp(p1, p2);
+}
+```
+
+When we call this version of `compare`:
+
+```c++
+compare("hi", "mom")
+```
+
+the compiler will use the size of the literals to instantiate a version of the template with the sizes substituted for `N` and `M`:
+
+```c++
+int compare(const char (&p1)[3], const char (&p2)[4])
+```
+
+#### `inline` and `constexpr` Function Templates
+
+A function template can be declared `inline` or `constexpr` in the same ways as nontemplate functions. The `inline` or `constexpr` specifier **<font color='red'>follows the template parameter list</font>** and precedes the return type:
+
+```c++
+template<typename T>
+inline T min(const T&, const T&);
+```
+
+#### Writing Type-Independent Code
+
+Recall our initial `compare` function:
+
+```c++
+template<typename T>
+int compare(const T &v1, const T &v2){
+    if(v1 < v2) return -1;
+    if(v2 < v1) return 1;
+    return 0;
+}
+```
+
+It illustrates two important principles for writing generic code:
+
+* The function parameters in the template are references to `const`.
+
+  By making the function parameters references to `const`, we ensure that our function can be used on types that cannot be copied.
+
+  Moreover, if `compare` is called with large objects, then this design will also make the function run faster.
+
+* The tests in the body use only `<` comparisons
+
+  By writing the code using only the `<` operator, we reduce the requirements on types that can be used with our `compare` function. Those types must support `<`, but they need not also support `>`.
+
+**<font color='red'>In fact, if we were truly concerned about type independence and portability, we probably should have defined our function using the `less`</font>**:
+
+```c++
+template<typename T>
+int compare(const T &v1, const T &v2){
+    if(less<T, T>()(v1, v2)) return -1;
+    if(less<T, T>()(v2, v1)) return 1;
+    return 0;
+}
+```
+
+The problem with our original version is that if a user calls it with two pointers and those pointers do not point to the same array, then our code is undefined.
+
+#### Template Compilation
+
+When the compiler sees the definition of a template, it does not generate code. It generates code only when we instantiate a specific instance of the template.
+
+Ordinarily, when we call a function, the compiler needs to see only a declaration for the function. Similarly, when we use objects of class type, the class definition must be available, but the definitions of the member functions need not be present. As a result:
+
+* We put class definitions and function declarations in header files
+* We put definitions of ordinary and class-member functions in source files
+
+Templates are different: To generate an instantiation, the compiler needs to have the code that defines a function template or class template member function. As a result:
+
+* Unlike nontemplate code, **<font color='red'>definitions of function templates and member functions of class templates are ordinarily put into header files.</font>**
+
+### 16.1.2. Class Templates
+
+Class templates differ from function templates in that **<font color='red'>the compiler cannot deduce the template parameter type(s) for a class template</font>**. Instead, as we’ve seen many times, to use a class template we must supply additional information inside angle brackets following the template’s name.
+
+#### Defining a Class Template
+
+As an example, we’ll implement a template version of `StrBlob` (§ 12.1.1, p. 456). We’ll name our template `Blob` to indicate that it is no longer specific to `string`s.
+
+```c++
+template <typename T>
+class Blob{
+public:
+    typedef T value_type;
+    typedef typename vector<T>::size_type size_type;
+    // constructors
+    Blob();
+    Blob(initializer_list<T> il);
+    // number of elements in the Blob
+	size_type size() const { return data->size(); }
+	bool empty() const { return data->empty(); }
+	// add and remove elements
+	void push_back(const T &t) {data->push_back(t);}
+	// move version
+	void push_back(T &&t) { data->push_back(std::move(t)); }
+	void pop_back();
+	// element access
+	T& back();
+	T& operator[](size_type i); 
+private:
+    shared_ptr<vector<T>> data;
+    void check(size_type i, const string &msg) const;
+};
+```
+
+#### Instantiating a Class Template
+
+As we’ve seen many times, when we use a class template, we must supply extra information. We can now see that that extra information is a list of **<font color='blue'>explicit template arguments </font>**that are bound to the template’s parameters. The compiler uses these template arguments to instantiate a specific class from the template：
+
+```c++
+Blob<int> ia;
+Blob<int> ia2 = {0,1,2,3,4};
+```
+
+When the compiler instantiates a class from our `Blob` template, it rewrites the `Blob` template, replacing each instance of the template parameter `T` by the given template argument, which in this case is `int`.
+
+The compiler generates a different class for each element type we specify：
+
+```c++
+// these definitions instantiate two distinct Blob types
+Blob<string> names; // Blob that holds strings
+Blob<double> prices;// different element type
+```
+
+#### References to a Template Type in the Scope of the Template
+
+In order to read template class code, it can be helpful to remember that **<font color='red'>the name of a class template is not the name of a type</font>**. A class template is used to instantiate a type, and an instantiated type always **<font color='red'>includes template argument(s).</font>**
+
+In a class template, we often use the template’s own parameter(s) as the template argument(s). For example, our `data` member uses two templates, `vector` and `shared_ptr`:
+
+```c++
+shared_ptr<vector<T>> data;
+```
+
+`data` is the instantiation of `shared_ptr` that points to the instantiation of `vector` that holds objects of type `T`.
+
+#### Member Functions of Class Templates
+
+As with any class, we can define the member functions of a class template either inside or outside of the class body.
+
+Because each instantiation of the class template has its own version of each member, **<font color='red'>a member function defined outside the class template body starts
+with the keyword template followed by the class’ template parameter list.</font>**
+
+As usual, when we define a member outside its class, we must say to which class the member belongs. Also as usual, the name of a class generated from a template includes its template arguments. That is, for a given member function of `StrBlob` that was defined as
+
+```c++
+ret-type StrBlob::member-name(parm-list)
+```
+
+the corresponding `Blob` member will look like
+
+```c++
+template <typename T>
+ret-type Blob<T>::member-name(param-list){
+    ...
+}
+```
+
+#### `Blob` Constructors
+
+As with any other member defined outside a class template, a constructor starts by declaring the template parameters for the class template of which it is a member:
+
+```c++
+template <typename T>
+Blob<T>::Blob(): data(make_shared<vector<T>>()) {}
+
+template <typename T>
+Blob<T>::Blob(initializer_list<T> il): data(make_shared<vector<T>>(il)) {}
+```
+
+#### Instantiation of Class-Template Member Functions
+
+By default, **<font color='red'>a member function of a class template is instantiated only if the program uses that member function.</font>** If a member function isn’t used, it is not instantiated.
+
+This fact lets us instantiate a class with a type that may not meet the requirements for some of the template’s operations.
+
+#### Simplifying Use of a Template Class Name inside Class Code
+
+There is one exception to the rule that we must supply template arguments when we use a class template type. Inside the scope of the class template itself, we may use the name of the template without arguments:
+
+```c++
+template <typename T>
+class BlobPtr{
+public:
+    BlobPtr(): curr(0) { }
+	BlobPtr(Blob<T> &a, size_t sz = 0):
+		wptr(a.data), curr(sz) { }
+    BlobPtr& operator++();
+    BlobPtr& operator--();
+    ...
+private:
+    weak_ptr<vector<T>> wptr;
+    size_t curr;
+};
+```
+
+The prefix increment and decrement members of `BlobPtr` return `BlobPtr&,` not `BlobPtr<T>&`.
+
+#### Using a Class Template Name outside the Class Template Body
+
+When we define members outside the body of a class template, we must remember that we are not in the scope of the class until the class name is seen.
+
+```c++
+template <typename T>
+BlobPtr<T> BlobPtr<T>::operator++(int){
+    BlobPtr ret = *this;		// save the current value
+    ++*this;					// advance one element; prefix ++ checks the increment
+    return ret;					// return the saved state
+}
+```
+
+Because the return type appears outside the scope of the class, we must specify that the return type returns a `BlobPtr` instantiated with the same type as the class.
+
+Inside the function body, we are in the scope of the class so do not need to repeat the template argument when we define `ret`.
+
+#### Class Templates and Friends
+
+A class template that has a nontemplate friend grants that friend access to all the instantiations of the template.
+
+When the friend is itself a template, the class granting friendship controls whether friendship includes all instantiations of the template or only specific instantiation(s).
+
+#### One-to-One Friendship
+
+The most common form of friendship from a class template to another template (class or function) establishes friendship between **corresponding instantiations** of the class and its friend.
+
+In order to refer to a specific instantiation of a template (class or function) we must first declare the template itself. A template declaration includes the template’s template parameter list:
+
+```c++
+// forward declarations needed for friend declarations in Blob
+template <typename T> class BlobPtr;
+template <typename T> class Blob;		// needed for parameters in operator==
+template <typename T> bool operator==(const Blob<T>&, const Blob<T>&);
+
+template <typename T> class Blob{
+    friend class BlobPtr<T>;
+    friend bool bool operator==(const Blob<T>&, const Blob<T>&)
+};
+```
+
+The friend declarations use `Blob`’s template parameter as their own template argument. Thus, the friendship is restricted to those instantiations of `BlobPtr` and the equality operator that are instantiated with the same type：
+
+```c++
+Blob<char> ca; 	// BlobPtr<char> and operator==<char> are friends
+Blob<int> ia; 	// BlobPtr<int> and operator==<int> are friends
+```
+
+#### General and Specific Template Friendship
+
+A class can also make every instantiation of another template its friend, or it may limit friendship to a specific instantiation:
+
+```c++
+template <typename T> class Pal;
+
+class C{
+    // Pal instantiated with class C is a friend to C
+	friend class Pal<C>;		
+    // all instances of Pal2 are friends to C;
+	// no forward declaration required when we befriend all instantiations
+    template <typename T> friend class Pal2;
+};
+
+template <typename T> class C2{
+    // each instantiation of C2 has the same instance of Pal as a friend
+    friend class Pas<T>;		// a template declaration for Pal must be in scope
+    // all instances of Pal2 are friends of each instance of C2, prior declaration needed
+    template<typename X> friend class Pal2;
+    // Pal3 is a nontemplate class that is a friend of every instance of C2
+	friend class Pal3; // prior declaration for Pal3 not needed
+};
+```
+
+To allow all instantiations as friends, the friend declaration must use template parameter(s) that differ from those used by the class itself.
+
+#### Befriending the Template’s Own Type Parameter 令模板自己的类型参数成为友元
+
+```c++
+template <typename Type> class Bar {
+	friend Type; // grants access to the type used to instantiate Bar
+	// ...
+};
+```
+
+Here we say that whatever type is used to instantiate `Bar` is a friend. Thus, for some type named `Foo`, `Foo` would be a friend of `Bar<Foo>`, `Sales_data` a friend of `Bar<Sales_data>`, and so on.
+
+#### Template Type Aliases 模板类型别名
+
+The new standard lets us define a type alias for a class template:
+
+```c++
+template <typename T> using twin = pair<T, T>;
+
+twin<string> authors; 	// authors is a pair<string, string>
+twin<int> win_loss; 	// win_loss is a pair<int, int>
+twin<double> area; 		// area is a pair<double, double>
+```
+
+Here we’ve defined `twin` as a synonym for `pai`rs in which the members have the same type. Users of `twin` need to specify that type only once.
+
+When we define a template type alias, we can fix one or more of the template parameters:
+
+```C++
+template <typename T> using partNo = pair<T, unsigned>;
+partNo<string> books; 	// books is a pair<string, unsigned>
+partNo<Vehicle> cars; 	// cars is a pair<Vehicle, unsigned>
+partNo<Student> kids; 	// kids is a pair<Student, unsigned>
+```
+
+#### `static` Members of Class Templates
+
+```c++
+template <typename T> class Foo {
+public:
+	static std::size_t count() { return ctr; }
+	// other interface members
+private:
+	static std::size_t ctr;
+	// other implementation members
+};
+```
+
+Each instantiation of `Foo` has its own instance of the `static` members. That is, for any given type `X`, there is one `Foo<X>::ctr` and one `Foo<X>::count` member. All objects of type `Foo<X>` share the same `ctr` object and `count` function.
+
+**<font color='red'>Because there is a distinct object for each instantiation of a class template, we define a `static` data member as a template similarly to how we define the member functions of that template</font>**:
+
+```c++
+template <typename T>
+size_t Foo<T>::ctr = 0;
+```
+
+As with `static` members of nontemplate classes, we can access a `static` member of a class template through an object of the class type or by using the scope operator to access the member directly. Of course, to use a `static` member through the class, we must refer to a specific instantiation:
+
+```c++
+Foo<int> fi;
+ct = fi.count();
+ct = Foo<int>::count();
+```
+
+### 16.1.3. Template Parameters
+
+#### Template Parameters and Scope
+
+The name of a template parameter can be used after it has been declared and until the end of the template declaration or definition.
+
+As with any other name, a template parameter hides any declaration of that name in an outer scope. 
+
+Unlike most other contexts, however, a name used as a template parameter may not be reused within the template:
+
+```c++
+typedef double A;
+template <typename A, typename B> void f(A a, B b)
+{
+	A tmp = a; 	// tmp has same type as the template parameter A, not double
+	double B; 	// error: redeclares template parameter B
+}
+```
+
+#### Template Declarations
+
+A template declaration must include the template parameters .
+
+As with function parameters, the names of a template parameter need not be the same across the declaration(s) and the definition of the same template.
+
+```c++
+// all three uses of calc refer to the same function template
+template <typename T> T calc(const T&, const T&); // declaration
+template <typename U> U calc(const U&, const U&); // declaration
+// definition of the template
+template <typename Type>
+Type calc(const Type& a, const Type& b) { /* . . . */ }
+```
+
+#### Using Class Members That Are Types
+
+Recall that we use the scope operator (`::`) to access both `static` members and type members.
+
+In ordinary (nontemplate) code, the compiler has access to the class defintion. As a result, it knows whether a name accessed through the scope operator is a type or a `static` member.
+
+Assuming `T` is a template type parameter, When the compiler sees code such as `T::mem` it won’t know until instantiation time whether `mem` is a type or a `static` data member：
+
+```c++
+T::size_type * p;
+```
+
+The compiler needs to know whether we’re defining a variable named `p` or are multiplying a `static` data member named `size_type` by a variable named `p`.
+
+By default, the language assumes that a name accessed through the scope operator is not a type. As a result, **<font color='red'>if we want to use a type member of a template type parameter, we must explicitly tell the compiler that the name is a type. We do so by using the keyword `typename`</font>**:
+
+```c++
+template <typename T>
+typename T::value_type top(const T& c)
+{
+	if (!c.empty())
+		return c.back();
+	else
+		return typename T::value_type();
+}
+```
+
+#### Default Template Arguments
+
+Just as we can supply default arguments to function parameters, we can also supply default template arguments.
+
+As an example, we’ll rewrite `compare` to use the library `less` function-object template by default:
+
+```c++
+template <typename T, typename F = less<T>>
+int compare(const T &v1, const T &v2, F f = F()){
+    if(f(v1, v2)) return -1;
+    if(f(v2, v1)) return 1;
+    return 0;
+}
+```
+
+Here we’ve given our template a second type parameter, named `F`, that represents the type of a callable object and defined a new function parameter,
+`f`, that will be bound to a callable object.
+
+We’ve also provided defaults for this template parameter and its corresponding function parameter.
+
+* The default template argument specifies that `compare` will use the library less function-object class, instantiated with the same type parameter as `compare`.
+* The default function argument says that `f` will be a default-initialized object of type `F`.
+
+```c++
+bool i = compare(0, 42); // uses less; i is -1
+
+Sales_data item1(cin), item2(cin);
+bool j = compare(item1, item2, compareIsbn);
+```
+
+The first call uses the default function argument, which is a default-initialized object of type `less<T>`. In this call, `T` is `int` so that object has type `less<int>`. This instantiation of `compare` will use `less<int>` to do its comparisons.
+
+In the second call, we pass `compareIsbn` and two objects of type `Sales_data`. As usual, the types of the template parameters are deduced from their
+corresponding function arguments. In this call, the type of `T` is deduced as `Sales_data` and F is deduced as the type of `compareIsbn`.
+
+#### Template Default Arguments and Class Templates
+
+Whenever we use a class template, we must always follow the template’s name with brackets. In particular, if a class template provides default arguments for all of its template parameters, and we want to use those defaults, we must put **<font color='red'>an empty bracket pair </font>**following the template’s name:
+
+```c++
+template <typename T = int>
+class Numbers{
+public:
+    Numbers(T v = 0): val(v) { }
+private:
+    T val;
+};
+
+Numbers<long double> lots_of_precision;
+Numbers<> average_precision; 		// empty <> says we want the default type
+```
+
+### 16.1.4. Member Templates 成员模板
+
+A class—either an ordinary class or a class template—may have a member function that is itself a template. Such members are referred to as **<font color='blue'>member templates</font>**. **<font color='red'>Member templates may not be virtual.</font>**
+
+#### Member Templates of Ordianary (Nontemplate) Classes
+
+```c++
+class DebugDelete{
+public:
+    DebugDelete(ostream &s = cerr): os(s) { }
+    // as with any function template, the type of T is deduced by the compiler
+    template <typename T>
+    void operator()(T *p) const{
+        os << "delete unique_ptr" << endl;
+        delete p;
+    }
+private:
+    ostream &os;
+};
+```
+
+Like any other template, a member template starts with its own template parameter list. We can use this class as a replacement for `delete`:
+
+```c++
+double *p = new double;
+DebugDelete d;
+d(p);				// calls DebugDelete::operator()(double*), which deletes p
+
+int* ip = new int;
+DebugDelete()(ip);	// calls operator()(int*) on a temporary DebugDelete object
+```
+
+#### Member Templates of Class Templates
+
+We can also define a member template of a class template. In this case, both the class and the member have their own, independent, template parameters.
+
+As an example, we’ll give our `Blob` class a constructor that will take two iterators denoting a range of elements to copy. Because we’d like to support iterators into varying kinds of sequences, we’ll make this constructor a template:
+
+```c++
+template <typename T> class Blob{
+	template <typename It> Blob(It b, It e);
+    ...
+};
+```
+
+When we define a member template outside the body of a class template, we must **<font color='red'>provide the template parameter list for the class template and for the
+function template.</font>**
+
+```c++
+template <typename T>			// type parameter for the class
+template <typename It>			// type parameter for the construc
+Blob<T>::Blob(It b, It e):
+	data(make_shared<vector<T>>(b, e)) { }
+```
+
+#### Instantiation and Member Templates
+
+To instantiate a member template of a class template, we must supply arguments for the template parameters for both the class and the function templates.
+
+```c++
+int ia[] = {0,1,2,3,4,5,6,7,8,9};
+vector<long> vi = {0,1,2,3,4,5,6,7,8,9};
+list<const char*> w = {"now", "is", "the", "time"};
+// instantiates the Blob<int> class
+// and the Blob<int> constructor that has two int* parameters
+Blob<int> a1(begin(ia), end(ia));
+// instantiates the Blob<int> constructor that has two vector<long>::iterator parameters
+Blob<int> a2(vi.begin(), vi.end());
+// instantiates the Blob<string> class 
+// and the Blob<string> constructor that has two list<const char*>::iterator parameters
+Blob<string> a3(w.begin(), w.end());
+```
+
+### ⭐16.1.5. Controlling Instantiations
+
+The fact that instantiations are generated when a template is used means that **<font color='red'>the same instantiation may appear in multiple object files</font>**. When two or more separately compiled source files use the same template with the same template arguments, there is an instantiation of that template in each of those files.
+
+Under the new standard, we can avoid this overhead through an **<font color='blue'>explicit instantiation</font>**. An explicit instantiation has the form
+
+```c++
+extern template declaration;		// instantiation declaration
+template declaration; 				// instantiation definitionte 
+```
+
+where declaration is a class or function declaration in which all the template parameters are replaced by the template arguments:
+
+```c++
+extern template class Blob<string>; // declaration
+template int compare(const int&, const int&); // definition
+```
+
+When the compiler sees an `extern` template declaration, it will not generate code for that instantiation in that file. Declaring an instantiation as `extern` is a promise that there will be a non`extern` use of that instantiation elsewhere in the program. There may be several `extern` declarations for a given instantiation but there must be exactly one definition for that instantiation.
+
+```c++
+// Application.cc
+extern template class Blob<string>;
+extern template int compare(const int&, const int&);
+Blob<string> sa1, sa2; 					// instantiation will appear elsewhere
+int i = compare(a1[0], a2[0]); 			// instantiation will appear elsewhere
+Blob<int> a1 = {0,1,2,3,4,5,6,7,8,9};	// Blob<int> and its initializer_list constructor instantiated in this file
+```
+
+The file `Application.o` will contain instantiations for `Blob<int>`, along with the `initializer_list` constructor for that class.The `compare<int>` function and `Blob<string>` class will not be instantiated in that file. There must be definitions of these templates in some other file in the program:
+
+```c++
+// templateBuild.cc
+template class Blob<string>;
+template int compare(const int&, const int&);
+```
+
+When the compiler sees an instantiation definition (as opposed to a declaration), it generates code. Thus, the file `templateBuild.o` will contain the definitions for `compare` instantiated with `int` and for the `Blob<string>` class.
+
+#### Instantiation Definitions Instantiate All Members
+
+An instantiation definition for a class template instantiates all the members of that template including `inline` member functions.
+
+Consequently, we can use explicit instantiation only for types that can be used with all the members of that template.
+
+### 16.1.6. Efficiency and Flexibility
+
+The library smart pointer types offer a good illustration of design choices faced by designers of templates.
+
+`shared_ptr` and `unique_ptr` differ in how they let users override their default deleter:
+
+* We can easily override the deleter of a `shared_ptr` by passing a callable object when we create or reset the pointer.
+* In contrast, the type of the deleter is part of the type of a `unique_ptr` object. Users must supply that type as an explicit template argument
+  when they define a `unique_ptr`. 
+
+#### Binding the Deleter at Run Time
+
+We can infer that `shared_ptr` must access its deleter **indirectly**. That is the deleter must be stored as a pointer or as a class (such as `function`) that encapsulates a pointer.
+
+We can be certain that `shared_ptr` does not hold the deleter as a direct member, because the type of the deleter isn’t known until run time. Indeed, **<font color='red'>we can change the type of the deleter in a given `shared_ptr` during that `shared_ptr`’s lifetime:</font>** We can construct a `shared_ptr` using a deleter of one type, and subsequently use `reset` to give that same `shared_ptr` a different type of deleter. 
+
+In general, we cannot have a member whose type changes at run time. Hence, the deleter must be stored indirectly.
+
+#### Binding the Deleter at Compile Time
+
+Because the type of the deleter is part of the type of a `unique_ptr`, the type of the deleter member is known at compile time. The deleter can be stored **directly** in each `unique_ptr` object.
+
+**<font color='red'>By binding the deleter at compile time, `unique_ptr` avoids the run-time cost of an indirect call to its deleter. By binding the deleter at run time, `shared_ptr` makes it easier for users to override the deleter.</font>**
+
+## 16.2. Template Argument Deduction
+
+The process of determining the template arguments from the function arguments is known as **<font color='blue'>template argument deduction</font>**.
+
+### 16.2.1. Conversions and Template Type Parameters
+
+Function parameters whose type uses a template type parameter have special initialization rules. Only a very limited number of conversions are automatically applied to such arguments.
+
+As usual, top-level `const`s in either the parameter or the argument are ignored. The only other conversions performed in a call to a function template are:
+
+* `const` conversions
+* Array- or function-to-pointer conversions
+
+**<font color='red'>Other conversions, such as the arithmetic conversions, derived-to-base , and user-defined conversions, are not performed.</font>**
+
+```c++
+template <typename T> T fobj(T, T);
+template <typename T> T fref(const T&, const T&);
+
+string s1("a value");
+const string s2("another value");
+fobj(s1, s2);		// calls fobj(string, string); const is ignored
+fref(s1, s2);		// calls fref(const string&, const string&)
+					// uses premissible conversion to const on s1
+
+int a[10], b[42];
+fobj(a, b);			// calls fobj(int*, int*)
+fref(a, b);			// error: array types don't match
+```
+
+In the first pair of calls, we pass a `string` and a `const string`.
+
+* In the call to `fobj`, the arguments are copied, so whether the original object is `const` doesn’t matter.
+* In the call to `fref`, the parameter type is a reference to `const`. Conversion to `const` for a reference parameter is a permitted conversion, so this call is legal.
+
+In the next pair of calls, we pass array arguments in which the arrays are different sizes and hence have different types. 
+
+* In the call to `fobj`, the fact that the array types differ doesn’t matter. Both arrays are converted to pointers. The template parameter type in `fobj` is `int*`. 
+* The call to `fref`, however, is illegal. When the parameter is a reference, the arrays are not converted to pointers. The types of `a` and `b` don’t match, so the call is in error.
+
+#### Function Parameters That Use the Same Template Parameter Type
+
+A template type parameter can be used as the type of more than one function parameter. Because there are **limited conversions**, the arguments to such parameters must have essentially the same type. If the deduced types do not match, then the call is an error:
+
+```c++
+template <typename T> int compare(const T&, const T&);
+long lng;
+compare(lng, 1024); // error: cannot instantiate compare(long, int)
+```
+
+If we want to allow normal conversions on the arguments, we can define the function with two type parameters:
+
+```c++
+template <typename A, typename B> int flexibleCompare(const A&, const B&);
+long lng;
+flexibleCompare(lng, 1024); // ok: calls flexibleCompare(long, int)
+```
+
+### 16.2.2. Function-Template Explicit Arguments
+
+In some situations, it is not possible for the compiler to deduce the types of the template arguments. In others, we want to allow the user to control the template instantiation. Both cases arise most often when a function **return type** differs from any of those used in the parameter list.
+
+#### Specifying an Explicit Template Argument 指定显式模板实参
+
+We’ll define a function template named `sum` that takes arguments of two different types. We’d like to let the user specify the type of the result. That way the user can choose whatever precision is appropriate.
+
+We can let the user control the type of the return by **defining a third template paramete**r to represent the return type:
+
+```c++
+template <typename T1, typename T2, typename T3>
+T1 sum(T2, T3);
+```
+
+In this case, there is no argument whose type can be used to deduce the type of `T1`. The caller must provide an **<font color='blue'>explicit template argument</font>** for this parameter on each call to `sum`.
+
+We supply an explicit template argument to a call the same way that we define an instance of a class template.
+
+```c++
+int i = 0;
+long lng = 42;
+auto val = sum<long long>(i, lng);
+```
+
+This call explicitly specifies the type for `T1`. The compiler will deduce the types for `T2` and `T3` from the types of `i` and `lng`.
+
+Explicit template argument(s) are matched to corresponding template parameter(s) from left to right. An explicit template argument may be omitted only for the trailing (right-most) parameters, and then only if these can be deduced from the function parameters.
+
+#### Normal Conversions Apply for Explicitly Specified Arguments
+
+For the same reasons that normal conversions are permitted for parameters that are defined using ordinary types, normal conversions also apply for
+arguments whose template type parameter is explicitly specified:
+
+```c++
+template <typename T> int compare(const T&, const T&);
+long lng;
+compare(lng, 1024); 			// error: template parameters don't match
+compare<long>(lng, 1024); 		// ok: instantiates compare(long, long)
+compare<int>(lng, 1024); 		// ok: instantiates compare(int, int)
+```
+
+### 16.2.3. Trailing Return Types and Type Transformation
+
+Using an explicit template argument to represent a template function’s return type works well when we want to let the user determine the return type. In other cases, requiring an explicit template argument imposes a burden on the user with no compensating advantage. 
+
+For example, we might want to write a function that takes a pair of iterators denoting a sequence and returns a reference to an element in the sequence:
+
+```c++
+template <typename It>
+??? &fcn(It beg, It end)
+{
+	// process the range
+	return *beg; 	// return a reference to an element from the range
+}
+```
+
+We don’t know the exact type we want to return, but we do know that we want that type to be a reference to the element type of the sequence we’re processing.
+
+Here, we know that our function will return `*beg`, and we know that we can use `decltype(*beg)` to obtain the type of that expression. However, `beg` doesn’t exist until the parameter list has been seen. To define this function, we must use **a trailing return type**:
+
+```c++
+template <typename It>
+auto fcn(It beg, It end)->decltype(*beg){
+    // process the range
+	return *beg; 	// return a reference to an element from the range
+}
+```
+
+The dereference operator returns an lvalue, so the type deduced by `decltype` is a reference to the type of the element that `beg` denotes.
+
+#### ⭐The Type Transformation Library Template Classes 进行类型转换的标准库模板类
+
+Sometimes we do not have direct access to the type that we need. For example, we might want to write a function similar to `fcn` that returns an element by value, rather than a reference to an element.
+
+To obtain the element type, we can use a library **<font color='blue'>type transformation template</font>**. These templates are defined in the `type_traits` header：
+
+ ![image-20220820095501262](images/image-20220820095501262.png)
+
+In this case, we can use `remove_reference` to obtain the element type. The `remove_reference` template has one template type parameter and a (public)
+type member named `type`. If we instantiate `remove_reference` with a reference type, then `type` will be the referred-to type. For example, if we instantiate `remove_reference<int&>`, the type member will be `int`.
+
+```c++
+// must use typename to use a type member of a template parameter
+template <typename It>
+auto fcn(It beg, It end) -> 
+	typename remove_reference<decltype(*begin)>::type{
+	// process the range    
+    return *beg;    // return a reference to an element from the range
+}
+```
+
+Note that `type` is member of a class that depends on a template parameter. As a result, we must use `typename` in the declaration of the return type to tell the compiler that `type` represents a type.
+
+### 16.2.4. Function Pointers and Argument Deduction
+
+When we initialize or assign a function pointer from a function template, the compiler uses the type of the pointer to deduce the template argument(s):
+
+```c++
+template <typename T> int compare(const T&, const T&);
+int (*pf1)(const int&, const int&) = compare;
+```
+
+The type of the parameters in `pf1` determines the type of the template argument for `T`. The template argument for `T` is `int`. The pointer `pf1` points to the instantiation of `compare` with `T` bound to `int`.
+
+It is an error if the template arguments cannot be determined from the function pointer type:
+
+```c++
+// overloaded versions of func; each takes a different function pointer type
+void func(int(*)(const string&, const string&));
+void func(int(*)(const int&, const int&));
+func(compare); 		// error: which instantiation of compare?
+```
+
+The problem is that by looking at the type of `func`’s parameter, it is not possible to determine a unique type for the template argument. We can disambiguate the call to `func` by using **explicit template arguments**:
+
+```c++
+// ok: explicitly specify which version of compare to instantiate
+func(compare<int>);
+```
+
+### ⭐16.2.5. Template Argument Deduction and References
+
+In order to understand type deduction from a call to a function such as
+
+```c++
+template <typename T> void f(T &p);
+```
+
+in which the function’s parameter `p` is a reference to a template type parameter `T`, it is important to keep in mind two points:
+
+* Normal reference binding rules apply
+* `const`s are low level, not top level
+
+#### Type Deduction from Lvalue Reference Function Parameters
+
+1. When a function parameter is an ordinary (lvalue) reference to a template type parameter (i.e., that has the form `T&`), the binding rules say that we can pass only an lvalue. That argument might or might not have a `const` type. If the argument is `const`, then `T` will be deduced as a `const` type：
+
+   ```c++
+   template <typename T> void f1(T&); 	// argument must be an lvalue
+   f1(i); 		// i is an int; template parameter T is int
+   f1(ci);	 	// ci is a const int; template parameter T is const int
+   f1(5); 		// error: argument to a & parameter must be an lvalue
+   ```
+
+2. If a function parameter has type `const T&`, normal binding rules say that we can pass any kind of argument—an object (`const` or otherwise), a temporary, or a literal value.
+
+   When the function parameter is itself `const`, the type deduced for `T` will not be a `const` type. The `const` is already part of the function parameter type; therefore, it does not also become part of the template parameter type:
+
+   ```c++
+   template <typename T> void f2(const T&);
+   f2(i); 		// i is an int; template parameter T is int
+   f2(ci); 	// ci is a const int, but template parameter T is int
+   f2(5); 		// a const & parameter can be bound to an rvalue; T is int
+   ```
+
+#### Type Deduction from Rvalue Reference Function Parameters
+
+When a function parameter is an rvalue reference (i.e., has the form `T&&`), normal binding rules say that we can pass an rvalue to this parameter.
+When we do so, type deduction behaves similarly to deduction for an ordinary lvalue reference function parameter. **<font color='red'>The deduced type for `T` is the type of the rvalue</font>**:
+
+```c++
+template <typename T>
+void f3(T&&);
+f3(42);			// argument is an rvalue of type int; template parameter T is int
+```
+
+#### ⭐Reference Collapsing and Rvalue Reference Parameters
+
+Assuming `i` is an `int` object, we might think that a call such as `f3(i)` would be illegal. After all, `i` is an lvalue, and normally we cannot bind an rvalue reference to an lvalue. However, the language defines **two exceptions** to normal binding rules that allow this kind of usage：
+
+* When we pass an lvalue (e.g., `i`) to a function parameter that is an rvalue reference to a template type parameter (e.g, `T&&`), the compiler deduces the template type parameter as the argument’s **<font color='red'>lvalue reference type</font>**.
+
+  So, when we call `f3(i)`, the compiler deduces the type of `T` as `int&`, not `int`.
+
+Deducing `T` as `int&` would seem to mean that `f3`’s function parameter would be an rvalue reference to the type `int&`(e.g, `int& &&`). Ordinarily, we cannot (directly) define a reference to a reference. If we indirectly create a reference to a reference, then those references “**<font color='blue'>collapse</font>**.”:
+
+* In all but one case, the references collapse to form an ordinary **lvalue reference type**.
+
+* References collapse to form an **rvalue reference** only in the specific case of an rvalue reference to an rvalue reference. 
+
+  That is, for a given type `X`:
+
+  * `X& &`, `X& &&`, and `X&& &` all collapse to type `X&`
+  * The type `X&& &`& collapses to `X&&
+
+The combination of the reference collapsing rule and the special rule for type deduction for rvalue reference parameters means that we can call `f3` on an lvalue.
+
+```c++
+f3(i);	// argument is an lvalue; template parameter T is int&, function parameter is int& &&, which collapses to int&
+```
+
+**<font color='red'>It is also worth noting that by implication, we can pass any type of argument to a `T&&` function parameter.</font>** A parameter of such a type can (obviously) be used with rvalues, and as we’ve just seen, can be used by lvalues as well.
+
+#### Writing Template Functions with Rvalue Reference Parameters
+
+The fact that the template parameter can be deduced to a reference type can have surprising impacts on the code inside the template:
+
+```c++
+template <typename T>
+void f3(T&& val){
+    T t = val;
+    t = fcn(t);
+    if(val == t) { /* */ }	// always true if T is a reference type
+}
+```
+
+When we call `f3` on an rvalue, such as the literal `42`, T is `int`. In this case, the local variable `t` has type `int` and is initialized by copying the value of the parameter `val`. When we assign to `t`, the parameter `val` remains unchanged.
+
+On the other hand, when we call `f3` on the lvalue `i`, then `T` is `int&`. When we define and initialize the local variable `t`, that variable has type `int&`. The initialization of `t` binds `t` to `val`. When we assign to `t`, we change `val` at the same time. 
+
+In practice, rvalue reference parameters are used in one of two contexts: Either **<font color='red'>the template is forwarding its arguments</font>**, or **<font color='red'>the template is overloaded</font>**.
+
+### ⭐16.2.6. Understanding `std::move`
+
+The library `move` function is a good illustration of a template that uses rvalue references.
+
+#### How `std::move` Is Defined
+
+The standard defines `move` as follows:
+
+```c++
+template <typename T>
+typename remove_reference<T>::type&& move(T&& t){
+    return static_cast<typename remove_reference<T>::type&&>(t);
+}
+```
+
+`move`’s function parameter, `T&&`, is an rvalue reference to a template parameter type. Through reference collapsing, this parameter can match arguments of any type. In particular, we can pass either an lvalue or an rvalue to `move`:
+
+```c++
+string s1("hi!"), s2;
+s2 = std::move(string("bye!")); // ok: moving from an rvalue
+s2 = std::move(s1); 			// ok: but after the assigment s1 has indeterminate value
+```
+
+#### How `std::move` Works
+
+1. In the first assignment, we pass an rvalue to an rvalue reference function parameter, the type deduced from that argument is the referred-to
+   type. Thus, in `std::move(string("bye!"))`:
+
+   * The deduced type of `T` is `string`.
+   * Therefore, `remove_reference` is instantiated with `string`.
+   * The `type` member of `remove_reference<string>` is `string`.
+   * The return type of `move` is `string&&`.
+   * `move`’s function parameter, `t`, has type `string&&`.
+
+   The body of this function returns `static_cast<string&&>(t)`. The type of `t` is already `string&&`, so the cast does nothing. Therefore, the result of this call is the rvalue reference it was given.
+
+2. In the second assignment, the argument to `move` is an lvalue:
+
+   * The deduced type of `T` is `string&`.
+   * Therefore, `remove_reference` is instantiated with `string&`.
+   * The `type` member of `remove_reference<string>` is `string`.
+   * The return type of `move` is `string&&`.
+   * `move`’s function parameter, `t`, instantiates as `string& &&`, which collapses to `string&`.
+
+   The body of this instantiation returns `static_cast<string&&>(t)`. In this case, the type of `t` is `string&`, which the cast converts to `string&&`.
+
+#### `static_cast` from an Lvalue to an Rvalue Reference Is Permitted
+
+Even though we cannot implicitly convert an lvalue to an rvalue reference, we can explicitly cast an lvalue to an rvalue reference using `static_cast`.
+
+Although we can write such casts directly, it is much easier to use the library `move` function. Moreover, using `std::move` consistently makes it easy to find the places in our code that might potentially clobber lvalues.
+
+### ⭐16.2.7. Forwarding
+
+Some functions need to forward one or more of their arguments with their types unchanged to another, forwarded-to, function. In such cases, we need to preserve everything about the forwarded arguments, including whether or not the argument type is **<font color='red'>`const`</font>**, and whether the argument is an **<font color='red'>lvalue or an rvalue</font>**.
+
+As an example, we’ll write a function that takes a callable expression and two additional arguments. Our function will call the given callable with the other two arguments in reverse order.
+
+```c++
+template <typename F, typename T1, typename T2>
+void flip1(F f, T1 t1, T2 t2)
+{
+	f(t2, t1);
+}
+```
+
+This template works fine until we want to use it to call a function that has a reference parameter:
+
+```c++
+void f(int v1, int &v2) // note v2 is a reference
+{
+	cout << v1 << " " << ++v2 << endl;
+}
+```
+
+Here `f` changes the value of the argument bound to `v2`. However, if we call `f` through `flip1`, the changes made by `f` do not affect the original argument:
+
+```c++
+f(42, i); 			// f changes its argument i
+flip1(f, j, 42); 	// f called through flip1 leaves j unchanged
+```
+
+The problem is that `j` is passed to the `t1` parameter in `flip1`. That parameter has is a plain, nonreference type, `int`, not an `int&`. The value of `j` is copied into `t1`. The reference parameter in `f` is bound to `t1`, not to `j`.
+
+#### Defining Function Parameters That Retain Type Information
+
+**<font color='red'>We can preserve all the type information in an argument by defining its corresponding function parameter as an rvalue reference to a template type
+parameter.</font>** 
+
+Using a reference parameter (either lvalue or rvalue) lets us preserve `const`ness, because the `const` in a reference type is low-level. Through reference
+collapsing, if we define the function parameters as `T1&&` and `T2&&`, we can preserve the lvalue/rvalue property of `flip`’s arguments:
+
+```c++
+template <typename F, typename T1, typename T2>
+void flip2(F f, T1&& t1, T2&& t2)
+{
+	f(t2, t1);
+}
+void f(int v1, int &v2) // note v2 is a reference
+{
+	cout << v1 << " " << ++v2 << endl;
+}
+```
+
+As in our earlier call, if we call `flip2(f, j, 42)`, the lvalue `j` is passed to the parameter `t1`. However, in `flip2`, the type deduced for `T1` is `int&`, which means that the type of `t1` collapses to `int&`. The reference `t1` is bound to `j`. When `flip2` calls `f`, the reference parameter `v2` in `f` is bound to `t1`, which in turn is bound to `j`. When `f` increments `v2`, it is changing the value of `j`.
+
+This version of `flip2` solves one half of our problem. Our `flip2` function works fine for functions that take lvalue references but **<font color='red'>cannot be used to call a function that has an rvalue reference parameter.</font>** For example:
+
+```c++
+void g(int &&i, int& j)
+{
+	cout << i << " " << j << endl;
+}
+```
+
+If we try to call `g` through `flip2`, we will be passing the parameter `t2` to `g`’s rvalue reference parameter. Even if we pass an rvalue to `flip2`:
+
+```c++
+flip2(g, i, 42); // error: can't initialize int&& from an lvalue
+```
+
+what is passed to `g` will be the parameter named `t2` inside `flip2`. **<font color='red'>A function parameter, like any other variable, is an lvalue expression.</font>** As a result, the call to `g` in `flip2` passes an lvalue to `g`’s rvalue reference parameter.
+
+#### Using `std::forward` to Preserve Type Information in a Call
+
+We can use a new library facility named `forward` to pass `flip2`’s parameters in a way that preserves the types of the original arguments.
+
+Unlike `move`, `forward` must be called with an explicit template argument. `forward` returns an rvalue reference to that explicit argument type. That is, the return type of `forward<T>` is `T&&`.
+
+Ordinarily,**<font color='red'> we use `forward` to pass a function parameter that is defined as an rvalue reference to a template type parameter.</font>** Through reference collapsing on its return type, `forward` preserves the lvalue/rvalue nature of its given argument:
+
+```c++
+template <typename Type> intermediary(Type &&arg)
+{
+	finalFcn(std::forward<Type>(arg));
+	// ...
+}
+```
+
+1. If `arg` was an rvalue, then `Type` is an ordinary (nonreference) type and `forward<Type>` will return `Type&&`. 
+2. If `arg` was an lvalue, then—through reference collapsing—`Type` itself is an lvalue reference type. In this case, the return type is an rvalue reference to an lvalue reference type. Again through reference collapsing—this time on the return type—f`orward<Type>` will return an lvalue reference type.
+
+Using `forward`, we’ll rewrite our `flip` function once more:
+
+```c++
+template <typename F, typename T1, typename T2>
+void flip3(F f, T1&& t1, T2&& t2)
+{
+	f(std::forward<T2>(t2), std::forward<T1>(t1));
+}
+```
+
+## 16.3. Overloading and Templates
+
+Function templates can be overloaded by other templates or by ordinary, nontemplate functions.
+
+Function matching is affected by the presence of function templates in the following ways:
+
+* The candidate functions for a call include any function-template instantiation for which template argument deduction succeeds.
+* As usual, the viable functions (template and nontemplate) are ranked by the conversions, if any, needed to make the call. Of course, the conversions used to call a function template are quite limited
+* Also as usual, if exactly one function provides a better match than any of the others, that function is selected. However, if there are several functions that provide an equally good match, then:
+  * If there is only one nontemplate function in the set of equally good matches, the nontemplate function is called.
+  * If there are no nontemplate functions in the set, but there are multiple function templates, and one of these templates is more **specialized** than any of the others, the more specialized function template is called.
+  * Otherwise, the call is ambiguous
+
+#### Writing Overloaded Templates
+
+We’ll build a set of functions which will return a `string` representation of a given object. 
+
+We’ll start by writing the most general version of this function as a template that takes a reference to a `const` object:
+
+```c++
+template <typename T> string debug_rep(const T &t){
+    ostringstream ret;
+    ret << t;			// uses T's output operator to print a representation of t
+    return ret.str();	// return a copy of the string to which ret is bound
+}
+```
+
+Next, we’ll define a version of `debug_rep` to print pointers:
+
+```c++
+template <typename T> string debug_rep(T *p){
+    ostringstream ret;
+	ret << "pointer: " << p; 			// print the pointer's own value
+    if (p)
+        ret << " " << debug_rep(*p); 	// print the value to which p points
+    else
+        ret << " null pointer"; 		// or indicate that the p is null
+    return ret.str(); 					// return a copy of the string to which ret is bound
+}
+```
+
+This version generates a `string` that contains the pointer’s own value and calls `debug_rep` to print the object to which that pointer points. Note that this function can’t be used to print character pointers, because the IO library defines a version of the `<<` for `char*` values. That version of `<<` assumes the pointer denotes a null-terminated character array, and prints the contents of the array, not its address.
+
+1. If we call `debug_rep` with a `string`:
+
+   ```c++
+   string s("hi");
+   cout << debug_rep(s) << endl;
+   ```
+
+   For this call, only the first version of `debug_rep` is viable. The second version of `debug_rep` requires a pointer parameter, and in this call we passed a nonpointer object. Because there is only one viable function, that is the one that is called.
+
+2. If we call `debug_rep` with a pointer:
+
+   ```c++
+   cout << debug_rep(&s) << endl;
+   ```
+
+   both functions generate viable instantiations:
+
+   * `debug_rep(const string* &)`, which is the instantiation of the first version of `debug_rep` with `T` bound to `string*`
+   * `debug_rep(string*)`, which is the instantiation of the second version of `debug_rep` with `T` bound to `string`
+
+   The instantiation of the second version of `debug_rep` is an exact match for this call. The instantiation of the first version requires a conversion of the plain pointer to a pointer to `const`. Normal function matching says we should prefer the second template, and indeed that is the one that is run.
+
+#### Multiple Viable Templates
+
+As another example, consider the following call:
+
+```c++
+const string *sp = &s;
+cout << debug_rep(sp) << endl;
+```
+
+Here both templates are viable and both provide an exact match. 
+
+In this case, normal function matching can’t distinguish between these two calls. We might expect this call to be ambiguous. However, due to the special rule for overloaded function templates, this call resolves to `debug_rep(T*)`, which is the **<font color='red'>more specialized</font>** （更特例化） template.
+
+The problem is that the template `debug_rep(const T&)` can be called on essentially any type, including pointer types. That template is more general than `debug_rep(T*)`, which can be called only on pointer types. Without this rule, calls that passed pointers to `const` would always be ambiguous.
+
+#### Nontemplate and Template Overloads
+
+For our next example, we’ll define an ordinary nontemplate version of `debug_rep` to print `string`s inside double quotes:
+
+```c++
+// print strings inside double quotes
+string debug_rep(const string &s)
+{
+	return '"' + s + '"';
+}
+```
+
+Now, when we call `debug_rep` on a `string`,
+
+```c++
+string s("hi");
+cout << debug_rep(s) << endl;
+```
+
+there are two equally good viable functions:
+
+* `debug_rep<string>(const string&)`, the first template with `T` bound to `string`
+* `debug_rep(const string&)`, the ordinary, nontemplate function
+
+In this case, both functions have the same parameter list, so obviously, each function provides an equally good match for this call. However, the nontemplate version is selected. For the same reasons that**<font color='red'> the most specialized</font>** of equally good function templates is preferred, a nontemplate function is preferred over equally good match(es) to a function template.
+
+#### ⭐Overloaded Templates and Conversions
+
+Now consider that we pass a C-character string to our `debug_rep`. Because we have a version of `debug_rep` that takes a `string`, we might expect that the call  would match that version. However:
+
+```c++
+cout << debug_rep("hi world!") << endl;
+```
+
+Here all three of the `debug_rep` functions are viable:
+
+* `debug_rep(const T&)`, with `T` bound to `char[10]`
+* `debug_rep(T*)`, with `T` bound to `const char`
+* `debug_rep(const string&)`, which requires a conversion from `const char*` to `string`
+
+Both templates provide an exact match to the argument—the second template requires a (permissible) conversion from array to pointer, and that conversion is considered as an exact match for function-matching purposes.
+
+The nontemplate version is viable but requires a user-defined conversion. That function is less good than an exact match, leaving the two templates as the possible functions to call.
+
+As before, the `T*` version is more specialized and is the one that will be selected.
+
+If we want to handle character pointers as `string`s, we can define two more nontemplate overloads:
+
+```c++
+string debug_rep(char *p)
+{
+	return debug_rep(string(p));
+}
+string debug_rep(const char *p)
+{
+	return debug_rep(string(p));
+}
+```
+
+## 16.4. Variadic Templates 可变参数模板
+
+A **<font color='blue'>variadic template</font>** is a template function or class that can take a varying number of parameters. The varying parameters are known as a **<font color='blue'>parameter pack</font>**（参数包）. 
+
+We use an ellipsis to indicate that a template or function parameter represents a pack. 
+
+* In a template parameter list, `class...` or `typename...` indicates that the following parameter represents a list of zero or more **type parameters**.
+* The name of a type followed by an ellipsis represents a list of zero or more **nontype parameter**s of the given type. 
+* In the function parameter list, a parameter whose type is a template parameter pack is a function parameter pack.
+
+```c++
+template <typename T, typename... Args>
+void foo(const T &t, const Args& ... rest);
+```
+
+`foo` is a variadic function that has one type parameter named `T` and a template parameter pack named `Args`. That pack represents zero or more additional type parameters. 
+
+The function parameter list of `foo` has one parameter, whose type is a `const &` to whatever type `T` has, and a function parameter pack named `rest`. That pack represents zero or more function parameters.
+
+As usual, the compiler deduces the template parameter types from the function’s arguments. For a variadic template, the compiler **<font color='red'>also deduces the number of parameters in the pack</font>**. For example, given these calls:
+
+```c++
+int i = 0; double d = 3.14; string s = "how now brown cow";
+foo(i, s, 42, d); 	// three parameters in the pack
+foo(s, 42, "hi"); 	// two parameters in the pack
+foo(d, s); 			// one parameter in the pack
+foo("hi"); 			// empty pack
+```
+
+the compiler will instantiate four different instances of `foo`:
+
+```c++
+void foo(const int&, const string&, const int&, const double&);
+void foo(const string&, const int&, const char[3]&);
+void foo(const double&, const string&);
+void foo(const char[3]&);
+```
+
+#### The `sizeof...` Operator
+
+When we need to know how many elements there are in a pack, we can use the `sizeof...` operator.
+
+```c++
+template <typename... Args>
+void foo(Args ... args){
+    cout << sizeof...(Args) << endl;	// number of type parameters
+    cout << sizeof...(args) << endl;	// number of function parameters
+}
+```
+
+### 16.4.1. Writing a Variadic Function Template
+
+In § 6.2.6 we saw that we can use an `initializer_list` to define a function that can take a varying number of arguments. However, the arguments must have the same type (or types that are convertible to a common type). **<font color='red'>Variadic functions are used when we know neither the number nor the types of the arguments we want to process.</font>**
+
+**<font color='red'>Variadic functions are often recursive. The first call processes the first argument in the pack and calls itself on the remaining arguments.</font>**
+
+As an example, we’ll define a function named `print` that will print the contents of a given list of arguments on a given stream. This function works recursively: each call will print its second argument on the stream denoted by its first argument. To stop the recursion, we’ll also need to define a non-variadic `print` function that will take a stream and an object:
+
+```c++
+// function to end the recursion and print the last element
+template <typename T> 
+ostream& print(ostream &os, const T &t){
+    return os << t;
+}
+
+template <typename T, typename ... Args>
+ostream& print(ostream &os, const T &t, const Args& ... rest){
+    os << t << ", ";
+    return print(os, rest...);
+}
+```
+
+The key part is the call to `print` inside the variadic function:
+
+The variadic version of our `print` function takes three parameters: 
+
+* an `ostream&`
+* a `const T&`
+* a parameter pack.
+
+Yet this call passes only two arguments. What happens is that the first argument in `rest` gets bound to `t`. The remaining arguments in `rest` form the parameter pack for the next call to `print`. Thus, on each call, the first argument in the pack is removed from the pack and becomes the argument bound to `t`.
+
+For the last call in the recursion, both versions of `print` are viable. However, a nonvariadic template is more specialized than a variadic template, so the nonvariadic version is chosen for this call.
+
+### 16.4.2. Pack Expansion
+
+Aside from taking its size, the only other thing we can do with a parameter pack is to expand it. Expanding a pack separates the pack into its constituent elements, applying the **pattern** to each element as it does so. We trigger an expansion by putting an ellipsis (`...` ) to the right of the pattern.
+
+Our `print` function contains two expansions:
+
+* The first expansion expands the template parameter pack and generates the function parameter list for `print`:
+
+  ```c++
+  ostream& print(ostream &os, const T &t, const Args& ... rest)
+  ```
+
+  The expansion of `Args` applies the **pattern** `const Args&` to each element in the　template parameter pack `Args`.
+
+* The second expansion appears in the call to `print`. That pattern generates the argument list for the call to `print`:
+
+  ```c++
+  print(os, rest...);
+  ```
+
+  In this case, the **pattern** is the name of the function parameter `pack` (i.e., `rest`). This pattern expands to a comma-separated list of the elements in the pack.
+
+#### Understanding Pack Expansions
+
+We might write a second variadic function that calls `debug_rep` (§ 16.3) on each of its arguments and then calls `print` to print the resulting `string`s:
+
+```c++
+template<typename... Args>
+ostream& error_msg(ostream &os, const Args&... rest){
+    return print(os, debug_rep(rest)...);
+}
+```
+
+The call to `print` uses the pattern `debug_rep(rest)`. That pattern says that we want to call `debug_rep` on each element in the function parameter pack `rest`. The resulting expanded pack will be a comma-separated list of calls to `debug_rep`. That is, a call such as
+
+```c++
+errorMsg(cerr, fcnName, code.num(), otherData, "other", item);
+```
+
+will execute as if we had written
+
+```c++
+print(cerr, debug_rep(fcnName), debug_rep(code.num()), debug_rep(otherData), debug_rep("otherData"),
+		debug_rep(item));
+```
+
+### 16.4.3. Forwarding Parameter Packs
+
+Under the new standard, we can use variadic templates together with `forward` to write functions that pass their arguments unchanged to some other function. To illustrate such functions, we’ll add an `emplace_back` member to our `StrVec` class (§
+13.5)
+
+The `emplace_back` member uses its arguments to construct an element directly in space managed by the container. Because
+`string` has a number of constructors that differ in terms of their parameters, our version of `emplace_back` for `StrVec` will also have to be a variadic template.
+
+Because we’d like to be able to use the `string` move constructor, we’ll also need to preserve all the type information about the arguments passed to `emplace_back`.
+
+**<font color='red'>As we’ve seen, preserving type information is a two-step process.</font>** 
+
+* First, to preserve type information in the arguments, we must define `emplace_back`’s function parameters as rvalue references to a template type parameter:
+
+  ```c++
+  class StrVec{
+  public:
+      template <typename... Args> void emplace_back(Args&&...);
+      ...
+  };
+  ```
+
+* Second, we must use `forward` to preserve the arguments’ original types when `emplace_back` passes those arguments to `construct`:
+
+  ```c++
+  template <typename... Args>
+  inline void StrVec::emplace_back(Args&&... args){
+      chk_n_alloc(); 	// reallocates the StrVec if necessary
+      alloc.construct(first_free++, std::forward<Args>(args)...);
+  }
+  ```
+
+  The expansion in the call to `construct` expands both the template parameter pack, `Args`, and the function parameter pack,
+  `args`. 
+
+  By using `forward` in this call, we guarantee that if `emplace_back` is called with an rvalue, then `construct` will also get an rvalue. The `construct` function will, in turn, forward this argument to the `string` move constructor to build the element.
+
+## 16.5. Template Specializations 模板特例化
+
+When we can’t (or don’t want to) use the template version, we can define a specialized version of the class or function template.
+
+Our `compare` function is a good example of a function template for which the general definition is not appropriate for a particular type, namely, **character pointers**.
+
+We’d like `compare` to compare character pointers by calling `strcmp` rather than by comparing the pointer values. Indeed, we have already overloaded the compare function to handle character string literals (§ 16.1.1):
+
+```c++
+template <typename T> int compare(const T&, const T&);
+
+template <size_t N, size_t M>
+int compare(const char (&)[N], const char (&)[M]);
+```
+
+However, the version of `compare` that has two nontype template parameters will be called only when we pass a string literal or an array. If we call `compare` with character pointers, the first version of the template will be called:
+
+```c++
+const char *p1 = "hi", *p2 = "mom";
+compare(p1, p2); 		// calls the first template
+compare("hi", "mom"); 	// calls the template with two nontype parameters
+```
+
+#### Defining a Function Template Specialization
+
+To handle character pointers, we can define a **<font color='blue'>template specialization</font>** of the first version of `compare`. A specialization is a separate definition of the template in which one or more template parameters are specified to have particular types.
+
+To indicate that we are specializing a template, we use the keyword `template` followed by an empty pair of angle brackets (`<>`). When we specialize a function template, we must supply arguments for every template parameter in the original template:
+
+```c++
+template <>
+int compare(const char* const &p1, const char* const &p2){
+    return strcmp(p1, p2);
+}
+```
+
+The hard part in understanding this specialization is the function parameter types. **<font color='red'>When we define a specialization, the function parameter type(s) must match the corresponding types in a previously declared template.</font>** Here we are specializing:
+
+```c++
+template <typename T> int compare(const T&, const T&);
+```
+
+in which the function parameters are r**<font color='red'>eferences to a `const` type</font>**.
+
+We want to define a specialization of this function with `T` as `const char*`. **<font color='red'>Our function requires a reference to the `const` version of this type.</font>** Thus the type we need to use in our specialization is `const char* const &`, which is a reference to a `const` pointer to `const char`.
+
+#### Function Overloading versus Template Specializations
+
+It is important to realize that a specialization is an instantiation; it is not an overloaded instance of the function name.
+
+Specializations instantiate a template; they do not overload it. As a result, **<font color='red'>specializations do not affect function matching</font>**. For example, we have defined two versions of our `compare` function template:
+
+```c++
+template <typename T> int compare(const T&, const T&);
+
+template <size_t N, size_t M>
+int compare(const char (&)[N], const char (&)[M]);
+```
+
+The fact that we also have a specialization for character pointers has no impact on function matching. When we call `compare` on a string literal:
+
+```c++
+compare("hi", "mom")
+```
+
+both function templates are viable and provide an equally good match to the call. However, the version with character array parameters is more specialized and is chosen for this call.
+
+Had we defined the version of `compare` that takes character pointers as a plain nontemplate function, all three are equally
+good matches for this call. As we’ve seen, when a nontemplate provides an equally good match as a function template, the nontemplate is selected.
+
+#### Class Template Specializations
+
+In addition to specializing function templates, we can also specialize class templates. As an example, we’ll define a specialization of the library `hash` template that we can use to store `Sales_data` objects in an unordered container.
+
+By default, the unordered containers use `hash<key_type>`  to organize their elements. To **use this default** with our own data type, we must define a specialization of the `hash` template.
+
+**<font color='red'>When we specialize a template, we must do so in the same namespace in which the original template is defined.</font>** We can add members to a namespace by opening the namespace:
+
+```c++
+// open the std namespace so we can specialize std::hash
+namespace std {
+} // close the std namespace; note: no semicolon after the close curly
+```
+
+A specialized `hash` class must define:
+
+* An overloaded call operator  that returns a `size_t` and takes an object of the container’s key type
+* Two type members, `result_type` and `argument_type`, which are the return and argument types, respectively, of the call operator
+* The default constructor and a copy-assignment operator (which can be implicitly defined）
+
+The following defines a specialization of `hash` for `Sales_data`:
+
+```c++
+namespace std{
+	template <>						// we're defining a template specialization
+    struct hash<Sales_data>{		// the template parameter is Sales_data
+        typedef size_t result_type;
+        typedef Sales_data argument_type;
+        size_t operator()(const Sales_data &s) const;
+    };
+    size_t hash<Sales_data>::operator()(const Sales_data &s) const{
+        return hash<string>()(s.bookNo) ^
+            	hash<unsigned>()(s.units_sold) ^
+            	hash<double>()(s.revenue);
+    }
+}
+```
+
+Our `hash<Sales_data>` definition starts with `template<>`, which indicates that we are defining a **<font color='blue'>fully specialized</font>** template.
+
+By default, the unordered containers use the specialization of `hash` that corresponds to the key type. Assuming our specialization is in scope, it will be used automatically when we use `Sales_data` as a key to one of these containers:
+
+```c++
+// uses hash<Sales_data> and Sales_data operator==
+unordered_multiset<Sales_data> SDset;
+```
+
+Because `hash<Sales_data>` uses the `private` members of `Sales_data`, we must make this class a friend of `Sales_data`:
+
+```c++
+template <typename T> class hash;
+class Sales_data{
+friend class hash<Sales_data>;
+    ...
+};
+```
+
+#### Class-Template Partial Specializations
+
+Differently from function templates, a class template specialization does not have to supply an argument for every template parameter. 
+
+We can specify some, but not all, of the template parameters or**<font color='red'> some, but not all, aspects of the parameters</font>**. A class template partial specialization is itself a template. Users must supply arguments for those template parameters that are not fixed by the specialization.
+
+The library `remove_reference` template works through a series of specializations:
+
+```c++
+// original, most general template
+template <class T> struct remove_reference {
+	typedef T type;
+};
+// partial specializations that will be used for lvalue references
+template <class T> struct remove_reference<T&>{
+  	typedef T type;  
+};
+// partial specializations that will be used for rvalue references
+template <class T> struct remove_reference<T&&>{
+  	typedef T type;  
+};
+
+```
+
+**<font color='red'>Because a partial specialization is a template, we start, as usual, by defining the template parameters.</font>** After the class name, we specify arguments for the template parameters we are specializing. These arguments are listed inside angle brackets following the template name. The arguments correspond positionally to the parameters in the original template.
+
+```c++
+int i;
+// decltype(42) is int, uses the original template
+remove_reference<decltype(42)>::type a;
+// decltype(i) is int&, uses first (T&) partial specialization
+remove_reference<decltype(i)>::type b;
+// decltype(std::move(i)) is int&&, uses second (i.e., T&&) partial specialization
+remove_reference<decltype(std::move(i))>::type c;s
+```
+
+#### Specializing Members but Not the Class
+
+Rather than specializing the whole template, we can specialize just specific member function(s). For example, if `Foo` is a template class with a member `Bar`, we can specialize just that member:
+
+```c++
+template <typename T> struct Foo {
+	Foo(const T &t = T()): mem(t) { }
+	void Bar() { /* ... */ }
+	T mem;
+	// other members of Foo
+};
+
+template <>				// we're specializing a template
+void Foo<int>::Bar()	// we're specializing the Bar member of Foo<int>
+{
+	// do whatever specialized processing that applies to ints
+}
+```
+
+When we use `Foo` with any type other than `int`, members are instantiated as usual. When we use `Foo` with `int`, members other than `Bar` are instantiated as usual. If we use the `Bar` member of `Foo<int>`, then we get our specialized definition.

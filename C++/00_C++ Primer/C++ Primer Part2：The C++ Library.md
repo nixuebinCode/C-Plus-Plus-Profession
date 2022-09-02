@@ -2345,7 +2345,7 @@ We cannot subscript a `multimap` or an `unordered_multimap` because there may be
 
 **<font color='red'>Unlike other subscript operators, if the key is not already present, a new element is created and inserted into the `map` for that key. The associated value is value initialized.</font>**
 
-Because the subscript operator might insert an element, **<font color='red'>we may use subscript only on a `map` that is not `const`.</font>**
+Because the subscript operator might insert an element, **<font color='red'>we may use subscript only on a `map` that is not `const`.</font>** 只能对 non-const map 使用下标操作！
 
 #### Using the Value Returned from a Subscript Operation
 
