@@ -1635,7 +1635,7 @@ using namespcae std::placeholders;
 
 makes all the names defined by `placeholders` usable.
 
-#### Arguments to bind
+#### Arguments to `bind`
 
 More generally, we can use `bind` to bind or rearrange the parameters in the given callable.
 
@@ -1652,7 +1652,7 @@ For example, calling `g(X, Y)` calls
 f(a, b, Y, c, X)l
 ```
 
-#### Using to bind to Reorder Parameters
+#### Using to `bind` to Reorder Parameters
 
 As a more concrete example of using `bind` to reorder arguments, we can use `bind` to invert the meaning of `isShorter` by writing
 

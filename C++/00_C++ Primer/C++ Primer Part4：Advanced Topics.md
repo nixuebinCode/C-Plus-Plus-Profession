@@ -1321,3 +1321,527 @@ For example, when a `Panda` object is created:
 If the `Panda` constructor does not explicitly initialize the `ZooAnimal` base class, then the `ZooAnimal` default constructor is used.
 
 # Chapter 19. Specialized Tools and Techniques
+
+## 19.1. Controlling Memory Allocation
+
+### 19.1.1. Overloading new and delete
+
+When we use a `new` expression:
+
+```c++
+// new expressions
+string *sp = new string("a value"); // allocate and initialize a string
+string *arr = new string[10];		// allocate ten default initialized strings
+```
+
+The expression calls a library function named `operator new` (or `operator new[]`). **<font color='red'>This function allocates raw, untyped memory large enough to hold an object (or an array of objects) of the specified type.</font>**
+
+When we use a `delete` expression
+
+```c++
+delete sp;
+delete [] arr;
+```
+
+**<font color='red'>The compiler frees the memory</font>** by calling a library function named `operator delete` or `operator delete[]` after appropriate destructor is run on the object.
+
+Applications that want to take control of memory allocation define their own versions of the `operator new` and `operator delete` functions. Even though the library contains definitions for these functions, we can define our own versions of them and the compiler won’t complain about duplicate definitions. Instead, the compiler will use our version in place of the one defined by the library.
+
+When the compiler sees a `new` or `delete` expression, it looks for the corresponding `operator` function to call:
+
+* If the object being allocated (deallocated) has class type, the compiler first looks in the scope of the class, including any base classes. If the class has a member `operator new` or `operator delete`, that function is used by the `new` or `delete` expression.
+* Otherwise, the compiler looks for a matching function in the global scope. If the compiler finds a user-defined version, it uses that function to execute the `new` or `delete` expression. Otherwise, the standard library version is used.
+
+#### The `operator new` and `operator delete` Interface
+
+The library defines eight overloaded versions of `operator new` and `delete` functions. The first four support the versions of `new` that can throw a `bad_alloc` exception. The next four support nonthrowing versions of `new`
+
+```c++
+// these versions might throw an exception
+void *operator new(size_t); 				// allocate an object
+void *operator new[](size_t); 				// allocate an array
+void *operator delete(void*) noexcept; 		// free an object
+void *operator delete[](void*) noexcept; 	// free an array
+// versions that promise not to throw
+void *operator new(size_t, nothrow_t&) noexcept;
+void *operator new[](size_t, nothrow_t&) noexcept;
+void *operator delete(void*, nothrow_t&) noexcept;
+void *operator delete[](void*, nothrow_t&) noexcept;
+```
+
+An application can define its own version of any of these functions. If it does so, it must define these functions in the global scope or as members of a class. **<font color='red'>When defined as members of a class, these operator functions are implicitly `static`. </font>**The member `new` and `delete` functions must be `static` because they are used either before the object is constructed (`operator new`) or after it has been destroyed (`operator delete`). There are, therefore, no member data for these functions to manipulate.
+
+An `operator new` or `operator new[]` function must have a return type of `void*` and its first parameter must have type `size_t`. When the compiler calls `operator new`, it initializes the `size_t` parameter with the number of bytes required to hold an object of the specified type; when it calls `operator new[]`, it passes the number of bytes required to store an array of the given number of elements.
+
+An `operator delete` or `operator delete[]` function must have a `void` return type and a first parameter of type `void*`. Executing a `delete` expression calls the appropriate operator function and initializes its `void*` parameter with a pointer to the memory to free.
+
+> Terminology: `new` Expression versus `operator new` Function
+>
+> A `new` expression always executes by calling an `operator new` function to obtain memory and then constructing an object in that memory. 
+>
+> A `delete` expression always executes by destroying an object and then calling an `operator delete` function to free the memory used by the object.
+>
+> By providing our own definitions of the `operator new` and `operator delete` functions, we can change how memory is allocated. However, we
+> cannot change this basic meaning of the `new` and `delete` operators.
+
+#### ⭐The `malloc` and `free` Functions
+
+The `malloc` function takes a `size_t` that says how many bytes to allocate. It returns a pointer to the memory that it allocated, or `0` if it was unable to allocate the memory. 
+
+The `free` function takes a `void*` that is a copy of a pointer that was returned from `malloc` and returns the associated memory to the system. Calling
+`free(0)` has no effect.
+
+A simple way to write `operator new` and `operator delete` is as follows:
+
+```c++
+void* operator new(size_t size){
+    if(void *mem = malloc(size))
+        return mem;
+    else
+        throw bad_alloc();
+}
+
+void operator delete(void *mem) noexcept{
+    free(mem);
+}
+```
+
+## 19.2. Run-Time Type Identification
+
+**<font color='blue'>Run-time type identification</font>** (RTTI) is provided through two operators:
+
+* The `typeid` operator, which returns the type of a given expression
+* The `dynamic_cast` operator, which safely converts a pointer or reference to a base type into a pointer or reference to a derived type
+
+These operators are useful when we have a derived operation that we want to perform through a pointer or reference to a base-class object and it is not possible to make that operation a virtual function.
+
+> RTTI should be used with caution. When possible, it is better to define a virtual function rather than to take over managing the types directly.
+
+### 19.2.1. The `dynamic_cast` Operator
+
+A `dynamic_cast` has the following form:
+
+```c++
+dynamic_cast<type*> (e)
+dynamic_cast<type&> (e)
+dynamic_cast<type&&> (e)
+```
+
+`type` must be a class type and (ordinarily) names a class that has virtual functions.
+
+the type of `e` must be either a class type that is publicly derived from the target type, a `public` base class of the target type, or the same as the target
+type. If `e` has one of these types, then the cast will succeed. Otherwise, the cast fails. If a `dynamic_cast` to a pointer type fails, the result is `0`. If a `dynamic_cast` to a reference type fails, the operator throws an exception of type `bad_cast`.
+
+#### Pointer-Type `dynamic_cast`s
+
+As a simple example, assume that `Base` is a class with at least one virtual function and that class `Derived` is publicly derived from `Base`. If we have a pointer to `Base` named `bp`, we can cast it, at run time, to a pointer to `Derived` as follows:
+
+```c++
+if(Derived *dp = dynamic_cast<Derived*> (bp)){
+    // use the Derived object to which dp points
+}
+```
+
+#### Reference-Type `dynamic_cast`s
+
+When a cast to a reference type fails, the cast throws a `std::bad_cast` exception, which is defined in the `typeinfo` library header.
+
+```c++
+void f(const Base &b){
+    try{
+        const Derived &d = dynamic_cast<Derived&> (b);
+        // use the Derived object to which b referred
+    }
+    catch(bad_cast){
+        // handle the fact that the cast failed
+    }
+}
+```
+
+### 19.2.2. The `typeid` Operator
+
+A `typeid` expression has the form `typeid(e)` where `e` is any expression or a type name. The result of a `typeid` operation is a reference to a `const` object of a library type named `type_info`, or a type publicly derived from `type_info`. 
+
+As usual, top-level `const` is ignored, and if the expression is a reference, `typeid` returns the type to which the reference refers. When applied to an array or function, the standard conversion to pointer is not done.
+
+#### Using the `typeid` Operator
+
+Ordinarily, we use `typeid` to compare the types of two expressions or to compare the type of an expression to a specified type:
+
+```c++
+Derived *dp = new Derived;
+Base *bp = dp;				// both pointers point to a Derived object
+// compare the type of two objects at run time
+if(typeid(*bp) == typeid(*dp)){
+    // bp and dp point to objects of the same type
+}
+// test whether the run-time type is a specific type
+if(typeid(*bp) == typeid(Derived)){
+	// bp actually points to a Derived
+}
+```
+
+When the operand is not of class type or is a class without virtual functions, then the `typeid` operator indicates the static type of the operand. When the operand is an lvalue of a class type that defines at least one virtual function, then the type is evaluated at run time.
+
+If the type has no virtuals, then `typeid` returns the static type of the expression; the compiler knows the static type without evaluating the expression.
+
+### 19.2.3. Using RTTI
+
+As an example of when RTTI might be useful, consider a class hierarchy for which we’d like to implement the equality operator. Two objects are equal
+if they have the same type and same value for a given set of their data members. Each derived type may add its own data, which we will want to include when we test for equality.
+
+We might think we could solve this problem by defining a set of virtual functions that would perform the equality test at each level in the hierarchy. Unfortunately, this strategy doesn’t quite work. **<font color='red'>Virtual functions must have the same parameter type(s) in both the base and derived classes</font>**. If we
+wanted to define a virtual equal function, that function must have a parameter that is a reference to the base class. If the parameter is a reference to base, the `equal` function could use only members from the base class. equal would have no way to compare members that are in the derived class but not in the base.
+
+Given this observation, we can now see that we can use RTTI to solve our problem. We’ll define an equality operator whose parameters are references to the base-class type. The equality operator will use `typeid` to verify that the operands have the same type. If the operands differ, the `==` will return `false`. Otherwise, it will call a virtual `equal` function. Each class will define `equal` to compare the data elements of its own type. These operators will take a `Base&` parameter but will cast the operand to its own type before doing the comparison.
+
+```c++
+class Base{
+friend operator==(const Base&, const Base&);
+protected:
+    virtual bool equal(const Base&) const;
+};
+
+class Derived : public Base{
+friend operator==(const Base&, const Base&);
+protected:
+    bool equal(const Base&) const;
+};
+
+bool operator==(const Base &lhs, const Base &rhs){
+    return typeid(lhs) == typeid(rhs) &&
+        	lhs.equal(rhs);
+}
+
+bool Base::equal(const Base &rhs){
+    // do whatever is required to compare to Base objects
+}
+
+bool Derived::equal(const Base &rhs){
+    auto r = dynamic_cast<Derived&> (rhs);
+    // do the work to compare two Derived objects and return the result
+}
+```
+
+### 19.2.4. The `type_info` Class
+
+the `type_info` class will provide at least the operations:
+
+ ![image-20220903121734080](images/image-20220903121734080.png)
+
+The `name` member function returns a C-style character string for the name of the type represented by the `type_info` object. The value used for a given type depends on the compiler and in particular is not required to match the type names as used in a program. The only guarantee we have about the return from name is that it returns a unique string for each type.
+
+## 19.3. Enumerations
+
+Enumerations let us group together sets of integral constants. Like classes, each enumeration defines a new type. Enumerations are literal types.
+
+C++ has two kinds of enumerations:
+
+* **<font color='blue'>scoped enumerations</font>**
+
+  We define a scoped enumeration using the keywords `enum class` (or, equivalently, `enum struct`), followed by the enumeration name and a comma-separated list of enumerators enclosed in curly braces：
+
+  ```c++
+  enum class open_modes {input, output, append};
+  ```
+
+* **<font color='blue'>unscoped enumeration</font>**
+
+  We define an unscoped enumeration by omitting the `class` (or `struct`) keyword. The enumeration name is optional in an unscoped enum:
+
+  ```c++
+  enum color {red, yellow, green};
+  enum {floatPrec = 6, doublePrec = 10, double_doublePrec = 10};
+  ```
+
+#### Enumerators 枚举成员
+
+The names of the enumerators in a **scoped enumeration** follow normal scoping rules and are inaccessible outside the scope of the enumeration.
+
+The enumerator names in an **unscoped enumeration** are placed into the same scope as the enumeration itself.
+
+```c++
+enum color {red, yellow, green};
+enum stoplight {red, yellow, green};		// error: redefines enumerators
+enum class peppers {red, yellow, green}; 	// ok: enumerators are hidden
+color eyes = green;							// ok: enumerators are in scope for an unscoped enumeration
+peppers p = green;							// error: enumerators from peppers are not in scope
+											// color::green is in scope but has the wrong type
+color hair = color::red;					// ok: we can explicitly access the enumerators
+peppers p2 = peppers::red;					// ok: using red from peppers
+```
+
+By default, enumerator values start at 0 and each enumerator has a value 1 greater than the preceding one. However, we can also supply initializers for one or more enumerators:
+
+```c++
+enum class intTypes{
+    charTyp = 8, shortTyp = 16, intTyp = 16,
+    longTyp = 32, long_longTyp = 64
+};
+```
+
+As we see with the enumerators for `intTyp` and `shortTyp`, an enumerator value need not be unique. When we omit an initializer, the enumerator has a value 1 greater than the preceding enumerator.
+
+Enumerators are `const` and, if initialized, their initializers must be constant expressions. Consequently, **<font color='red'>each enumerator is itself a constant expression.</font>** Because the enumerators are constant expressions, we can use them where a constant expression is required.
+
+#### Like Classes, Enumerations Define New Types
+
+An `enum` object may be initialized or assigned only by one of its enumerators or by another object of the same `enum` type:
+
+```c++
+open_modes om = 2;		// error: 2 is not of type open_modes
+om = open_modes::input;	// ok: input is an enumerator of open_modes
+```
+
+Objects or enumerators of an **unscoped enumeration** type are automatically converted to an integral type. As a result, they can be used where an integral value is required:
+
+```c++
+int i = color::red;		// ok: unscoped enumerator implicitly converted to int
+int j = peppers::red;	// error: scoped enumerations are not implicitly converted
+```
+
+#### Specifying the Size of an `enum`
+
+Although each `enum` defines a unique type, it is represented by one of the built-in integral types. Under the new standard, we may specify that type by following the `enum` name with a colon and the name of the type we want to use:
+
+```c++
+enum intValues : unsigned long long{
+    charTyp = 255, shortTyp = 65535, intTyp = 65535,
+	longTyp = 4294967295UL,
+	long_longTyp = 18446744073709551615ULL
+};
+```
+
+If we do not specify the underlying type, then by default scoped `enum`s have `int` as the underlying type. There is no default for unscoped `enum`s.
+
+#### Forward Declarations for Enumerations
+
+Under the new standard, we can forward declare an `enum`. An `enum` forward declaration must specify (implicitly or explicitly) the underlying size of the `enum`:
+
+```c++
+enum intValues : unsigned long long;
+enum class open_modes;
+```
+
+Because there is no default size for an unscoped `enum`, every declaration must include the size of that `enum`. We can declare a scoped `enum` without specifying a size, in which case the size is implicitly defined as `int`.
+
+## 19.4. Pointer to Class Member
+
+**<font color='blue'>A pointer to member</font>** is a pointer that can point to a non`static` member of a class. Normally a pointer points to an object, but a pointer to member identifies a member of a class, not an object of that class.
+
+The type of a pointer to member embodies both the type of a class and the type of a member of that class.
+
+To explain pointers to members, we’ll use a version of the `Screen` class from §7.3.1
+
+```c++
+class Screen {
+public:
+	typedef std::string::size_type pos;
+	char get_cursor() const { return contents[cursor]; }
+	char get() const;
+	char get(pos ht, pos wd) const;
+private:
+	std::string contents;
+	pos cursor;
+	pos height, width;
+};
+```
+
+### 19.4.1. Pointers to Data Members
+
+Unlike ordinary pointers, a pointer to member also incorporates the class that contains the member. Hence, we must precede the `*` with `classname::` to indicate that the pointer we are defining can point to a member of `classname`. For example:
+
+```c++
+const string Screen::*pdata;
+```
+
+declares that `pdata` is a “pointer to a member of class `Screen` that has type `const string`.”
+
+When we initialize (or assign to) a pointer to member, we say to which member it points. For example, we can make `pdata` point to the `contents` member of an unspecified `Screen` object as follows:
+
+```c++
+auto pdata = &Screen::contents;
+```
+
+#### Using a Pointer to Data Member
+
+It is essential to understand that when we initialize or assign a pointer to member, that pointer does not yet point to any data. It identifies a specific member but not the object that contains that member. **<font color='red'>We supply the object when we dereference the pointer to member.</font>**：
+
+```c++
+Screen myScreen, *pScreen = &myScreen;
+// .* dereferences pdata to fetch the contents member from the object myScreen
+auto s = myScreen.*pdata;
+// ->* dereferences pdata to fetch contents from the object to which pScreen points
+s = pScreen->*pdata;
+```
+
+Conceptually, these operators perform two actions: 
+
+* They dereference the pointer to member to get the member that we want
+* Then, like the member access operators, they fetch that member from an object (`.`) or through a pointer (`->`).
+
+#### A Function Returning a Pointer to Data Member
+
+Normal access controls apply to pointers to members. For example, the `contents` member of `Screen` is private. As a result, the use of `pdata` above must have been inside a member or friend of class `Screen` or it would be an error.
+
+Because data members are typically `private`, we normally can’t get a pointer to data member directly. Instead, if a class like `Screen` wanted to allow access to its `contents` member, it would define a function to return a pointer to that member:
+
+```c++
+class Screen{
+public:
+    static const string Screen::* data(){
+        return &Screen::contents;
+    }
+    // other members as before
+};
+```
+
+When we call `data`, we get a pointer to member:
+
+```c++
+const string Screen::*pdata = Screen::data();
+// fetch the contents of the object named myScreen
+auto s = myScreen.*pdata;
+```
+
+### 19.4.2. Pointers to Member Functions
+
+We can also define a pointer that can point to a member function of a class:
+
+```c++
+auto pmf = &Screen::get_cursor;
+```
+
+Like a pointer to data member, a pointer to a function member is declared using `classname::*`. Like any other function pointer, a pointer to member
+function specifies the return type and parameter list of the type of function to which this pointer can point.
+
+As with normal function pointers, if the member is overloaded, we must distinguish which function we want by declaring the type explicitly:
+
+```c++
+char (Screen*pmf2)(Screen::pos ht, Screen::pos wd) const;
+pmf2 = &Screen::get;
+```
+
+#### Using a Pointer to Member Function
+
+As when we use a pointer to a data member, we use the `.*` or `->*` operators to call a member function through a pointer to member:
+
+```c++
+Screen myScreen,*pScreen = &myScreen;
+char c1 = (myScreen.*pmf2)(0, 0);
+char c2 = (pScreen->*pmf2)(0, 0);
+```
+
+#### Pointer-to-Member Function Tables
+
+One common use for function pointers and for pointers to member functions is to store them in a function table (§ 14.8.3). 
+
+Let’s assume that our `Screen` class is extended to contain several member functions, each of which moves the cursor in a particular direction:
+
+```c++
+class Screen {
+public:
+	// other interface and implementation members as before
+	Screen& home(); // cursor movement functions
+	Screen& forward();
+	Screen& back();
+	Screen& up();
+	Screen& down();
+};
+```
+
+We might want to define a `move` function that can call any one of these functions and perform the indicated action. To support this new function, we’ll add a `static` member to `Screen` that will be an array of pointers to the cursor movement functions:
+
+```c++
+class Screen{
+public:
+	// other interface and implementation members as before
+    using Action = Screen& (Screen::*)();	// Action is a pointer that can be assigned any of the cursor movement members
+    enum Directions { HOME, FORWARD, BACK, UP, DOWN };
+    Screen& move(Directions);
+private:
+    static Action Menu[];					// function table
+};
+```
+
+The array named `Menu` will hold pointers to each of the cursor movement functions. Those functions will be stored at the offsets corresponding to the enumerators in `Directions`.
+
+```c++
+Screen& Screen::move(Directions cm){
+    return (this->*Menu[cm])();		// Menu[cm] points to a member function
+}
+
+Screen::Action Screen::Menu[] = { &Screen::home,
+									&Screen::forward,
+									&Screen::back,
+									&Screen::up,
+									&Screen::down,
+								};
+```
+
+### 19.4.3. Using Member Functions as Callable Objects
+
+A pointer to member is not a callable object, we cannot directly pass a pointer to a member function to an algorithm. As an example, if we wanted to find the first empty `string` in a `vector` of `string`s, the obvious call won’t work
+
+```c++
+autp fp = &Screen::empty;
+find_if(svec.begin(), svec.end(), fp);	// error
+```
+
+This call won’t compile, because the code inside `find_if` executes a statement something like
+
+```c++
+if(fp(*it))	// error: must use ->* to call through a pointer to member
+```
+
+#### Using `function` to Generate a Callable
+
+One way to obtain a callable from a pointer to member function is by using the library `function` template
+
+```c++
+function<bool (const string&)> fcn = &Screen::empty;
+find_if(svec.begin(), svec.end(), fcn);
+```
+
+When we define a `function` object, we must specify the function type that is the signature of the callable objects that object can represent. **<font color='red'>When the callable is a member function, the signature’s first parameter must represent the (normally implicit) object on which the member will be run.</font>** The signature we give to `function` must specify whether the object will be passed as a pointer or a reference.
+
+When we defined `fcn`, we knew that we wanted to call `find_if` on a sequence of `string` objects. Hence, we asked function to generate a callable that took `string` objects. Had our `vector` held pointers to `string`, we would have told `function` to expect a pointer:
+
+```c++
+vector<string*> pvec;
+function<bool (const string*)> fp = &Screen::empty;
+find_if(pvec.begin(), pvec.end(), fp);
+```
+
+#### Using `mem_fn` to Generate a Callable
+
+To use `function`, we must supply the call signature of the member we want to call. We can, instead, let the compiler deduce the member’s type by using another library facility, `mem_fn`.
+
+Like `function`, `mem_fn` generates a callable object from a pointer to member. Unlike `function`, `mem_fn` will deduce the type of the callable from the type of the pointer to member:
+
+```c++
+find_if(svec.begin(), svec.end(), mem_fn(&string::empty));
+```
+
+The callable generated by `mem_fn` can be called on either an object or a pointer:
+
+```c++
+auto f = mem_fn(&string::empty); 	// f takes a string or a string*
+f(*svec.begin()); 					// ok: passes a string object; f uses .* to call empty
+f(&svec[0]); 						// ok: passes a pointer to string; f uses .-> to call empty
+```
+
+#### Using `bind` to Generate a Callable
+
+```c++
+auto it = find_if(svec.begin(), svec.end(), bind(&string::empty, _1));
+```
+
+Like `mem_fn`, the first argument to the callable generated by `bind` can be either a pointer or a reference to a `string`:
+
+```c++
+auto f = bind(&string::empty, _1);
+f(*svec.begin()); 					// ok: argument is a string f will use .* to call empty
+f(&svec[0]); 						// ok: argument is a pointer to string f will use .-> to call empty
+```
+
