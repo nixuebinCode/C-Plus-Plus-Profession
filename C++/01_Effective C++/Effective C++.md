@@ -838,6 +838,8 @@ In this example, telling clients to call `close` themselves doesn't impose a bur
 
 ## Item 9: Never call virtual functions during construction or destruction
 
+You shouldn't call virtual functions during construction or destruction, because the calls won't do what you think.
+
 Suppose you've got a class hierarchy for modeling stock transactions:
 
 ```c++
@@ -864,25 +866,27 @@ public:
 	virtual void logTransaction() const; // how to log transactions of this type
 	...
 };
-
-
 ```
 
-When the code `BuyTransaction b;` is executed, a BuyTransaction constructor will be called, but first, a Transaction constructor must be called.
-Base class parts of derived class objects are constructed before derived class parts are. The last line of the Transaction constructor calls the virtual function logTransaction. 
-The version of logTransaction that's called is the one in Transaction, not the one in BuyTransaction — even though the type of object being created is BuyTransaction.
+When the code `BuyTransaction b;` is executed, a `BuyTransaction` constructor will be called, but first, a `Transaction` constructor must be called.
+Base class parts of derived class objects are constructed before derived class parts are. The last line of the `Transaction` constructor calls the virtual function `logTransaction`. 
 
-There's a good reason for this seemingly counterintuitive behavior. Because base class constructors execute before derived class constructors, derived
-class data members have not been initialized when base class constructors run. If virtual functions called during base class construction went down to
-derived classes, the derived class functions would almost certainly refer to local data members, but those data members would not yet have been initialized.
+The version of `logTransaction` that's called is the one in `Transaction`, not the one in `BuyTransaction` — even though the type of object being created is `BuyTransaction`.
+
+There's a good reason for this seemingly counterintuitive behavior. Because **<font color='red'>base class constructors execute before derived class constructors, derived
+class data members have not been initialized when base class constructors run.</font>** If virtual functions called during base class construction went down to derived classes, the derived class functions would almost certainly refer to local data members, but those data members would not yet have been initialized.
+
+It's actually more fundamental than that. **<font color='red'>During base class construction of a derived class object, the type of the object is that of the base class.</font>** Not only do virtual functions resolve to the base class, but the parts of the language using runtime type information (e.g., `dynamic_cast` and `typeid`)
+treat the object as a base class type.
 
 The same reasoning applies during destruction. Once a derived class destructor has run, the object's derived class data members assume undefined
-values, so C++ treats them as if they no longer exist. Upon entry to the base class destructor, the object becomes a base class.
+values, so C++ treats them as if they no longer exist. **<font color='red'>Upon entry to the base class destructor, the object becomes a base class object, and all parts of C++
+— virtual functions, `dynamic_casts`, etc., — treat it that way.</font>**
 
-### how to ensure that the proper version of logTransaction is called each time an object in the Transaction hierarchy is created
+### 9.1 How to ensure that the proper version of `logTransaction` is called each time an object in the Transaction hierarchy is created
 
-Turn logTransaction into a non-virtual function in Transaction, then require that derived class constructors pass the necessary log information to the
-Transaction constructor. Having derived classes pass necessary construction information up to base class constructors.
+Turn `logTransaction` into a non-virtual function in `Transaction`, then require that derived class constructors pass the necessary log information to the
+`Transaction` constructor. That function can then safely call the non-virtual `logTransaction`.
 
 ```c++
 class Transaction {
@@ -907,16 +911,26 @@ private:
 };
 ```
 
-**The (private) static function createLogString**
+In other words, since you can't use virtual functions to call down from base classes during construction（无法在构造期间使用virtual 函数从基类向下调用）,you can compensate by **<font color='red'>having derived classes pass necessary construction information up to base class constructors</font>** instead.
 
-* Using a helper function to create a value to pass to a base class constructor is often more convenient (and more readable).
-* By making the function static, there's no danger of accidentally referring to the nascent BuyTransaction object's as-yet-uninitialized data
-  members. 
+## Item 10: Have assignment operators return a reference to `*this`
+One of the interesting things about assignments is that you can chain them together:
 
-## Item 10: Have assignment operators return a reference to *this
-Assignment returns a reference to its left-hand argument, and that's the convention you should follow when you implement assignment operators for your classes
+```c++
+int x, y, z;
+x = y = z = 15;
+```
 
-This convention applies to all assignment operators, not just the standard form.
+Also interesting is that assignment is **<font color='red'>right-associative</font>**, so the above assignment chain is parsed like this:
+
+```c++
+x = (y = (z = 15));
+```
+
+Here, `15` is assigned to `z`, then the result of that assignment (the updated `z`) is assigned to `y`, then the result of that assignment (the updated `y`) is assigned to x.
+
+The way this is implemented is that assignment returns a reference to its lefthand argument, and that's the convention you should follow when you
+implement assignment operators for your classes：
 
 ```c++
 class Widget {
@@ -941,9 +955,11 @@ public:
 };
 ```
 
-## Item 11: Handle assignment to self in operator=
+## ⭐Item 11: Handle assignment to self in `operator=`
 
-In the implementation of operator=, you may fall into the trap of accidentally releasing a resource before you're done using it, if you don't consider the self assignment.
+An assignment to self occurs when an object is assigned to itself. In general, code that operates on references or pointers to multiple objects of the same type needs to consider that the objects might be the same.
+
+If you try to manage resources yourself,  you can fall into the trap of accidentally releasing a resource before you're done using it in your assignment operators. For example, suppose you create a class that holds a raw pointer to a dynamically allocated `Bitmap`:
 
 ```c++
 class Bitmap { ... };
@@ -961,11 +977,11 @@ Widget& Widget::operator=(const Widget& rhs) // unsafe impl. of operator=
 }
 ```
 
-When *this (the target of the assignment) and rhs are the same object, the delete not only destroys the bitmap for the current object, it destroys the bitmap for rhs, too.
+When `*this` (the target of the assignment) and `rhs` are the same object, the `delete` not only destroys the `Bitmap` for the current object, it destroys the `Bitmap` for `rhs`, too.
 
+### 11.1 identity test
 
-
-### The traditional way to prevent this error is to check for assignment to self via an identity test at the top of operator=
+The traditional way to prevent this error is to check for assignment to self via an identity test at the top of `operator=`
 
 ```c++
 Widget& Widget::operator=(const Widget& rhs)
@@ -977,37 +993,50 @@ Widget& Widget::operator=(const Widget& rhs)
 }
 ```
 
-This version continues to have exception trouble. In particular, if the “new Bitmap” expression yields an exception (either because there is insufficient memory for the allocation or because Bitmap's copy constructor throws one), the Widget will end up holding a pointer to a deleted Bitmap.
+This works, but the previous version of `operator=` wasn't just self-assignment-unsafe, it was also exception-unsafe, and **<font color='red'>this version continues to have exception trouble:</font>**If the “`new Bitmap`” expression yields an exception, the `Widget` will end up holding a pointer to a deleted `Bitmap`.
 
-###  Making operator= exception-safe typically renders it self-assignment-safe, too. 
-A careful ordering of statements can yield exception-safe (and self-assignment-safe) code. We just have to be careful not to delete pb until after we've copied what it points to.
+### 11.2 exception safety
+
+Happily, making `operator=` exception-safe typically renders it self-assignment-safe, too. As a result, **<font color='red'>it's increasingly common to deal with issues of self-assignment by ignoring them, focusing instead on achieving exception safety.</font>**
+
+In many cases, a careful ordering of statements can yield exception-safe (and self-assignment-safe) code. Here, for example, we just have to be careful not to `delete pb` until after we've copied what it points to:
 
 ```c++
 Widget& Widget::operator=(const Widget& rhs)
 {
-	Bitmap *pOrig = pb; // remember original pb
+	Bitmap *pOrig = pb; 		// remember original pb
 	pb = new Bitmap(*rhs.pb);
-	delete pOrig; // delete the original pb
+	delete pOrig; 				// delete the original pb
 	return *this;
 }
 ```
 
-### Use the technique known as “copy and swap.”
+Now, if `new Bitmap` throws an exception, `pb` (and the `Widget` it's inside of) remains unchanged. 
+
+Even without the identity test, this code handles assignment to self, because we make a copy of the original `bitmap`, `delete` the original bitmap, then point to the copy we made.
+
+### 11.3 copy and swap
+
+An alternative to manually ordering statements in `operator=` to make sure the implementation is both exception- and self-assignment-safe is to use the
+technique known as “**<font color='blue'>copy and swap</font>**:”
 
 ```c++
 class Widget {
 	...
-	void swap(Widget& rhs); // exchange *this's and rhs's data;
+	void swap(Widget& rhs); 	// exchange *this's and rhs's data;
 };
 Widget& Widget::operator=(const Widget& rhs)
 {
-	Widget temp(rhs); // make a copy of rhs's data
-	swap(temp); // swap *this's data with the copy's
+	Widget temp(rhs); 	// make a copy of rhs's data
+	swap(temp); 		// swap *this's data with the copy's
 	return *this;
 }
 ```
 
-A variation on this theme：
+A variation on this theme takes advantage of the facts that
+
+* A class's copy assignment operator may be declared to take its argument by value
+* Passing something by value makes a copy of it
 
 ```c++
 Widget& Widget::operator=(Widget rhs) 	// rhs is a copy of the object passed in
@@ -1017,29 +1046,28 @@ Widget& Widget::operator=(Widget rhs) 	// rhs is a copy of the object passed in
 }
 ```
 
-It takes advantage of the facts that
-
-* A class's copy assignment operator may be declared to take its argument by value
-* Passing something by value makes a copy of it
-
 ## Item 12: Copy all parts of an object
 
 In well-designed object-oriented systems that encapsulate the internal parts of objects, only two functions copy objects: the aptly named **copy constructor** and **copy assignment operator**. We'll call these the copying functions.
 
-If you add a data member to a class, you need to make sure that you update the copying functions, too.
+Compilers will generate the copying functions, if needed, and they do precisely what you'd expect: they copy **all the data** of the object being copied.
+
+When you declare your own copying functions, you are indicating to compilers that there is something about the default implementations you don't
+like. Compilers don't tell you when your implementations are almost certainly wrong.
+
+Especially, **<font color='red'>if you add a data member to a class, you need to make sure that you update the copying functions, too.</font>**
 
 #### Copying functions in inheritance
 
+Consider the following inheritance hierarchy:
+
 ```c++
-void logCall(const std::string& funcName); // make a log entry
 class Customer {
 public:
-	...
-	Customer(const Customer& rhs);
-	Customer& operator=(const Customer& rhs);
-	...
+	... 
 private:
-	std::string name;
+	string name;
+	Date lastTransaction;
 };
 
 class PriorityCustomer: public Customer { // a derived class
@@ -1051,6 +1079,7 @@ public:
 private:
 	int priority;
 };
+
 PriorityCustomer::PriorityCustomer(const PriorityCustomer& rhs)
 		: priority(rhs.priority)
 {
@@ -1064,12 +1093,13 @@ PriorityCustomer& PriorityCustomer::operator=(const PriorityCustomer& rhs)
 }
 ```
 
-The problem is that every PriorityCustomer also contains a copy of the data members it inherits from Customer, and those data members are not being copied at all.
+The problem is that every `PriorityCustomer` also contains a copy of the data members it inherits from `Customer`, and those data members are not being copied at all.
 
-Priority Customer's copy constructor specifies no arguments to be passed to its base class constructor (i.e., it makes no mention of Customer on its member initialization list), so **the Customer part of the PriorityCustomer object will be initialized by the Customer constructor taking no arguments** —by the default constructor. (Assuming it has one. If not, the code won't compile.) That constructor will perform a default initialization for name and lastTransaction.
+`PriorityCustomer`'s copy constructor specifies no arguments to be passed to its base class constructor (i.e., it makes no mention of `Customer` on its member initialization list), so**<font color='red'> the `Customer` part of the `PriorityCustomer` object will be initialized by the `Customer`'s default constructor.</font>**That constructor will perform a default initialization for `name` and `lastTransaction`.
 
-Any time you take it upon yourself to write copying functions for a derived class, you must take care to also copy the base class parts. Those parts are
-typically private, so **derived class copying functions must invoke their corresponding base class functions**
+The situation is only slightly different for `PriorityCustomer`'s copy assignment operator. It makes no attempt to modify its base class data members in any way, so they'll remain unchanged.
+
+Any time you take it upon yourself to **<font color='red'>write copying functions for a derived class, you must take care to also copy the base class parts</font>**. Those parts are typically `private`, so you can't access them directly. Instead, derived class copying functions must**<font color='red'> invoke their corresponding base class functions</font>**:
 
 ```c++
 PriorityCustomer::PriorityCustomer(const PriorityCustomer& rhs)
@@ -1086,6 +1116,10 @@ PriorityCustomer& PriorityCustomer::operator=(const PriorityCustomer& rhs)
 	return *this;
 }
 ```
+
+> In practice, the two copying functions will often have similar bodies, and this may tempt you to try to avoid code duplication by having one function call the other. 
+>
+> Don't try to implement one of the copying functions in terms of the other. Instead, put common functionality in a third function that both call.
 
 # 3. Resource Management
 
