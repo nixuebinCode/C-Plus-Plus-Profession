@@ -1123,17 +1123,30 @@ PriorityCustomer& PriorityCustomer::operator=(const PriorityCustomer& rhs)
 
 # 3. Resource Management
 
+A resource is something that, once you're done using it, you need to return to the system. If you don't, bad things happen. 
+
+In C++ programs, the most commonly used resource is **dynamically allocated memory**. Other common resources include **file descriptors**, **mutex locks**, **database connections**, and **network sockets**.
+
 ## Item 13: Use objects to manage resources
 
-A resource is something that, once you're done using it, you need to return to the system. For example, dynamically allocated memory, file descriptors, mutex locks, fonts and brushes in graphical user interfaces (GUIs), database connections, and network sockets.
-
-Suppose we have such class as below and a factory function: 
+Suppose we're working with a library for modeling investments (e.g., stocks, bonds, etc.), where the various investment types inherit from a root class
+`Investment`:
 
 ```c++
 class Investment { ... }; // root class of hierarchy of investment types
+```
+
+Further suppose that the way the library provides us with specific `Investment` objects is through a **<font color='red'>factory function</font>**
+
+```c++
 Investment* createInvestment(); // return ptr to dynamically allocated
 								// object in the Investment hierarchy;
 								// the caller must delete it
+```
+
+As the comment indicates, callers of createInvestment are responsible for deleting the object that function returns when they are done with it:
+
+```c++
 void f()
 {
 	Investment *pInv = createInvestment(); // call factory function
@@ -1142,47 +1155,54 @@ void f()
 }
 ```
 
-There are several ways f could fail to delete the investment object it gets from createInvestment:
+There are several ways `f` could fail to `delete` the `investment` object it gets from `createInvestment`:
 
-* There might be a premature return statement somewhere inside the “...” part of the function
-* If the uses of createInvestment and delete were in a loop, and the loop was prematurely exited by a break or goto statement
+* There might be a premature `return` statement somewhere inside the “`...`” part of the function
+* If the uses of `createInvestment` and `delete` were in a loop, and the loop was prematurely exited by a `break` or `goto` statement
 * Some statement inside the “...” might throw an exception
 
-We can fix this problem by putting resources inside objects, and then we can rely on C++'s automatic destructor invocation to make sure that the resources are released.
+### 13.1 Putting resources inside objects(often, smart pointers)
 
-The smart pointer's destructor automatically calls delete on what it points to:
+To make sure that the resource returned by `createInvestment` is always released, we need to **<font color='red'>put that resource inside an object whose destructor will
+automatically release the resource when control leaves `f`</font>**.
+
+The standard library's `auto_ptr` is tailor-made for this kind of situation. `auto_ptr` is a pointer-like object (a smart pointer) whose destructor automatically calls `delete` on what it points to.
 
 ```c++
 void f()
 {
-	std::auto_ptr<Investment> pInv(createInvestment()); // call factory function
-	... 												// use pInv as before
+	auto_ptr<Investment> pInv(createInvestment()); 	// call factory function
+	... 											// use pInv as before
 } // automatically delete pInv via auto_ptr's dtor
 
 // auto_ptr在C++11中已经弃用，可用shared_ptr和unique_ptr代替
 ```
 
-auto_ptrs have an unusual characteristic: copying them (via copy constructor or copy assignment operator) sets them to null, and the copying pointer assumes sole ownership of the resource!
+**<font color='red'>This simple example demonstrates the two critical aspects of using objects to manage resources:</font>**
 
-An alternative to auto_ptr is a reference-counting smart pointer (RCSP). An RCSP is a smart pointer that keeps track of how many objects point to a
-particular resource and automatically deletes the resource when nobody is pointing to it any longer.
+* Resources are acquired and immediately turned over to resource-managing objects.
 
-*Both auto_ptr and tr1::shared_ptr use delete in their destructors, not delete []. That means that using auto_ptr or tr1::shared_ptr with dynamically allocated arrays is a bad idea*
+  Above, the resource returned by `createInvestment` is used to initialize the `auto_ptr` that will manage it. In fact, the idea of using objects to manage resources is often called Resource Acquisition Is Initialization (**<font color='blue'>RAII</font>**), because it's so common to acquire a resource and initialize a resource-managing object in the same statement.
 
-### Two critical aspects of using objects to manage resources
-
-* Resources are acquired and immediately turned over to resource managing objects.
 * Resource-managing objects use their destructors to ensure that resources are released.
 
+  Because destructors are called automatically when an object is destroyed (e.g., when an object goes out of scope), resources are correctly released, regardless of how control leaves a block.
+
+> `createInvestment`'s raw pointer return type is an invitation to a resource leak, because it's so easy for callers to forget to call `delete` on the pointer they get back. Combatting that problem calls for an **<font color='blue'>interface modification</font>** to `createInvestment`, a topic addressed in Item 18.
+
 ## Item 14: Think carefully about copying behavior in resource-managing classes
-Sometimes, we need to create our own resource-managing classes when the resources are not heap-based.
+Not all resources are heap-based, and for such resources, smart pointers are generally inappropriate as resource handlers. Sometimes you have to create your own resource-managing classes.
+
+For example, suppose you're using a C API to manipulate mutex objects of type `Mutex` offering functions `lock` and `unlock`:
 
 ```c++
 void lock(Mutex *pm); // lock mutex pointed to by pm
 void unlock(Mutex *pm); // unlock the mutex
 ```
 
-To make sure that you never forget to unlock a Mutex you've locked, you'd like to create a class to manage locks.
+To make sure that you never forget to unlock a `Mutex` you've locked, you'd like to create a class to manage locks. 
+
+The basic structure of such a class is dictated by the **<font color='blue'>RAII principle</font>** that resources are **<font color='red'>acquired during construction and released during destruction</font>**:
 
 ```c++
 class Lock {
@@ -1193,6 +1213,12 @@ private:
 	Mutex *mutexPtr;
 };
 
+
+```
+
+Clients use `Lock` in the conventional RAII fashion:
+
+```c++
 Mutex m; 			// define the mutex you need to use
 ...
 { 					// create block to define critical section
@@ -1201,15 +1227,30 @@ Mutex m; 			// define the mutex you need to use
 } 					// automatically unlock mutex at end of block
 ```
 
-The problem is that when a Lock object is copied, what should happen? Typically you have the choices:
+### 14.1 when a `Lock` object is copied, what should happen?
+
+The problem is that when a `Lock` object is copied, what should happen? 
+
+```c++
+Lock ml1(&m); 	// lock m
+Lock ml2(ml1); 	// copy ml1 to ml2
+```
+
+Typically you have the choices:
 
 * **Prohibit copying**
 
+  In many cases, it makes no sense to allow RAII objects to be copied. When copying makes no sense for an RAII class, you should prohibit it.
+
 * **Reference-count the underlying resource**
 
-  Copying an RAII*(Resource Acquisition Is Initialization)* object should increment the count of the number of objects referring to the resource.
+  Sometimes it's desirable to hold on to a resource until the last object using it has been destroyed. When that's the case, copying an RAII object should increment the count of the number of objects referring to the resource.
 
-  <font color='red'>We can implement this behavior by containing a shared_ptr data member, and specify the deleter of shared_ptr</font>
+  Often,**<font color='red'> RAII classes can implement reference-counting copying behavior by containing a `shared_ptr` data member.</font>** 
+
+  Unfortunately, `shared_ptr`'s default behavior is to `delete` what it points to when the reference count goes to zero, and that's not what we want. When we're done with a `Mutex`, we want to `unlock` it, not `delete` it.
+
+  Fortunately, `shared_ptr` allows specification of a “deleter” — a function or function object to be called when the reference count goes to zero:
 
   ```c++
   class Lock {
@@ -1220,24 +1261,67 @@ The problem is that when a Lock object is copied, what should happen? Typically 
   		lock(mutexPtr.get());
   	}
   private:
-  	std::tr1::shared_ptr<Mutex> mutexPtr; // use shared_ptr instead of raw pointer
+  	shared_ptr<Mutex> mutexPtr; // use shared_ptr instead of raw pointer
   };
   ```
 
-  The Lock class no longer declares a destructor. The synthetized destructor automatically invokes the destructor of the class's non-static data members. In this case, that is mutexPtr. And mutexPtr's destructor will automatically call its deleter -- unlock.
+  The `Lock` class no longer declares a destructor. The synthetized destructor automatically invokes the destructor of the class's non-`static` data members. In this case, that is `mutexPtr`. And `mutexPtr's` destructor will automatically call its deleter -- `unlock`.
 
 * **Copy the underlying resource**
 
-  Copying the resource-managing object should also copy the resource it wraps. That is, copying a resource-managing object performs a “deep copy.”
+  Copying the resource-managing object should also copy the resource it wraps. That is, copying a resource-managing object performs a “**<font color='blue'>deep copy</font>**.”
+
+  Some implementations of the standard `string` type consist of pointers to heap memory, where the characters making up the `string` are stored. Objects of such `string`s contain a pointer to the heap memory. When a `string` object is copied, a copy is made of both the pointer and the memory it points to. Such `string`s exhibit deep copying.
 
 * **Transfer ownership of the underlying resource**
 
-  As auto_ptr, ownership of the resource is transferred from the copied object to the copying object.
+  On rare occasion, you may wish to make sure that only one RAII object refers to a raw resource and that when the RAII object is copied, ownership of the resource is transferred from the copied object to the copying object.
 
 ## Item 15: Provide access to raw resources in resource managing classes
-In a perfect world, you'd rely on resource managing classes for all your interactions with resources. But many APIs refer to resources directly, you'll have to bypass resource-managing objects and deal with raw resources. For example, tr1::shared_ptr and auto_ptr both offer a get member function to perform an explicit conversion, i.e., to return (a copy of) the raw pointer inside the smart pointer object.
+Item 13 introduces the idea of using smart pointers  to hold the result of a call to a factory function like `createInvestment`:
 
-Similarly because it is sometimes necessary to get at the raw resource inside an RAII object, some RAII class designers grease the skids by offering an conversion function.
+```c++
+shared_ptr<Investment> pInv(createInvestment());
+```
+
+Suppose that a function you'd like to use when working with `Investment` objects is this:
+
+```c++
+int daysHeld(const Investment *pi); // return number of days investment has been held
+```
+
+You'd like to call it like this,
+
+```c++
+int days = daysHeld(pInv); // error!
+```
+
+The code won't compile: `daysHeld` wants a raw `Investment*` pointer, but you're passing an object of type `shared_ptr<Investment>`.
+
+You need a way to convert an object of the RAII class (in this case, `shared_ptr`) into the raw resource it contains (e.g., the underlying `Investment*`). There are two general ways to do it: explicit conversion and implicit conversion：
+
+* `shared_ptr` offers a `get` member function to perform an explicit conversion, i.e., to return (a copy of) the raw pointer inside the smart pointer object:
+
+  ```c++
+  int days = daysHeld(pInv.get());
+  ```
+
+* `shared_ptr` also overloads the pointer dereferencing operators (`operator->` and `operator*`), and this allows implicit conversion to the underlying raw pointers:
+
+  ```c++
+  class Investment {
+  public:
+  	bool isTaxFree () const;
+      ...
+  };
+  Investment* createinvestment();
+  shared_ptr<Investment> pi1 (createinvestment());
+  bool taxable1 = !(pi1->isTaxFree()); // access resource via operator->
+  shared_ptr<Investment> pi2 (createinvestment());
+  bool taxable2 = !((*pi2).isTaxFree()); // access resource via operator*
+  ```
+
+Because it is sometimes necessary to get at the raw resource inside an RAII object, some RAII class designers offer an implicit conversion function. For example, consider this RAII class for `fonts` that are native to a C API:
 
 ```c++
 FontHandle getFont(); 				// from C API—params omitted for simplicity
@@ -1254,7 +1338,7 @@ private:
 };
 ```
 
-Assuming there's a large font-related C API that deals entirely with FontHandles, there will be a frequent need to convert from Font objects to FontHandles. 
+Assuming there's a large font-related C API that deals entirely with `FontHandles`, there will be a frequent need to convert from `Font` objects to `FontHandles`. 
 
 * **The Font class could offer an explicit conversion function such as get:**
 
@@ -1265,6 +1349,13 @@ Assuming there's a large font-related C API that deals entirely with FontHandles
   	FontHandle get() const { return f; } // explicit conversion function
   	...
   };
+  ```
+
+  Unfortunately, this would require that clients call `get` every time they want to communicate with the API:
+
+  ```c++
+  Font f(getFont());
+  changeFontSize(f.get(), newFontSize);
   ```
 
 * **The alternative is to have Font offer an implicit conversion function to its FontHandle**
@@ -1278,67 +1369,104 @@ Assuming there's a large font-related C API that deals entirely with FontHandles
   ...
   };
   ```
+  
+  That makes calling into the C API easy and natural:
+  
+  ```c++
+  Font f(getFont());
+  changeFontSize(f, newFontSize);
+  ```
+  
+  The downside is that implicit conversions increase the chance of errors. For example, a client might accidently create a `FontHandle` when a `Font` was intended:
+  
+  ```c++
+  Font f1(getFont());
+  ...
+  FontHandle f2 = f1;
+  ```
+  
+  Now the program has a `FontHandle` being managed by the `Font` object `f1`, but the `FontHandle` is also available for direct use as `f2`. When `f1` is destroyed, the `font` will be released, and `f2` will dangle.
 
-Often, an explicit conversion function like get is the preferable path, because it minimizes the chances of unintended type conversions. Sometime, however, the naturalness of use arising from implicit type conversions will tip the scales in that direction
+## Item 16: Use the same form in corresponding uses of `new` and `delete`
+When you employ a `new` expression, two things happen：
 
-## Item 16: Use the same form in corresponding uses of new and delete
-When you employ a new expression (i.e., dynamic creation of an object via a use of new), two things happen：
-
-* memory is allocated
+* memory is allocated (via a function named `operator new`)
 * one or more constructors are called for that memory
 
-When you employ a delete expression (i.e., use delete), two other things happen:
+When you employ a `delete` expression, two other things happen:
 
 * one or more destructors are called for the memory
-* the memory is deallocated
+* the memory is deallocated (via a function named `operator delete`)
 
-If you use brackets in your use of delete(`delete []`), delete assumes an array is pointed to. Otherwise, it assumes that a single object is pointed to.
+The big question for `delete` is this: *how many objects reside in the memory being deleted?* 
+
+The answer to that determines how many destructors must be called. The memory layout for single objects is generally different from the memory layout for arrays. In particular, **<font color='red'>the memory for an array usually includes the size of the array</font>**, thus making it easy for `delete` to know how many
+destructors to call：
+
+ ![](images/1.jpg)
+
+If you use brackets in your use of `delete`, `delete` assumes an array is pointed to. Otherwise, it assumes that a single object is pointed to.
 
 ```c++
-std::string *stringPtr1 = new std::string;
-std::string *stringPtr2 = new std::string[100];
+string *stringPtr1 = new string;
+string *stringPtr2 = new string[100];
 ...
-delete stringPtr1; // delete an object
-delete [] stringPtr2; // delete an array of objects
+delete stringPtr1; 		// delete an object
+delete [] stringPtr2; 	// delete an array of objects
 ```
 
-if you used the “[]” form on stringPtr1, the result is undefined: delete would read some memory and interpret what it read as an array size, then start invoking that many destructors.
+What would happen if you used the “`[]`” form on `stringPtr1`? The result is undefined, but it's unlikely to be pretty. Assuming the layout above, `delete`
+would read some memory and interpret what it read as an array size, then start invoking that many destructors, oblivious to the fact that the memory it's
+working on not only isn't in the array, it's also probably not holding objects of the type it's busy destructing.
 
-if you didn't use the “[]” form on stringPtr2, it would lead to too few destructors being called.
+What would happen if you didn't use the “`[]`” form on `stringPtr2`? Well, that's undefined too, but you can see how it would lead to too few destructors being called. Furthermore, it's undefined (and sometimes harmful) for built-in types like `int`s, too, even though such types lack destructors.
 
-## Item 17: Store newed objects in smart pointers in standalone statements
-Consider the code below:
+The rule is simple: I
+
+f you use `[]` in a `new` expression, you must use `[]` in the corresponding `delete` expression. 
+
+If you don't use `[]` in a `new` expression, don't use `[]` in the matching `delete` expression.
+
+## Item 17: Store `new`ed objects in smart pointers in standalone statements
+Suppose we have a function to reveal our processing priority and a second function to do some processing on a dynamically allocated `Widget` in accord
+with a priority.
+
+Mindful of the wisdom of using objects to manage resources, `processWidget` uses a smart pointer for the dynamically allocated `Widget` it processes:
 
 ```c++
 int priority();
-void processWidget(std::tr1::shared_ptr<Widget> pw, int priority);
-processWidget(new Widget, priority());		// error: shared_ptr's constructor taking a raw pointer is explicit 
-processWidget(std::tr1::shared_ptr<Widget>(new Widget), priority());	// ok
+void processWidget(shared_ptr<Widget> pw, int priority);
 ```
 
-The last statement will compile, and before processWidget can be called, compilers must generate code to do these three things:
+To call processWidget, we may write the code:
 
-* Call priority
-* Execute “new Widget”
-* Call the tr1::shared_ptr constructor
+```c++
+processWidget(shared_ptr<Widget>(new Widget),priority());
+```
 
-The “`new Widget`” expression must be executed before the tr1::shared_ptr constructor can be called, but **the call to priority can be performed first, second, or third in C++.**
+Surprisingly, although we're using object-managing resources everywhere here, **<font color='red'>this call may leak resources.</font>** Before `processWidget` can be called, compilers must generate code to do these three things:
+
+* Call `priority`
+* Execute “`new Widget`”
+* Call the `shared_ptr`'s constructor
+
+The “`new Widget`” expression must be executed before the `shared_ptr` constructor can be called, but the call to `priority` can be performed first, second, or third in C++.
 
 If If compilers choose to perform it second, we end up with this sequence of operations:
 
-* Execute “new Widget”
-* Call priority
-* Call the tr1::shared_ptr constructor
+* Execute “`new Widget`”
+* Call `priority`
+* Call the `shared_ptr` constructor
 
-Here that is the problem, if the call to priority yields an exception, the pointer returned from “new Widget” will be lost, because it won't have been stored in the tr1::shared_ptr we were expecting.
+Here that is the problem, if the call to `priority` yields an exception, the pointer returned from “`new Widget`” will be lost, because it won't have been stored in the `shared_ptr` we were expecting.
 
-**A leak in the call to processWidget can arise because an exception can intervene between the time <font color='red'>a resource is created</font> (via “new Widget”) and the time that <font color='red'>resource is turned over to a resource-managing object</font>.**
+A leak in the call to `processWidget` can arise because **<font color='red'>an exception can intervene between the time a resource is created (via “`new Widget`”) and the time that resource is turned over to a resource-managing object.</font>**
 
-The way to avoid problems like this is simple: use a separate statement to create the Widget and store it in a smart pointer, then pass the smart pointer to processWidget:
+The way to avoid problems like this is simple: use a separate statement to create the `Widget` and store it in a smart pointer, then pass the smart pointer to `processWidget`:
 
 ```c++
-std::tr1::shared_ptr<Widget> pw(new Widget); // store newed object in a smart pointer in a standalone statement
-processWidget(pw, priority()); // this call won't leak
+shared_ptr<Widget> pw(new Widget); 	// store newed object in a smart pointer in a standalone statement
+processWidget(pw, priority()); 		// this call won't leak
 ```
 
 # 4. Designs and Declarations
