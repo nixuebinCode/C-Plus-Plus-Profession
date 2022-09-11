@@ -1473,7 +1473,7 @@ processWidget(pw, priority()); 		// this call won't leak
 
 ## Item 18: Make interfaces easy to use correctly and hard to use incorrectly
 
-Developing interfaces that are easy to use correctly and hard to use incorrectly requires that you consider the kinds of mistakes that clients might make.
+Developing interfaces that are easy to use correctly and hard to use incorrectly requires that **<font color='red'>you consider the kinds of mistakes that clients might make</font>**.
 
 For example, suppose you're designing the constructor for a class representing dates in time.
 
@@ -1483,12 +1483,23 @@ public:
 	Date(int month, int day, int year);
 	...
 };
+```
 
+For this interface, clients might pass parameters in the wrong order:
+
+```c++
 Date d(30, 3, 1995); // Oops! Should be "3, 30" , not "30, 3"
+```
+
+Or they might pass an invalid month or day number:
+
+```c++
 Date d(3, 40, 1995); // Oops! Should be "3, 30" , not "3, 40"
 ```
 
-Many client errors can be prevented by the introduction of **new types**. The judicious introduction of new types can work wonders for the prevention of interface usage errors: 
+### 18.1 Introduce new types
+
+**<font color='red'>Many client errors can be prevented by the introduction of new types. </font>**In this case, we can introduce simple wrapper types to distinguish days, months, and years, then use these types in the `Date` constructor:
 
 ```c++
 struct Day {
@@ -1517,9 +1528,9 @@ Date d(Day(30), Month(3), Year(1995)); // error! wrong types
 Date d(Month(3), Day(30), Year(1995)); // okay, types are correct
 ```
 
-### Predefine the set of all valid Months
+### 18.2 Using functions instead of objects to represent specific months
 
-Moreover, there are only 12 valid month values, so the Month type should reflect that. One way to do this would be to use an enum to represent the month, but enums are not as type-safe as we might like. For example, enums can be used like ints. A safer solution is to predefine the set of all valid Months:
+Once the right types are in place, it can sometimes be reasonable to restrict the values of those types. For example, there are only 12 valid month values, so the `Month` type should reflect that. One way to do this would be to use an `enum` to represent the month, but `enum`s are not as type-safe as we might like. For example, `enum`s can be used like `int`s. A safer solution is to **<font color='red'>predefine the set of all valid `Month`s</font>**:
 
 ```c++
 class Month {
@@ -1538,41 +1549,21 @@ private:
 Date d(Month::Mar(), Day(30), Year(1995));
 ```
 
-### Restrict what can be done with a type
+### 18.3 Any interface that requires that clients remember to do something is prone to incorrect use
 
-A common way to impose restrictions is to add const. **Unless there's a good reason not to, have your types behave consistently with the built-in types**.
+For example, Item 13 introduces a factory function that returns pointers to dynamically allocated objects in an `Investment` hierarchy:
 
-For example, const-qualifying the return type from operator* can prevent clients from making this error for user-defined types:
-
-```c++
-if (a * b = c) ... // oops, meant to do a comparison!
-```
-
-### Any interface that requires that clients remember to do something is prone to incorrect use
 ```c++
 Investment* createInvestment(); // from Item 13; parameters omitted for simplicity
 ```
 
-Item 13 shows how clients can store createInvestment's return value in a smart pointer like auto_ptr or tr1::shared_ptr, thus turning over to the smart pointer the responsibility for using delete. But what if clients forget to use the smart pointer? We should have the factory function return a smart pointer in the first place instead:
+Item 13 shows how clients can store `createInvestment`'s return value in a smart pointer, thus turning over to the smart pointer the responsibility for using `delete`. But what if clients forget to use the smart pointer? 
+
+In many cases, a better interface decision would be to preempt the problem by **<font color='red'>having the factory function return a smart pointer in the first place:</font>**
 
 ```c++
-tr1::shared_ptr<Investment> createInvestment(); // from Item 13; parameters omitted for simplicity
+shared_ptr<Investment> createInvestment(); // from Item 13; parameters omitted for simplicity
 ```
-
-Moreover, suppose clients who get an Investment* pointer from createInvestment are expected to pass that pointer to a function called getRidOfInvestment instead of using delete on it. The implementer of createInvestment can forestall such problems by returning a tr1::shared_ptr with
-getRidOfInvestment bound to it as its deleter.
-
-```c++
-std::tr1::shared_ptr<Investment> createInvestment()
-{
-	std::tr1::shared_ptr<Investment> retVal(static_cast<Investment*>(0), getRidOfInvestment);
-	retVal = ... ; // make retVal point to the correct object
-	return retVal;
-}
-```
-
-An especially nice feature of tr1::shared_ptr is that it automatically uses its per-pointer deleter to eliminate another potential client error, the “cross-DLL
-problem.” This problem crops up when an object is created using new in one dynamically linked library (DLL) but is deleted in a different DLL. tr1::shared_ptr avoids the problem, because its default deleter uses delete from the same DLL where the tr1::shared_ptr is created.
 
 ## Item 19: Treat class design as type design
 
@@ -1582,7 +1573,7 @@ When you design your class, consider the following questions:
 
 * **How should objects of your new type be created and destroyed?**
 
-  The design of your class's constructors and destructor, as well as its memory allocation and deallocation functions (operator new, operator new[], operator delete, and operator delete[])
+  The design of your class's constructors and destructor, as well as its memory allocation and deallocation functions (`operator new`, `operator new[]`, `operator delete`, and `operator delete[]`)
 
 * **How should object initialization differ from object assignment?**
 
@@ -1590,7 +1581,7 @@ When you design your class, consider the following questions:
 
 * **What does it mean for objects of your new type to be passed by value?**
 
-  <font color='red'>The copy constructor defines how pass-by-value is implemented for a type.</font>
+  The copy constructor defines how pass-by-value is implemented for a type
 
 * **What are the restrictions on legal values for your new type?**
 
@@ -1604,13 +1595,13 @@ When you design your class, consider the following questions:
 
   If you wish to allow other classes to inherit from your class, that affects whether the functions you declare are virtual, especially your destructor
 
-* **What kind of type conversions are allowed for your new type?**
+* **<font color='red'>What kind of type conversions are allowed for your new type?</font>**
 
-  * If you wish to allow objects of type T1 to be implicitly converted into objects of type T2
-    * Write a type conversion function in class T1 (e.g., operator T2)
-    * Write nonexplicit constructor in class T2 that can be called with a single argument
+  * If you wish to allow objects of type `T1` to be implicitly converted into objects of type `T2`
+    * Write a type conversion function in class `T1` (e.g., `operator T2`)
+    * Write non-`explicit` constructor in class `T2` that can be called with a single argument
   * If you wish to allow explicit conversions only
-    * Write functions to perform the conversions
+    * You'll want to write functions to perform the conversions, but you'll need to avoid making them type conversion operators or non-`explicit` constructors that can be called with one argument.
 
 * **What operators and functions make sense for the new type?**
 
@@ -1618,11 +1609,11 @@ When you design your class, consider the following questions:
 
 * **What standard functions should be disallowed?**
 
-  Those are the ones you'll need to declare private
+  Those are the ones you'll need to declare `private`
 
 * **Who should have access to the members of your new type?**
 
-  This question helps you determine which members are public, which are protected, and which are private.
+  This question helps you determine which members are `public`, which are `protected`, and which are `private`.
 
   It also helps you determine which classes and/or functions should be friends, as well as whether it makes sense to nest one class inside another.
 
@@ -1634,23 +1625,24 @@ When you design your class, consider the following questions:
 
   If you're defining a new derived class only so you can add functionality to an existing class, perhaps you'd better achieve your goals by simply defining one or more non-member functions or templates.
 
-## Item 20: Prefer pass-by-reference-to-const to pass-by value
+## Item 20: Prefer pass-by-reference-to-`const` to pass-by value
 
-Unless you specify otherwise, function parameters are initialized with copies of the actual arguments, and function callers get back a copy of the value returned by the function. **These copies are produced by the objects' copy constructors.** Moreover, after the function ends, each constructor call is matched by a destructor call.
+Unless you specify otherwise, function parameters are initialized with copies of the actual arguments, and**<font color='red'> function callers get back a copy of the value returned by the function</font>**. 
 
-Pass by reference-to-const is much more efficient: no constructors or destructors are called, because
-no new objects are being created.
+These copies are produced by the objects' copy constructors. This can make pass-by-value an expensive operation.
 
-### Passing parameters by reference also avoids the slicing problem.
+Pass by reference-to-const is much more efficient: no constructors or destructors are called, because no new objects are being created.
 
-When a derived class object is passed (by value) as a base class object, the base class copy constructor is called, and the specialized features that make the object behave like a derived class object are “sliced” off.
+### 20.1 Passing parameters by reference also avoids the slicing problem.
+
+When a derived class object is passed (by value) as a base class object, the base class copy constructor is called, and the specialized features that make the object behave like a derived class object are “sliced” off:
 
 ```c++
 class Window {
 public:
 	...
-	std::string name() const; // return name of window
-	virtual void display() const; // draw window and contents
+	string name() const; 			// return name of window
+	virtual void display() const; 	// draw window and contents
 };
 class Window-WithScrollBars: public Window {
 public:
@@ -1659,47 +1651,47 @@ public:
 };
 ```
 
-Now suppose you'd like to write a function to print out a window's name and then display the window. Here's the wrong way to write such a function
+Now suppose you'd like to write a function to print out a `Window`'s name and then display the `Window`. Here's the wrong way to write such a function
 
 ```c++
-void printNameAndDisplay(Window w) // incorrect! parameter may be sliced!
+void printNameAndDisplay(Window w) 	// incorrect! parameter may be sliced!
 {
-	std::cout << w.name();
+	cout << w.name();
 	w.display();
 }
 Window-WithScrollBars wwsb;
 printNameAndDisplay(wwsb);
 ```
 
-The parameter w will be constructed as a Window object, Inside printNameAndDisplay, w will always act like an object of class Window, regardless of the type of object passed to the function. In particular, the call to display inside printNameAndDisplay will always call Window::display, never Window-WithScrollBars::display.
+The parameter `w` will be constructed as a `Window` object, Inside `printNameAndDisplay`, `w` will always act like an object of class `Window`, regardless of the type of object passed to the function. In particular, the call to display inside `printNameAndDisplay` will always call `Window::display`, never `Window-WithScrollBars::display`.
+
+The way around the slicing problem is to pass `w` by reference-to-`const`:
 
 ```c++
 void printNameAndDisplay(const Window& w) // fine, parameter won't be sliced
 {
-	std::cout << w.name();
+	cout << w.name();
 	w.display();
 }
 ```
 
-### For built-in types and STL iterator and function object types, pass-by-value is usually appropriate
+### 20.2 For built-in types and STL iterator and function object types, pass-by-value is usually appropriate
 
-References are typically implemented as pointers, so passing something by reference usually means really passing a pointer.
+References are typically implemented as pointers, so passing something by reference usually means really passing a pointer. As a result, if you have an object of a **<font color='red'>built-in type</font>** (e.g., an `int`), it's often more efficient to pass it by value than by reference. 
 
-If you have an object of a built-in type (e.g., an int), it's often more efficient to pass it by value than by
-reference.
+This same advice applies to **<font color='red'>iterators </font>**and **<font color='red'>function objects in the STL</font>**, because, by convention, they are designed to be passed by value.
 
-This same advice applies to iterators and function objects in the STL, because, by convention, they are designed to be passed by value.
-
-### It doesn't mean that all small types are good candidates for pass-by-value, even if they're user-defined.
+Built-in types are small, so some people conclude that all small types are good candidates for pass-by-value, even if they're user-defined. This is shaky
+reasoning:
 
 * Just because an object is small doesn't mean that calling its copy constructor is inexpensive. Many objects — most STL containers among them — contain little more than a pointer, but copying such objects entails copying everything they point to. That can be very expensive.
 * Some compilers treat built-in and user-defined types differently. They refuse to put objects consisting of only a double into a register, but compilers will certainly put pointers (the implementation of references) into registers.
 * Being user-defined, their size is subject to change. A type that's small now may be bigger in a future release, because its internal implementation may change.
 
 ## Item 21: Don't try to return a reference when you must return an object
-A function can create a new object in only two ways: on the stack or on the heap.
+### 21.1 Returning a local object
 
-### Creation on the stack is accomplished by defining a local variable.
+Consider a class for representing rational numbers, including a function for multiplying two rationals together:
 
 ```c++
 class Rational {
@@ -1718,9 +1710,14 @@ const Rational& operator*(const Rational& lhs, const Rational& rhs) // warning! 
 }
 ```
 
-This function returns a reference to result, but result is a local object, and local objects are destroyed when the function exits. As a result, it returns a reference to an ex-Rational; a former Rational; the empty, stinking, rotting carcass of what used to be a Rational but is no longer, because it has been destroyed.
+This function returns a reference to `result`, but `result` is a local object, and local objects are destroyed when the function exits. As a result, it returns a reference to an ex-`Rational`; a former `Rational`; the empty, stinking, rotting carcass of what used to be a `Rational` but is no longer, because it has been destroyed.
 
-### Constructing an object on the heap and returning a reference to it
+The fact is, **<font color='red'>any function returning a reference to a local object is broken</font>**.
+
+### 21.2 Constructing an object on the heap and returning a reference to it
+
+Heap-based objects come into being through the use of `new`, so you might write a heap-based `operator*` like this:
+
 ```c++
 const Rational& operator*(const Rational& lhs, const Rational& rhs) // warning! more bad code!
 {
@@ -1729,23 +1726,32 @@ const Rational& operator*(const Rational& lhs, const Rational& rhs) // warning! 
 }
 ```
 
-You will have a different problem: who will apply delete to the object conjured up by your use of new?
+You will have a different problem: who will apply `delete` to the object conjured up by your use of `new`?
 
-### An implementation based on operator* returning a reference to a static Rational object, one defined inside the function
+Even if callers are conscientious and well intentioned, there's not much they can do to prevent leaks in reasonable usage scenarios like this:
 
 ```c++
-const Rational& operator*(const Rational& lhs, const Rational& rhs) // warning! yet more bad code!
+Rational w, x, y, z;
+w = x * y * z; // same as operator*(operator*(x, y), z)
+```
+
+Here, there are two calls to `operator*` in the same statement, hence two uses of `new` that need to be undone with uses of `delete`. Yet there is no reasonable way for clients of `operator*` to make those calls, because there's no reasonable way for them to get at the pointers hidden behind the references being returned from the calls to `operator*`.
+
+### 21.3 Returning a reference to a `static` Rational object defined inside the function
+
+```c++
+const Rational& operator*(const Rational& lhs, const Rational& rhs) 	// warning! yet more bad code!
 {
-	static Rational result; // static object to which a reference will be returned
-	result = ... ; // multiply lhs by rhs and put the product inside result
+	static Rational result; 	// static object to which a reference will be returned
+	result = ... ; 				// multiply lhs by rhs and put the product inside result
 	return result;
 }
 ```
 
-Consider this perfectly reasonable client code
+Consider this perfectly reasonable client code:
 
 ```c++
-bool operator==(const Rational& lhs, const Rational& rhs);// an operator== for Rationals
+bool operator==(const Rational& lhs, const Rational& rhs);	// an operator== for Rationals
 Rational a, b, c, d;
 ...
 if ((a * b) == (c * d)){
@@ -1756,14 +1762,20 @@ else{
 }
 ```
 
-The expression ((a*b) == (c*d)) will always evaluate to true, regardless of the values of a, b, c, and d!
+Guess what? The expression `((a*b) == (c*d))` will always evaluate to `true`, regardless of the values of `a`, `b`, `c`, and `d`!
 
-The equivalent functional form of `(a * b) == (c * d)` is `operator==( operator*(a, b) , operator*(c, d) )` 
+This revelation is easiest to understand when the code is rewritten in its equivalent functional form:
 
-Notice that when operator== is called, there will already be two active calls to operator*, each of which will return a reference to the static Rational object
-inside operator\*. Thus, operator== will be asked to compare the value of the static Rational object inside operator\*
+```c++
+if (operator*(a, b) == operator*(c, d))
+```
 
-### The right way to write a function that must return a new object is to have that function return a new object.
+Each of the calls to `operator*` will return a reference to the `static` `Rational` object inside `operator*`. Thus, `operator==` will be asked to compare the value of the `static Rational` object inside `operator*` with the value of the `static Rational` object inside `operator*`. It would be surprising indeed if they did not compare equal. Always.
+
+### 21.4 Summary
+
+The right way to write a function that must return a new object is to have that function return a new object:
+
 ```c++
 inline const Rational operator*(const Rational& lhs, const Rational& rhs)
 {
