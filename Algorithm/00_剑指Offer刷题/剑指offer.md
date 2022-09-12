@@ -60,7 +60,7 @@ private:
 CMyString& CMyString::operator=(const CMyString &rhs){
     if(this != &rhs){
         CMyString strTemp(rhs);
-        char *pTemp strTemp.m_pData;
+        char *pTemp = strTemp.m_pData;
         strTemp.m_pData = m_pData;
         m_pData = pTemp;
     }
@@ -4530,4 +4530,29 @@ void BuildProductionArray(const vector<double>& input, vector<double>& output){
 ```
 
 ## 面试题67：把字符串转换成整数
+
+### 题目
+
+实现 C 语言库函数 `atoi`, 写一个函数 `StrTolnt`, 实现把字符串转换成整数这个功能
+
+### 解题思路
+
+需要注意以下几个问题：
+
+* 检查宇符串是空指针的情况
+
+* 当字符串为空的时候，返回值是什么，区别字符串为 “0” 时的情况
+
+  `atoi` 通过一个全局变量来区分：
+
+  * 如果是非法输入，则返回0，并把这个全局变量设为一个特殊标记
+  * 如果输入是 “0”, 则返回 0, 不会设置全局变量
+
+* 除了空字符串，考虑其它非法输入的情况：例如包含除了 '0' ~ '9' 以及 '+', '-' 以外的字符
+
+* 如果输入只有一个正好或者负号，应该返回什么？
+
+* 溢出问题，考虑最大正整数，最小负整数
+
+### 代码实现
 
