@@ -4556,3 +4556,51 @@ void BuildProductionArray(const vector<double>& input, vector<double>& output){
 
 ### 代码实现
 
+```c++
+enum Status {
+	kValid = 0, 
+	kInvalid
+};
+int g_nStatus = kValid;
+
+int StrToInt(const char* str) {
+	g_nStatus = kInvalid;
+	long long number = 0;		// 使用long long来处理溢出问题
+
+	// 处理空指针和空字符串
+	if (str == nullptr || *str == '\0')
+		return 0;
+
+	// 处理正负号
+	bool minus = false;
+	if (*str == '+')
+		str++;
+	else if (*str == '-') {
+		minus = true;
+		str++;
+	}
+
+	// 处理只输入正好或者符号的情况
+	if (*str == '\0') {	
+		return 0;
+	}
+
+	// 转换数字
+	while (*str != '\0') {
+		if (*str < '0' || *str > '9')
+			return 0;
+		number = number * 10 + (*str - '0');
+		// 检查溢出情况
+
+		if (minus && -number < (signed)0x80000000)
+			return 0;
+		
+		if (!minus && number > (signed)0x7FFFFFFF)
+			return 0;
+		str++;
+	}
+	g_nStatus = kValid;
+	return minus ? -number : number;
+}
+```
+
