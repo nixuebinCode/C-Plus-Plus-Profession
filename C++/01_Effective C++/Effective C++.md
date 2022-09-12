@@ -1785,37 +1785,31 @@ inline const Rational operator*(const Rational& lhs, const Rational& rhs)
 
 ## Item 22: Declare data members `private`
 
-If data members aren't public, the only way for clients to access an object is via member functions. And if you use functions to get or set data members' value, you can implement no access, read-only access, and read-write access. Heck, you can even implement write-only access if you want to:
+### 22.1 why data members shouldn't be `public`
+1. If data members aren't `public`, the only way for clients to access an object is via member functions. If everything in the `public` interface is a function, clients won't have to scratch their heads trying to remember whether to use parentheses when they want to access a member of the class. They'll just do it, because everything is a function.
+2. Using functions gives you much more precise control over the accessibility of data members. If you make a data member `public`, everybody has read-write access to it, but if you use functions to get or set its value, you can implement no access, read-only access, and read-write access.
 
-```c++
-class AccessLevels {
-public:
-	...
-	int getReadOnly() const { return readOnly; }
-	void setReadWrite(int value) { readWrite = value; }
-	int getReadWrite() const { return readWrite; }
-	void setWriteOnly(int value) { writeOnly = value; }
-private:
-	int noAccess; // no access to this int
-	int readOnly; // read-only access to this int
-	int readWrite; // read-write access to this int
-	int writeOnly; // write-only access to this int
-};
-```
+3. Encapsulation
 
-### Encapsulation
+   If you implement access to a data member through a function, you can later replace the data member with a computation, and nobody using your class will be any the wiser. Clients will, at most, only have to recompile. (You can eliminate even that inconvenience by following the techniques described in Item 31.)
 
-If you hide your data members from your clients (i.e., encapsulate them), you can ensure that class invariants are always maintained, because
+If you hide your data members from your clients (i.e., encapsulate them), you can ensure that **<font color='red'>class invariants</font>** are always maintained, because
 only member functions can affect them. Furthermore, you reserve the right to change your implementation decisions later.
 
-### `protected` data members
+### 22.2 `protected` is no more encapsulated than `public`
 
-Suppose we have a public data member, and we eliminate it. How much code might be broken? All the client code that uses it, which is generally *an*
-*unknowably large amount*.
+1. The reasoning about syntactic consistency and fine-grained access control is clearly as applicable to `protected` data as to `public`
 
-Suppose we have a protected data member, and we eliminate it. How much code might be broken now? All the derived classes that use it, which is, again, typically *an unknowably large amount* of code.
+2. Encapsulation
 
-**Protected data members are thus as unencapsulated as public ones**, because in both cases, if the data members are changed, an unknowably large amount of client code is broken.
+   SomethinSg's encapsulation is inversely proportional to the amount of code that might be broken if that something changes.
+
+   Suppose we have a `public` data member, and we eliminate it. How much code might be broken? All the client code that uses it, which is generally an
+   **unknowably** large amount. `Public` data members are thus completely unencapsulated. 
+
+   But suppose we have a `protected` data member, and we eliminate it. How much code might be broken now? All the derived classes that use it, which is, again, typically an **unknowably** large amount of code.
+
+   `Protected` data members are thus as unencapsulated as `public` ones
 
 ## Item 23: Prefer non-member non-friend functions to member functions
 Imagine a class for representing web browsers with a set of member functions:
@@ -1831,7 +1825,7 @@ public:
 };
 ```
 
-Many users will want to perform all these actions together, so WebBrowser might also offer a function to do just that:
+Many users will want to perform all these actions together, so `WebBrowser` might also offer a function to do just that:
 
 ```c++
 class WebBrowser {
@@ -1853,15 +1847,20 @@ void clearBrowser(WebBrowser& wb)
 }
 ```
 
-### Encapsulation
+So which is better, the member function `clearEverything` or the non-member function `clearBrowser`?
 
-Consider the data associated with an object. We can count the number of functions that can access that data: **the more functions that can access it, the less encapsulated the data**.
+### 23.1 Encapsulation
 
-For data members that are private, the number of functions that can access them is the number of **member functions of the class** plus the number of **friend functions**, because only members and friends have access to private members.
+Object-oriented principles dictate that data should be as **<font color='red'>encapsulated </font>**as possible. If something is encapsulated, it's hidden from view. The more something is encapsulated, the fewer things can see it. The fewer things can see it, the greater flexibility we have to change it.
 
-Given a choice between a member function and a non-member non-friend function providing the same functionality, the choice **yielding greater encapsulation** is the **non-member non-friend function**, because it doesn't increase the number of functions that can access the private parts of the class.
+Consider the data associated with an object. The less code that can see the data (i.e., access it), the more the data is encapsulated. **<font color='red'>We can count the number of functions that can access that data: the more functions that can access it, the less encapsulated the data.</font>**
 
-### Make `clearBrowser` a nonmember function in the same namespace as WebBrowser
+For data members that are `private`, the number of functions that can access them is the number of member functions of the class plus the number of friend functions. Given a choice between a member function and a non-member non-friend function providing the same functionality, the choice yielding greater encapsulation is the non-member non-friend function.
+
+Thus `clearBrowser` (the non-member non-friend function) is preferable to `clearEverything` (the member function): it yields greater encapsulation in the `WebBrowser` class.
+
+### 23.2 Putting all convenience functions in multiple header files — but one namespace
+In C++, a more natural approach would be to make `clearBrowser` a nonmember function in the same namespace as `WebBrowser`:
 
 ```c++
 namespace WebBrowserStuff {
@@ -1871,9 +1870,9 @@ namespace WebBrowserStuff {
 }
 ```
 
-namespaces, unlike classes, can be spread across multiple source files.
+Being neither members nor friends, `clearBrowser` has no special access to `WebBrowser`, so it can't offer any functionality a `WebBrowser` client couldn't already get in some other way. For example, if `clearBrowser` didn't exist, clients could just call `clearCache`, `clearHistory`, and `removeCookies` themselves.
 
-A class like `WebBrowser` might have a large number of convenience functions, some related to bookmarks, others related to printing, still others related to cookie management, etc.
+A class like `WebBrowser` might have a large number of **<font color='blue'>convenience functions</font>**, some related to bookmarks, others related to printing, still others related to cookie management, etc. As a general rule, most clients will be interested in only some of these sets of convenience functions. 
 
 The straightforward way to separate them is to declare bookmark-related convenience functions in one header file, cookie-related convenience functions in a different header file, printing-related convenience functions in a third, etc.:
 
@@ -1899,27 +1898,28 @@ namespace WebBrowserStuff {
 ...
 ```
 
-Partitioning functionality in this way is not possible when it comes from a class's member functions, because a class must be defined in its entirety.
+This allows clients to be compilation dependent only on the parts of the system they actually use. Partitioning functionality in this way is not possible when it comes from a class's member functions, because a class must be defined in its entirety; it can't be split into pieces.
 
-**Putting all convenience functions in multiple header files — but one namespace** — also means that clients can easily extend the set of convenience
-functions. All they have to do is add more non-member non-friend functions to the namespace. This is another feature classes can't offer, because class definitions are closed to extension by clients.
+Furthermore, clients can easily extend the set of convenience functions. All they have to do is add more non-member non-friend functions to the namespace. This is another feature classes can't offer, because class definitions are closed to extension by clients.
 
 ## Item 24: Declare non-member functions when type conversions should apply to all parameters
 
-Having classes support implicit type conversions is generally a bad idea, Of course, there are exceptions to this rule, when creating **numerical types**
+Consider our `Rational` class:
 
 ```c++
 class Rational {
 public:
-	Rational(int numerator = 0, nt denominator = 1);  	// ctor is deliberately not explicit; 																		// allows implicit int-to-Rational conversions	
-	int numerator() const; 								// accessors for numerator and denominator
+	Rational(int numerator = 0, nt denominator = 1);  		// ctor is deliberately not explicit; 																							// allows implicit int-to-Rational conversions	
+	int numerator() const; 							
 	int denominator() const;
 private:
 	...
 };
 ```
 
-### Making operator* a member function of Rational
+You know you'd like to support arithmetic operations like addition, multiplication, etc., but you're unsure whether you should implement them via member functions, non-member functions, or, possibly, non-member functions that are friends.
+
+### 24.1 Making `operator*` a member function of Rational
 
 ```c++
 class Rational {
@@ -1927,29 +1927,48 @@ public:
 	...
 	const Rational operator*(const Rational& rhs) const;
 };
+```
 
+This design lets you multiply rationals with the greatest of ease:
+
+```c++
 Rational oneEighth(1, 8);
 Rational oneHalf(1, 2);
 Rational result = oneHalf * oneEighth; 	// fine
 result = result * oneEighth; 			// fine
 ```
 
-**When you try to do mixed-mode arithmetic, however, you find that it works only half the time:**
+When you try to do mixed-mode arithmetic, however, you find that it works only half the time:
 
 ```c++
-result = oneHalf * 2; // fine
-result = 2 * oneHalf; // error!
+result = oneHalf * 2; 	// fine
+result = 2 * oneHalf; 	// error!
+```
 
+The source of the problem becomes apparent when you rewrite the last two examples in their equivalent functional form:
+
+```c++
 //The equivalent fuction form:
 result = oneHalf.operator*(2); // fine
 result = 2.operator*(oneHalf); // error!
 ```
 
-In the form `oneHalf.operator*(2)`, Compilers know you're passing an int and that the function requires a Rational, but they also know they can conjure up a suitable Rational by calling the Rational constructor with the int you provided, so that's what they do. Of course, compilers do this only because a non-explicit constructor is involved.
+1. The object `oneHalf` is an instance of a class that contains an `operator*`, so compilers call that function. You'll see that its second parameter is the integer `2`, yet `Rational::operator*` takes a Rational object as its argument. Then **<font color='blue'>implicit type conversion</font>** happens. Compilers know you're passing
+   an `int` and that the function requires a `Rational`, but they also know they can conjure up a suitable `Rational` by calling the `Rational` constructor with the `int` you provided, so that's what they do. Of course, compilers do this only because a non-`explici`t constructor is involved.
 
-Parameters are eligible for implicit type conversion only if they are listed in the parameter list.
+2. However, the integer `2` has no associated class, hence no `operator*` member function. Compilers will also look for nonmember `operator*`s (i.e., ones at namespace or global scope) that can be called like this:
 
-### Making operator* a non-member function
+   ```c++
+   result = operator*(2, oneHalf);
+   ```
+
+   But in this example, there is no non-member `operator*` taking an `int` and a `Rational`, so the search fails.
+
+**<font color='red'>It turns out that parameters are eligible for implicit type conversion only if they are listed in the parameter list.</font>** The implicit parameter corresponding to the object on which the member function is invoked — the one `this` points to — is never eligible for implicit conversions.
+
+### 24.2 Making `operator*` a non-member function
+
+If you'd still like to support **<font color='red'>mixed-mode arithmetic</font>**, hthe way to do it is by now perhaps clear: make `operator*` a non-member function, thus **<font color='red'>allowing compilers to perform implicit type conversions on all arguments</font>**:
 
 ```c++
 class Rational {
@@ -1965,17 +1984,22 @@ result = oneFourth * 2; // fine
 result = 2 * oneFourth; // hooray, it works!
 ```
 
-If you need type conversions on all parameters to a function (including the one that would otherwise be pointed to by the
-this pointer), the function must be a non-member.
+#### Should `operator*` be made a friend of the `Rational` class?
 
-## Item 25: Consider support for a non-throwing `swap`
+In this case, the answer is no, because `operator*` can be implemented entirely in terms of `Rational`'s `public` interface. The code above shows one way to do it. Whenever you can avoid friend functions, you should, because, much as in real life, friends are often more trouble than they're worth.
 
-By default, swapping is accomplished via the standard swap algorithm. Its typical implementation is exactly what you'd expect:
+Sometimes friendship is warranted, of course, but the fact remains that just because **<font color='red'>a function shouldn't be a member doesn't automatically mean it should be a friend.</font>**
+
+## ⭐Item 25: Consider support for a non-throwing `swap`
+
+`swap` is an interesting function. Originally introduced as part of the STL, it's since become a mainstay of exception-safe programming and a common mechanism for coping with the possibility of assignment to self.
+
+By default, swapping is accomplished via the standard `swap` algorithm. Its typical implementation is exactly what you'd expect:
 
 ```c++
 namespace std {
-	template<typename T> // typical implementation of std::swap;
-	void swap(T& a, T& b) // swaps a's and b's values
+	template<typename T> 	// typical implementation of std::swap;
+	void swap(T& a, T& b) 	// swaps a's and b's values
 	{
 		T temp(a);
 		a = b;
@@ -1984,23 +2008,21 @@ namespace std {
 }
 ```
 
-As long as your types support copying (**via copy constructor and copy assignment operator**), the default `swap` implementation will let objects of your types be swapped.
+As long as your types support copying (via copy constructor and copy assignment operator), the default `swap` implementation will let objects of your types be swapped without your having to do any special work to support it.
 
-However, the default swap implementation involves copying three objects: a to temp, b to a, and temp to b. For some types, none of these copies are really necessary:
+However, the default `swap` implementation involves copying three objects: `a` to `temp`, `b` to `a`, and `temp` to `b`. For some types, none of these copies are really necessary. Foremost among such types are those consisting primarily of a pointer to another type that contains the real data. A `Widget` class employing such a design might look like this:
 
 ```c++
-class WidgetImpl { 	// class for Widget data;
-public: 			// details are unimportant
+class WidgetImpl { 			// class for Widget data;
+public: 					// details are unimportant
 	...
 private:
-	int a, b, c; 	// possibly lots of data 
-	std::vector<double> v; // expensive to copy!
+	int a, b, c; 			// possibly lots of data 
+	std::vector<double> v; 	// expensive to copy!
 	...
 };
-```
 
-```c++
-class Widget { 						// class using the pimpl idiom
+class Widget {	// class using the pimpl idiom
 public:
 	Widget(const Widget& rhs);
 	Widget& operator=(const Widget& rhs) 	// to copy a Widget, copy its WidgetImpl object
@@ -2010,21 +2032,19 @@ public:
 	}
 	...
 private:
-	WidgetImpl *pImpl; // ptr to object with this
+	WidgetImpl *pImpl; // ptr to object with this Widget's data
 };
 ```
 
-> **pimpl idiom**: pointer to implementation
->
-> Make a class consist primarily of a pointer to another type that contains the real data
+To swap the value of two `Widget` objects, all we really need to do is `swap` their `pImpl` pointers, but the default `swap` algorithm would copy not only three `Widget`s, but also three `WidgetImpl` objects.
 
-To swap the value of two Widget objects, all we really need to do is swap their pImpl pointers, but the default swap algorithm would copy not only three Widgets, but also three WidgetImpl objects.
+### 25.1 Write a total template specialization for `std::swap`
 
-### Specialize std::swap for Widget
+What we'd like to do is tell `std::swa`p that when `Widget`s are being swapped, the way to perform the `swap` is to swap their internal `pImpl` pointers. There is a way to say exactly that: specialize `std::swap` for `Widget`. Here's the basic idea, though it won't compile in this form:
 
 ```c++
 namespace std {
-	template<> // this is a specialized version of std::swap when T is Widget
+	template<> 	// this is a specialized version of std::swap when T is Widget
 	void swap<Widget>(Widget& a, Widget& b)
 	{
 		swap(a.pImpl, b.pImpl); // to swap Widgets, swap their pImpl pointers;
@@ -2033,11 +2053,8 @@ namespace std {
 }
 ```
 
-In general, we're not permitted to alter the contents of the std namespace, but we are allowed to **totally** specialize standard templates (like swap) for types of our own creation (such as Widget).
-
-**However this function won't compile.** That's because it's trying to access the pImpl pointers inside a and b, and they're private.
-
-### Have Widget declare a public member function called swap that does the actual swapping, then specialize std::swap to call the member function
+This function won't compile. That's because it's trying to access the `pImpl` pointers inside `a` and `b`, and they're `private`. We could declare our specialization a friend, but the convention is different: it's to **<font color='red'>have `Widget` declare a `public` member function called `swap` that does the actual swapping,
+then specialize `std::swap` to call the member function</font>**:
 
 ```c++
 class Widget { 	// same as above, except for the addition of the swap mem func
@@ -2045,8 +2062,8 @@ public:
 	...
 	void swap(Widget& other)
 	{
-		using std::swap; // the need for this declaration is explained later in this Item
-		swap(pImpl, other.pImpl); // to swap Widgets, swap their pImpl pointers
+		using std::swap; 			// the need for this declaration is explained later in this Item
+		swap(pImpl, other.pImpl); 	// to swap Widgets, swap their pImpl pointers
 	} 
 	...
 };
@@ -2060,32 +2077,35 @@ namespace std {
 }
 ```
 
-Not only does this compile, it's also consistent with the STL containers. All of STL containers provide both public swap member functions and versions of std::swap that call these member functions.
+Not only does this compile, it's also consistent with the STL containers, all of which provide both `public swap` member functions and versions of `std::swap` that call these member functions.
 
-### What if the `WidgetImpl` and `Widget` class are template class
+### 25.2 Add an overload version of `swap` for template class
+
+Suppose, however, that `Widget` and `WidgetImpl` were class templates instead of classes, possibly so we could parameterize the type of the data stored in `WidgetImpl`:
 
 ```c++
 template<typename T>
 class WidgetImpl { ... };
+
 template<typename T>
 class Widget { ... };
 ```
 
-Putting a swap member function in Widget (and, if we need to, in WidgetImpl) is as easy as before, but we run into trouble with the specialization for std::swap:
+Putting a `swap` member function in `Widget` is as easy as before, but we run into trouble with the specialization for `std::swap`:
 
 ```c++
 namespace std {
 	template<typename T>
-	void swap<Widget<T> >(Widget<T>& a, Widget<T>& b)// error! illegal code!
+	void swap<Widget<T>>(Widget<T>& a, Widget<T>& b)	// error! illegal code!
 	{
         a.swap(b);
     }
 }
 ```
 
-We're trying to **partially** specialize a function template (std::swap), but C++ allows partial specialization of class templates, it doesn't allow it for function templates.
+We're trying to **<font color='blue'>partially specialize</font>** a function template (`std::swap`), but **<font color='red'>C++ allows partial specialization of class templates, it doesn't allow it for function templates.</font>**
 
-#### When you want to “partially specialize” a function template, the usual approach is to **add an overload**：
+When you want to “partially specialize” a function template, the usual approach is to simply **<font color='red'>add an overload</font>**. That would look like this:
 
 ```c++
 namespace std {
@@ -2097,9 +2117,14 @@ namespace std {
 }
 ```
 
-It's okay to totally specialize templates in std, but it's not okay to add new templates (or classes or functions or anything else) to std.
+In general, overloading function templates is fine, but `std` is a special namespace, and the rules governing it are special, too. **<font color='red'>It's okay to totally specialize templates in `std`, but it's not okay to add new templates (or classes or functions or anything else) to `std`.</font>**
 
-What we should do is to declare a non-member swap that calls the member swap, we just don't declare the non-member to be a specialization or overloading of std::swap:
+Programs that cross this line will almost certainly compile and run, but their behavior is undefined. If you want your software to have predictable behavior, you'll not add new things to `std`.
+
+### 25.3 Don't declare the `swap` to be a specialization or overloading of `std::swap`
+We still need a way to let other people call `swap` and get our more efficient template-specific version. The answer is simple. We still declare a non-member `swap` that calls the member `swap`, we just don't declare the non-member to be a specialization or overloading of `std::swap`. 
+
+For example, if all our `Widget`-related functionality is in the namespace `WidgetStuff`, it would look like this:
 
 ```c++
 namespace WidgetStuff {
@@ -2115,44 +2140,65 @@ namespace WidgetStuff {
 }
 ```
 
-#### From a client's point of view
+Now, if any code anywhere calls `swap` on two `Widget` objects, the name lookup rules in C++ (specifically the rules known as **<font color='blue'>argument-dependent lookup（参数依赖查找）</font>**) will find the `Widget`-specific version in `WidgetStuff`. Which is exactly what we want.
 
-Suppose you're writing a function template where you need to swap the values of two objects, Which swap should this call? 
+This approach works as well for classes as for class templates, so it seems like we should use it all the time. Unfortunately, there is a reason for specializing `std::swap` for classes (I'll describe it shortly).
 
-* The general one in std, which you know exists;
-* A specialization of the general one in std, which may or may not exist;
-* A T-specific one, which may or may not exist and which may or may not be in a namespace (but should certainly not be in std)
+So if you want to have your class-specific version of `swap` called in as many contexts as possible, you need to write both a non-member version in the same namespace as your class and a specialization of `std::swap`.
 
-What you desire is to call a T-specific version if there is one, but to fall back on the general version in std if there's not:
+### 25.4 From a client's point of view
+
+Suppose you're writing a function template where you need to swap the values of two objects:
+
+```c++
+template <typename T>
+void doSomething(T& obj1, T&obj2){
+    ...
+    swap(obj1, obj2);    
+    ...
+}
+```
+
+Which `swap` should this call?
+
+* The general one in `std`, which you know exists;
+* A specialization of the general one in `std`, which may or may not exist;
+* A `T`-specific one, which may or may not exist and which may or may not be in a namespace (but should certainly not be in `std`)
+
+What you desire is to call a `T`-specific version if there is one, but to fall back on the general version in `std` if there's not. Here's how you fulfill your desire:
 
 ```c++
 template<typename T>
 void doSomething(T& obj1, T& obj2)
 {
-	using std::swap; // make std::swap available in this function
+	using std::swap; 	// make std::swap available in this function
 	...
-	swap(obj1, obj2); // call the best swap for objects of type T
+	swap(obj1, obj2); 	// call the best swap for objects of type T
 	...
 }
 ```
 
-C++'s name lookup rules ensure that this will find any T-specific swap at global scope or in the same namespace as the type T:
+When compilers see the call to `swap`, they search for the right `swap` to invoke. C++'s name lookup rules ensure that this will find any `T`-specific `swap` at
+global scope or in the same namespace as the type `T`. 
 
-* If T is Widget in the namespace WidgetStuff, compilers will use argument-dependent lookup to find swap in WidgetStuff.
-* If no T-specific swap exists, compilers will use swap in std, thanks to the using declaration that makes std::swap visible in this function.
-* Even then, compilers will prefer a T-specific specialization of std::swap over the general template, so if std::swap has been specialized for T, the specialized version will be used.
+If no `T`-specific `swap` exists, compilers will use `swap` in `std`, thanks to the `using` declaration that makes `std::swap` visible in this function. Even then, however, compilers will prefer a `T`-specific specialization of `std::swap` over the general template, so if `std::swap` has been specialized for `T`, the specialized version will be used.
 
-### Summary
+### 25.5 Summary
 
-If the default implementation of swap isn't efficient enough, do the following:
+If the default implementation of `swap` isn't efficient enough, do the following:
 
-* Offer a public swap member function that efficiently swaps the value of two objects of your type. For reasons I'll explain in a moment, this
-  function should never throw an exception.
-* Offer a non-member swap in the same namespace as your class or template. Have it call your swap member function.
-* If you're writing a class (not a class template), specialize std::swap for your class. Have it also call your swap member function.
+* Offer a `public swap` member function that efficiently swaps the value of two objects of your type. And **<font color='red'>this
+  function should never throw an exception:</font>** 
 
-Finally, if you're calling swap, be sure to include a using declaration to make std::swap visible in your function, then call swap without any namespace
-qualification.
+  * That's because one of the most useful applications of `swap` is to help classes (and class templates) offer the strong exception-safety guarantee. This constraint applies only to the member version! When you write a custom version of `swap`, then, you are typically offering more than just an efficient way to swap values; you're also offering one that doesn't throw exceptions.
+
+  * As a general rule, these two `swap` characteristics go hand in hand, because highly efficient `swap`s are almost always based on operations on built-in types (such as the pointers underlying the pimpl idiom), and operations on built-in types never throw exceptions.
+
+* Offer a non-member `swap` in the same namespace as your class or template. Have it call your `swap` member function.
+
+* If you're writing a class (not a class template), specialize `std::swap` for your class. Have it also call your `swap` member function.
+
+Finally, if you're calling `swap`, be sure to include a `using` declaration to make `std::swa`p visible in your function, then call `swap` without any namespace qualification.
 
 # 5. Implementations
 
