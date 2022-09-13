@@ -74,13 +74,53 @@ CMyString& CMyString::operator=(CMyString rhs){
 }
 ```
 
-## ？面试题2：实现 Singleton 模式
+## 面试题2：实现 Singleton 模式
 
 ### 题目
 
 设计一个类，我们只能生成该类的一个实例
 
 ### 解题思路
+
+通过将类的构造函数声明成 private，以防止外界创建该类的对象。
+
+### 解法一 饿汉模式
+
+```c++
+class A{
+public:
+    static A& getInstance() { return a; }
+private:
+    A();
+    A(const A& rhs);
+    static A a;
+};
+```
+
+问题：如果外界没有用到实例 a，该实例仍然存在，会造成空间的浪费
+
+很饿，先把单例准备好，饿了的时候直接使用
+
+### 解法二 懒汉模式
+
+```c++
+class A{
+public:
+    static A& getInstance();
+private:
+    A();
+    A(const A& rhs);
+};
+
+A& A::getInstance(){
+    static A a;
+    return a;
+}
+```
+
+只有当有人调用该函数后，实例 a 才会被创建，并且离开该函数，该实例会一直存在。因此在没有人使用这个单例时，这个单例不会存在。
+
+太懒了，只有需要单例时，才去创建。
 
 ## ？面试题3：数组中重复的数字
 
@@ -4601,6 +4641,88 @@ int StrToInt(const char* str) {
 	}
 	g_nStatus = kValid;
 	return minus ? -number : number;
+}
+```
+
+## 面试题68：树中两个节点的最低公共祖先
+
+### 题目
+
+输入两个树节点，求它们的最低公共祖先
+
+### 解题思路
+
+题目中仅仅给出两个树的节点，并未说明这是一棵什么树，我们需要考虑，并向面试官确认：
+
+1. 这棵树是否是二叉树，进一步，是否是二叉搜索树
+
+   如果是二叉搜索树，我们只需要从树的根节点开始和两个输入的节点进行比较：
+
+   * 如果当前节点的值比两个节点的值都大，那么最低的公共祖先一定在当前节点的左子树中，于是下一步遍历当前节点的左子节点。
+   * 如果当前节点的值比两个节点的值都小，那么最低的公共祖先一定在当前节点的右子树中，于是下一步遍历当前节点的右子节点。
+   * 这样，在树中从上到下找到的第一个在两个输入节点的值之间的节点就是最低的公共祖先。
+
+2. 这棵树中的节点有没有指向父节点的指针
+
+   如果树中的每个节点都有一个指向父节点的指针，**那么这个问题可以转换成求两个链表的第一个公共节点**。假设树节点中指向父节点的指针是pParent, 那么从树的每个叶节点开始都有一个由指针 pParent 串起来的链表，这些链表的尾指针都是树的根节点。输入两个节点，那么这两个节点位于两个链表上，它们的最低公共祖先刚好就是这两个链表的第一个公共节点，比如输入的两个节点分别力 F 和 H , 那么 F  在链表 F-> D-> B->A 上，而 H 在链表H->E-> B-> A 上，这两个链表的笫一个交点 B 刚好也是它们的最低公共祖先。
+
+    ![image-20220912204252142](images/image-20220912204252142.png)
+
+对于普通的树，我们可以参照第二种思路，利用树的遍历得到从根节点分别到两个输入节点的路径，将该路径看做是链表，进而将问题转化为求两个链表最后一个公共节点的问题。得到路径的方法如下：
+
+假如需要获得到 H 节点的路径，采用前序遍历从根节点开始遍历：
+
+* 遍历到 A，将 A 加入路径，此时路径中只有一个节点 A
+* 遍历到 B，将 B 加入路径，此时路径为 A，B
+* 遍历到 D，将 D 加入路径，此时路径为 A，B，D
+* 遍历到 F，将 F 加入路径，此时路径为 A，B，D，F。F 已经没有子节点了，因此这条路径不可能到达节点 H，把 F 从路径中删除，路径变为 A，B，D
+* 遍历到 G，将 G 加入路径，此时路径为 A，B，D，G。G 已经没有子节点了，因此这条路径不可能到达节点 H，把 G 从路径中删除，路径变为 A，B，D
+* 遍历到 E，将 E 加入路径，此时路径为 A，B，E
+* 遍历到 H，到达目标节点，得到最终路径为 A，B，E
+
+### 代码实现
+
+```c++
+struct TreeNode {
+	int m_nValue;
+	vector<TreeNode*> m_vChildren;
+};
+
+bool getNodePath(TreeNode *pRoot, TreeNode *pNode, vector<TreeNode*> &path) {
+	if (pRoot == pNode) {
+		return true;
+	}
+	path.push_back(pRoot);
+
+	bool found = false;
+	auto children = pRoot->m_vChildren;
+	auto iter = children.begin();
+	while (!found && iter != children.end()) {
+		found = getNodePath(*iter, pNode, path);
+		++iter;
+	}
+	if (!found)
+		path.pop_back();
+	return found;
+}
+
+TreeNode* GetLastCommonParent(TreeNode *pRoot, TreeNode *pNode1, TreeNode *pNode2) {
+	if (pRoot == nullptr || pNode1 == nullptr || pNode2 == nullptr)
+		return nullptr;
+	vector<TreeNode*> path1, path2;
+	bool isExist = getNodePath(pRoot, pNode1, path1) &&
+						getNodePath(pRoot, pNode2, path2);
+	if (!isExist)
+		return nullptr;
+	auto iter1 = path1.begin(), iter2 = path2.begin();
+	TreeNode *pLast = nullptr;
+	while (iter1 != path1.end() && iter2 != path2.end()) {
+		if (*iter1 == *iter2)
+			pLast = *iter1;
+		iter1++;
+		iter2++;
+	}
+	return pLast;
 }
 ```
 
