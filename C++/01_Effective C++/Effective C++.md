@@ -2204,11 +2204,13 @@ Finally, if you're calling `swap`, be sure to include a `using` declaration to m
 
 ## Item 26: Postpone variable definitions as long as possible
 
+Whenever you define a variable of a type with a constructor or destructor, you incur the cost of construction when control reaches the variable's definition, and you incur the cost of destruction when the variable goes out of scope. There's a cost associated with unused variables, so you want to avoid them whenever you can.
+
 Consider the following function, which returns an encrypted version of a password:
 
 ```c++
 // this function defines the variable "encrypted" too soon
-std::string encryptPassword(const std::string& password)
+string encryptPassword(const string& password)
 {
 	using namespace std;
 	string encrypted;
@@ -2221,30 +2223,35 @@ std::string encryptPassword(const std::string& password)
 }
 ```
 
-The object `encrypted` is unused if an exception is thrown. That is, you'll pay for the construction and destruction of encrypted even if encryptPassword throws an exception.
+The object `encrypted` is unused if an exception is thrown. That is, you'll pay for the construction and destruction of `encrypted` even if `encryptPassword` throws an exception.
+
+As a result, you're better off postponing `encrypted`'s definition until you know you'll need it:
 
 ```c++
 // this function postpones encrypted's definition until
 // it's necessary, but it's still needlessly inefficient
-std::string encryptPassword(const std::string& password)
+string encryptPassword(const string& password)
 {
 	using namespace std;
 	if (password.length() < MinimumPasswordLength) {
 		throw logic_error("Password is too short");
 	}
-	string encrypted;	// default-construct encrypted
-    					// encrypted is defined without any initialization arguments. 
-						// That means its default constructor will be used.
-	encrypted = password; // assign to encrypted
+	string encrypted;		// default-construct encrypted
+    						// encrypted is defined without any initialization arguments. 
+							// That means its default constructor will be used.
+	encrypted = password; 	// assign to encrypted
 	encrypt(encrypted);
 	return encrypted;
 }
 ```
 
+`encrypted` is defined without any initialization arguments, which means its default constructor will be used. Item 4 explains why default-constructing an
+object and then assigning to it is less efficient than initializing it with the value you really want it to have:
+
 ```c++
 // finally, the best way to define and initialize encrypted: 
 // skipping the pointless and potentially expensive default construction
-std::string encryptPassword(const std::string& password)
+string encryptPassword(const string& password)
 {
 	... // import std and check length
 	string encrypted(password); // define and initialize via copy constructor
@@ -2253,11 +2260,11 @@ std::string encryptPassword(const std::string& password)
 }
 ```
 
-Remember that default-constructing an object and then assigning to it is less efficient than initializing it with the value you really want it to have.
+**<font color='red'>As a result, not only should you postpone a variable's definition until right before you have to use the variable, you should also try to postpone the definition until you have initialization arguments for it.</font>**
 
-**As a result, not only should you postpone a variable's definition until right before you have to use the variable, you should also try to postpone the definition until you have initialization arguments for it.**
+### 26.1 variable used in a loop
 
-### variable used in a loop
+If a variable is used only inside a loop, is it better to define it outside the loop and make an assignment to it on each loop iteration, or is it be better to define the variable inside the loop?
 
 ```c++
 // Approach A: define outside loop
@@ -2273,80 +2280,75 @@ for (int i = 0; i < n; ++i){
 }
 ```
 
+In terms of `Widget` operations, the costs of these two approaches are as follows:
+
 * Approach A: 1 constructor + 1 destructor + n assignments.
 * Approach B: n constructors + n destructors.
 
 For classes where an assignment costs less than a constructor-destructor pair, Approach A is generally more efficient.
 
-However, Approach A makes the name w visible in a larger scope, something that's contrary to program comprehensibility and maintainability.
+However, Approach A makes the name `w` visible in a larger scope, something that's contrary to program comprehensibility and maintainability.
 
-As a result, unless you know that (1) assignment is less expensive than a constructor-destructor pair and (2) you're dealing with a performance-sensitive part of your code, you should default to using Approach B.
+As a result, unless you know that (1) assignment is less expensive than a constructor-destructor pair and (2) you're dealing with a performance-sensitive part of your code, **<font color='red'>you should default to using Approach B.</font>**
 
 ## Item 27: Minimize casting
 
-### Casting syntax
+The rules of C++ are designed to guarantee that type errors are impossible. In theory, if your program compiles cleanly, it's not trying to perform any unsafe or nonsensical operations on any objects. This is a valuable guarantee. You don't want to forgo it lightly. Unfortunately, casts subvert the type system. That can lead to all kinds of trouble,
+
+### 27.1 Casting syntax
 
 #### old-style casts 
 
-* **C-style casts:**
+* C-style casts
 
   ```c++
   (T) expression // cast expression to be of type T
   ```
 
-* **Function-style casts**
+* Function-style casts
 
   ```c++
   T(expression) // cast expression to be of type T
   ```
 
-There is no difference in meaning between these forms
+There is no difference in meaning between these forms; it's purely a matter of where you put the parentheses.
 
 #### new-style casts
 
-* **`const_cast<T>(expression)`**
+* `const_cast<T>(expression)`
 
-  `const_cast` is typically used to cast away the constness of objects. It is the only C++style cast that can do this.
+  `const_cast` is typically used to cast away the `const`ness of objects. It is the only C++style cast that can do this.
 
-* **`dynamic_cast<T>(expression)`**
+* `dynamic_cast<T>(expression)`
 
-  `dynamic_cast` is primarily used to perform “safe downcasting,” i.e., to determine whether an object is of a particular type in an inheritance
-  hierarchy. It is the only cast that cannot be performed using the old-style syntax.
+  `dynamic_cast` is primarily used to perform “**<font color='red'>safe downcasting</font>**,” i.e., to determine whether an object is of a particular type in an inheritance
+  hierarchy. 
 
-  <font color='red'>It is also the only cast that may have a significant runtime cost.</font>
+  It is the only cast that cannot be performed using the old-style syntax.
 
-* **`reinterpret_cast<T>(expression)`**
+  It is also the only cast that may have a significant runtime cost.
 
-  `reinterpret_cast` is intended for low-level casts that yield implementation dependent (i.e., unportable) results, e.g., casting a pointer to an int.
+* `reinterpret_cast<T>(expression)`
 
-* **`static_cast<T>(expression)`**
+  `reinterpret_cast` is intended for low-level casts that yield implementation dependent (i.e., unportable) results, e.g., casting a pointer to an `int`.
 
-  `static_cast` can be used to force implicit conversions (e.g., non-const object to const object, int to double, etc.). 
+* `static_cast<T>(expression)`
 
-  It can also be used to perform the reverse of many such conversions (e.g., void* pointers to typed pointers, pointer-to-base to pointer-to-derived), though it cannot cast from const to non-const objects. (Only const_cast can do that.)
+  `static_cast` can be used to force implicit conversions (e.g., non-`const` object to `const` object, `int` to `double`, etc.). 
 
-**The old-style casts continue to be legal, but the new forms are preferable:**
+  It can also be used to perform the reverse of many such conversions (e.g., `void*` pointers to typed pointers, pointer-to-base to pointer-to-derived), though it cannot cast from `const` to non-`const` objects. (Only `const_cast` can do that.)
+
+The old-style casts continue to be legal, but the new forms are preferable:
 
 * They're much easier to identify in code, thus simplifying the process of finding places in the code where the type system is being subverted.
-* The more narrowly specified purpose of each cast makes it possible for compilers to diagnose usage errors. For example, if you try to cast away constness using a new-style cast other than const_cast, your code won't compile.
+* The more narrowly specified purpose of each cast makes it possible for compilers to diagnose usage errors. For example, if you try to cast away `const`ness using a new-style cast other than `const_cast`, your code won't compile.
 
-About the only time I use an old-style cast is when I want to call an explicit constructor to pass an object to a function:
+### 27.2 Cast may create a new, temporary cop of the object
 
-```c++
-class Widget {
-public:
-	explicit Widget(int size);
-	...
-};
-void doSomeWork(const Widget& w);
+Many application frameworks require that virtual member function implementations in derived classes call their base class counterparts first. Suppose we have a `Window` base class and a `SpecialWindow` derived class, both of which define the virtual function `onResize`. Further suppose that `SpecialWindow`'s `onResize` is expected to invoke `Window`'s `onResize` first.
 
-doSomeWork(Widget(15)); // create Widget from int with functionstyle cast
-doSomeWork(static_cast<Widget>(15)); // create Widget from int with C++style cast
-```
+Here's a way to implement this that looks like it does the right thing, but doesn't:
 
-They do exactly the same thing here: create a temporary Widget object to pass to doSomeWork.
-
-### Casting in an inheritance hierarchy
 ```c++
 class Window { // base class
 public:
@@ -2355,8 +2357,8 @@ public:
 };
 class SpecialWindow: public Window { // derived class
 public:
-	virtual void onResize() { 		// derived onResize impl;
-		static_cast<Window>(*this).onResize(); // cast *this to Window, then call its onResize;
+	virtual void onResize() { 					// derived onResize impl;
+		static_cast<Window>(*this).onResize(); 	// cast *this to Window, then call its onResize;
 		// this doesn't work!
 		... // do SpecialWindow-specific stuff
 	} 
@@ -2364,86 +2366,80 @@ public:
 };
 ```
 
-The code casts *this to a Window. The resulting call to onResize therefore invokes Window::onResize.
+As you would expect, the code casts `*this` to a `Window`. The resulting call to `onResize` therefore invokes `Window::onResize`. 
 
-<font color='red'>However it does not invoke that function on the current object! Instead, the cast creates a new, temporary copy of the base class part of *this, then invokes onResize on the copy!</font> If Window::onResize modifies the current object, the current object won't be modified. Instead, a copy of that object will be modified.
+What you might not expect is that it does not invoke that function on the current object! Instead, **<font color='red'>the cast creates a new, temporary copy of the base class part of `*this`, then invokes `onResize` on the copy!</font>** If `Window::onResize` modifies the current object, the current object won't be modified. Instead, a copy of that object will be modified. If `SpecialWindow::onResize` modifies the current object, however, the current object will be modified, leading to the prospect that **<font color='red'>the code will leave the current object in an invalid state, one where base class modifications have not been made, but derived class ones have been.</font>**
 
-The solution is to eliminate the cast, replacing it with what you really want to say:
+The solution is to eliminate the cast, replacing it with what you really want to say. You want to call the base class version of `onResize` on the current
+object:
 
 ```c++
 class SpecialWindow: public Window {
 public:
 	virtual void onResize() {
-		Window::onResize(); // call Window::onResize on *this
+		Window::onResize(); 	// call Window::onResize on *this
         ...
 	}
 	...
 };
 ```
 
-### Many implementations of dynamic_cast can be quite slow
+### 27.3 `dynamic_cast` 
 
-The need for dynamic_cast generally arises because you want to perform derived class operations on what you believe to be a derived class object, but
-you have only a pointer- or reference-to-base.
+Many implementations of `dynamic_cast` can be quite slow. in addition to being leery of casts in general, you should be especially leery of `dynamic_cast`s in performance-sensitive code.
 
-For example, if, in our Window/SpecialWindow hierarchy, only SpecialWindows support blinking
+**<font color='red'>The need for `dynamic_cast` generally arises because you want to perform derived class operations on what you believe to be a derived class object, but
+you have only a pointer- or reference-to-base through which to manipulate the object:</font>**
 
-```c++
-class Window { ... };
-class SpecialWindow: public Window {
-public:
-	void blink();
-	...
-};
-typedef  std::vector<std::tr1::shared_ptr<Window> > VPW;
-VPW winPtrs;
-...
-for (VPW::iterator iter = winPtrs.begin(); iter != winPtrs.end(); ++iter) {
-	if (SpecialWindow *psw = dynamic_cast<SpecialWindow*>(iter->get()))
-		psw->blink();
-}
-```
+There are two general ways to avoid this problem. For example, if, in our `Window/SpecialWindow` hierarchy:
 
-Avoid casts whenever practical, especially dynamic_casts in performance-sensitive code. If a design requires casting, try to develop a cast-free alternative.
+* Use containers that store pointers to derived class objects directly
 
-There are two general ways to avoid this problem:
+  ```c++
+  class Window { ... };
+  class SpecialWindow: public Window {
+  public:
+  	void blink();
+  	...
+  };
+  typedef  vector<shared_ptr<SpecialWindow>> VPW;
+  VPW winPtrs;
+  ...
+  for (VPW::iterator iter = winPtrs.begin(); iter != winPtrs.end(); ++iter) {
+  	(*iter)->blink();
+  }
+  ```
 
-#### Use containers that store pointers (often smart pointers) to derived class objects directly
-```c++
-typedef std::vector<std::tr1::shared_ptr<SpecialWindow> > VPSW;
-VPSW winPtrs;
-...
-for (VPSW::iterator iter = winPtrs.begin(); iter != winPtrs.end(); ++iter)
-	(*iter)->blink();
-```
+  Of course, this approach won't allow you to store pointers to all possible `Window` derivatives in the same container. To work with different `window`
+  types, you might need multiple type-safe containers.
 
-Of course, this approach won't allow you to store pointers to all possible Window derivatives in the same container.
+* Provide virtual functions in the base class
 
-#### Provide virtual functions in the base class
+  Though only `SpecialWindows` can `blink`, maybe it makes sense to declare the function in the base class, offering a default implementation that does nothing:
 
-Though only SpecialWindows can blink, maybe it makes sense to declare the function in the base class, offering a default implementation that does nothing:
+  ```c++
+  class Window {
+  public:
+  	virtual void blink() {} 		// default impl is no-op;
+  	...
+  }; 
+  class SpecialWindow: public Window {
+  public:
+  	virtual void blink() { ... }; 	// in this class, blink does something
+      ...
+  };
+  
+  typedef vector<shared_ptr<Window>> VPW;
+  VPW winPtrs; 	// container holds (ptrs to) all possible Window types
+  for (VPW::iterator iter = winPtrs.begin(); iter != winPtrs.end(); ++iter)
+  	(*iter)->blink();
+  ```
 
-```c++
-class Window {
-public:
-	virtual void blink() {} // default impl is no-op;
-	...
-}; 
-class SpecialWindow: public Window {
-public:
-	virtual void blink() { ... }; // in this class, blink does something
-    ...
-};
+  This approach will let you manipulate all possible `Window` derivatives through a base class interface.
 
-typedef std::vector<std::tr1::shared_ptr<Window> > VPW;
-VPW winPtrs; // container holds (ptrs to) all possible Window types
-for (VPW::iterator iter = winPtrs.begin(); iter != winPtrs.end(); ++iter)
-	(*iter)->blink();
-```
+## Item 28: Avoid returning “handles” to object internals
 
-## Item 28: Avoid returning “handles” to object internals.
-
-Suppose you're working on an application involving rectangles. To keep a Rectangle object small, you might decide that the points defining its extent shouldn't be stored in the Rectangle itself, but rather in an auxiliary struct that the Rectangle points to：
+Suppose you're working on an application involving rectangles. To keep a `Rectangle` object small, you might decide that the points defining its extent shouldn't be stored in the `Rectangle` itself, but rather in an auxiliary struct that the `Rectangle` points to：
 
 ```c++
 class Point { // class for representing points
@@ -2459,35 +2455,38 @@ struct RectData { 	// Point data for a Rectangle
 	Point lrhc; 	// lrhc = " lower righthand corner"
 };
 class Rectangle {
-public:
-    Point& upperLeft() const { return pData->ulhc; }
-	Point& lowerRight() const { return pData->lrhc; }
+	...
 private:
-	std::tr1::shared_ptr<RectData> pData;
+	shared_ptr<RectData> pData;
 }; 
 ```
 
-This design will compile, but it's wrong, it's self-contradictory. On the one hand, `upperLeft` and `lowerRight` are declared to be const member functions
-, On the other hand, both functions return references to private internal data--references that callers can use to modify that internal data:
+Because `Rectangle` clients will need to be able to determine the extent of a `Rectangle`, the class provides the `upperLeft` and `lowerRight` functions. However, `Point` is a user-defined type, so, mindful of Item 20's observation that passing user-defined types by reference is typically more efficient than passing them by value, these functions return references to the underlying `Point` objects:
 
 ```c++
-Point coord1(0, 0);
-Point coord2(100, 100);
-const Rectangle rec(coord1, coord2); // rec is a const rectangle from (0, 0) to (100, 100)
-rec.upperLeft().setX(50); // now rec goes from (50, 0) to (100, 100)!
+class Rectangle {
+public:
+	...
+	Point& upperLeft() const { return pData->ulhc; }
+	Point& lowerRight() const { return pData->lrhc; }
+...
+};
 ```
 
-**References, pointers, and iterators are all handles** (ways to get at other objects), and returning a handle to an object's internals always runs the risk of compromising an object's encapsulation.
+This design will compile, but it's wrong, it's self-contradictory:
 
-object's “internals”:
+* On the one hand, `upperLeft` and `lowerRight` are declared to be `const` member functions , because they are designed only to offer clients a way to learn what the `Rectangle`'s points are, not to let clients modify the `Rectangle`
+* On the other hand, both functions return references to `private` internal data--references that callers can use to modify that internal data.
 
-* Its data members
+References, pointers, and iterators are all handles (ways to get at other objects), and returning a handle to an object's internals always runs the risk of compromising an object's encapsulation.
 
-* Its member functions not accessible to the general public (i.e., that are protected or private)
+We generally think of an object's “internals” as its data members, but member functions not accessible to the general public (i.e., that are `protected` or
+private) are part of an object's internals, too.
 
-  This means you should never have a member function return a pointer to a less accessible member function
+### 28.1 Applying to their return types `const` 
 
-### Applying to their return types const
+The problems we've identified for those functions can be eliminated by simply applying `const` to their return types:
+
 ```c++
 class Rectangle {
 public:
@@ -2498,41 +2497,41 @@ public:
 };
 ```
 
-Even so, `upperLeft` and `lowerRight` are still returning handles to an object's internals, and that can be problematic in other ways.
+With this altered design, clients can read the `Point`s defining a `rectangle`, but they can't write them. Even so, `upperLeft` and `lowerRight` are still returning handles to an object's internals, and that can be problematic in other ways.
 
-In particular, it can lead to dangling handles: handles that refer to parts of objects that don't exist any longer. For example, consider a function that returns the bounding box for a GUI object in the form of a rectangle:
+**<font color='red'>In particular, it can lead to dangling handles: handles that refer to parts of objects that don't exist any longer.</font>** 
+
+For example, consider a function that returns the bounding box for a GUI object in the form of a rectangle:
 
 ```c++
 class GUIObject { ... };
 const Rectangle boundingBox(const GUIObject& obj); // returns a rectangle by value
 
 // Now consider how a client might use this function:
-GUIObject *pgo; // make pgo point to some GUIObject
+GUIObject *pgo; 	// make pgo point to some GUIObject
 ... 
 const Point *pUpperLeft = &(boundingBox(*pgo).upperLeft()); // get a ptr to the upper left point of its bounding box
 ```
 
 Consider the last statement that create `pUpperLeft`:
 
-* The call to `boundingBox` will return a new, temporary Rectangle object，temp. 
+* The call to `boundingBox` will return a new, temporary `Rectangle` object，we call it `temp`. 
 
-* `upperLeft` will then be called on temp, and that call will return a reference to one of the Points making it up
+* `upperLeft` will then be called on `temp`, and that call will return a reference to one of the `Point`s making it up
 
-* `pUpperLeft` will then point to that Point object
+* `pUpperLeft` will then point to that `Point` object
 
-* At the end of the statement, `boundingBox`'s return value — temp — will be destroyed, and that will indirectly lead to the destruction of temp's `Point`s, in turn, will leave `pUpperLeft` pointing to an object that no longer exists; `pUpperLeft` will dangle by the end of the statement that created it!
-
-### Summary
+* At the end of the statement, `boundingBox`'s return value — `temp` — will be destroyed, and that will indirectly lead to the destruction of `temp`'s `Point`s, in turn, will leave `pUpperLeft` pointing to an object that no longer exists; `pUpperLeft` will dangle by the end of the statement that created it!
 
 Function that returns a handle to an internal part of the object is dangerous:
 
 * It doesn't matter whether the handle is a pointer, a reference, or an iterator.
-*  It doesn't matter whether it's qualified with const. 
-* It doesn't matter whether the member function returning the handle is itself const.
+*  It doesn't matter whether it's qualified with `const`. 
+* It doesn't matter whether the member function returning the handle is itself `const`.
 
-But, there is always an exception: operator[] returns references to the data in the containers--— data that is destroyed when the containers themselves are.
+But, there is always an exception: `operator[]` returns references to the data in the containers.
 
-## Item 29: Strive for exception-safe code.
+## Item 29: Strive for exception-safe code
 
 Suppose we have a class for representing GUI menus with background images. The class is designed to be used in a threaded environment, so it has a mutex for concurrency control:
 
@@ -2540,14 +2539,18 @@ Suppose we have a class for representing GUI menus with background images. The c
 class PrettyMenu {
 public:
 	...
-	void changeBackground(std::istream& imgSrc); // change background image
+	void changeBackground(istream& imgSrc); // change background image
 private:
 	Mutex mutex; 		// mutex for this object
 	Image *bgImage; 	// current background image
 	int imageChanges; 	// # of times image has been changed
 };
+```
 
-void PrettyMenu::changeBackground(std::istream& imgSrc)
+Consider this possible implementation of `PrettyMenu`'s `changeBackground` function:
+
+```c++
+void PrettyMenu::changeBackground(istream& imgSrc)
 {
 	lock(&mutex); 					// acquire mutex
 	delete bgImage; 				// get rid of old background
@@ -2557,7 +2560,8 @@ void PrettyMenu::changeBackground(std::istream& imgSrc)
 }
 ```
 
-There are two requirements for exception safety, and the implemention above satisfies neither
+From the perspective of exception safety, this function is about as bad as it gets. There are two requirements for exception safety, and this satisfies
+neither:
 
 * **Leak no resources**
 
@@ -2565,9 +2569,11 @@ There are two requirements for exception safety, and the implemention above sati
 
 * **Don't allow data structures to become corrupted**
 
-  If “`new Image(imgSrc)`” throws, `bgImage` is left pointing to a deleted object. In addition, imageChanges has been incremented, even though it's not true that a new image has been installed.
+  If “`new Image(imgSrc)`” throws, `bgImage` is left pointing to a deleted object. In addition, `imageChanges` has been incremented, even though it's not true that a new image has been installed.
 
-### Addressing the resource leak issue: use objects to manage resources
+### 29.1 Addressing the resource leak issue
+
+Use resource management classes like `Lock` introduced in Item14 can easily address the resource leak issue.
 
 ```c++
 class Lock {
@@ -2578,13 +2584,6 @@ private:
 	Mutex *mutexPtr;
 };
 
-Mutex m; 			// define the mutex you need to use
-...
-{ 					// create block to define critical section
-	Lock ml(&m); 	// lock the mutex
-	... 			// perform critical section operations
-} 					// automatically unlock mutex at end of block
-
 void PrettyMenu::changeBackground(std::istream& imgSrc)
 {
 	Lock ml(&mutex);
@@ -2594,34 +2593,36 @@ void PrettyMenu::changeBackground(std::istream& imgSrc)
 }
 ```
 
-### Addressing the data structure corruption issue
+### 29.2 Addressing the data structure corruption issue
 
-#### Three guarantees that exception-safe functions offer
+**<font color='red'>Exception-safe functions offer one of three guarantees:</font>**
 
-* **The basic guarantee**
+* The basic guarantee
 
   if an exception is thrown, everything in the program remains in a valid state. However, the exact state of the program may not be predictable.
 
-* **The strong guarantee**
+  For example, we could write `changeBackground` so that if an exception were thrown, the `PrettyMenu` object might continue to have the old background image, or it might have some default background image, but clients wouldn't be able to predict which.
 
-  if an exception is thrown, the state of the program is unchanged. Calls to such functions are <font color='red'>atomic</font> in the sense that if they succeed, they succeed completely, and if they fail, the program state is as if they'd never been called.
+* The strong guarantee
 
-* **The nothrow guarantee**
+  if an exception is thrown, the state of the program is unchanged. Calls to such functions are **<font color='red'>atomic </font>**in the sense that if they succeed, they succeed completely, and if they fail, the program state is as if they'd never been called.
 
-  Never to throw exceptions, because they always do what they promise to do. <font color='red'>All operations on built-in types are nothrow.</font>
+* The nothrow guarantee
 
-Exception-safe code must offer one of the three guarantees above. And offer the nothrow guarantee when you can, but for most functions, the choice is between the basic and strong guarantees.
+  Never to throw exceptions. **<font color='red'>All operations on built-in types (e.g., `int`s, pointers, etc.) are nothrow.</font>** This is a critical building block of exception-safe code.
+
+Exception-safe code must offer one of the three guarantees above. The choice, then, is to determine which guarantee to offer for each of the functions you write. As a general rule, offer the nothrow guarantee when you can, but for most functions, the choice is between the basic and strong guarantees.
 
 #### Offer the strong guarantee in `changeBackground`
 
-First, we change the type of `PrettyMenu`'s `bgImage` data member from a built-in `Image`* pointer to one of the smart resource-managing pointers.
+First, we change the type of `PrettyMenu`'s `bgImage` data member from a built-in `Image*` pointer to one of the**<font color='red'> smart</font>** resource-managing **<font color='red'>pointers</font>**. Frankly, this is a good idea purely on the basis of preventing resource leaks. The fact that it **<font color='red'>helps us offer the strong exception safety guarantee</font>** simply reinforces Item 13's argument that using objects (such as smart pointers) to manage resources is fundamental to good design.
 
-Second, we reorder the statements in `changeBackground` so that we don't increment `imageChanges` until the image has been changed.
+Second, we reorder the statements in `changeBackground` so that we don't increment `imageChanges` until the image has been changed. As a general rule, **<font color='red'>it's a good policy not to change the status of an object to indicate that something has happened until something actually has.</font>**
 
 ```c++
 class PrettyMenu {
 	...
-	std::tr1::shared_ptr<Image> bgImage;
+	shared_ptr<Image> bgImage;
 	...
 };
 void PrettyMenu::changeBackground(std::istream& imgSrc)
@@ -2632,43 +2633,40 @@ void PrettyMenu::changeBackground(std::istream& imgSrc)
 }
 ```
 
-Note that there's no longer a need to manually delete the old image, because that's handled internally by the smart pointer.
+Note that there's no longer a need to manually `delete` the old image, because that's handled internally by the smart pointer.
 
-Furthermore, the deletion takes place only if the new image is successfully created:
-The `shared_ptr::reset` function will be called only if its parameter (the result of “`new Image(imgSrc)`”) is successfully created. delete is used only inside the call to reset, so if the function is never entered, delete is never used.
+Furthermore, the deletion takes place only if the new image is successfully created: The `shared_ptr::reset` function will be called only if its parameter (the result of “`new Image(imgSrc)`”) is successfully created. `delete` is used only inside the call to `reset`, so if the function is never entered, `delete` is never used.
 
-### copy and `swap`
+### 29.3 copy and `swap`
 
-"copy and swap" is a general design strategy that typically leads to the strong guarantee:
+In principle, it's very simple：
 
-> Make a copy of the object you want to modify, then make all needed changes to the copy. If any of the modifying operations throws an exception, the original object remains unchanged. After all the changes have been successfully completed, swap the modified object with the original in a non-throwing operation.
+**<font color='red'>Make a copy of the object you want to modify, then make all needed changes to the copy. If any of the modifying operations throws an exception, the original object remains unchanged. After all the changes have been successfully completed, swap the modified object with the original in a non-throwing operation.</font>**
 
-This is usually implemented by the “**pimpl idiom**”----把数据(`bgImage`)放在类PMimpl里，而本身的类只保存一个指向PMimpl的只智能指针
+This is usually implemented by the “**pimpl idiom**”----把数据(`bgImage`)放在类PMimpl里，而本身的类只保存一个指向PMimpl的智能指针
 
 ```c++
 struct PMImpl {			// PMImpl = "PrettyMenu Impl."
-	std::tr1::shared_ptr<Image> bgImage;
+	shared_ptr<Image> bgImage;
 	int imageChanges;
 };
 class PrettyMenu {
 	...
 private:
 	Mutex mutex;
-	std::tr1::shared_ptr<PMImpl> pImpl;
+	shared_ptr<PMImpl> pImpl;
 };
 
-void PrettyMenu::changeBackground(std::istream& imgSrc)
+void PrettyMenu::changeBackground(istream& imgSrc)
 {
 	using std::swap;
 	Lock ml(&mutex); // acquire the mutex
-	std::tr1::shared_ptr<PMImpl> pNew(new PMImpl(*pImpl)); // copy obj.data
-	pNew->bgImage.reset(new Image(imgSrc)); // modify the copy
+	shared_ptr<PMImpl> pNew(new PMImpl(*pImpl)); 	// copy obj.data
+	pNew->bgImage.reset(new Image(imgSrc)); 		// modify the copy
 	++pNew->imageChanges;
-	swap(pImpl, pNew); // swap the new data into place
+	swap(pImpl, pNew); 								// swap the new data into place
 } // release the mutex
 ```
-
-The copy-and-`swap` strategy is an excellent way to make all-or-nothing changes to an object's state, but, in general, it doesn't guarantee that the overall function is strongly exception-safe. Furthermore, it requires making a copy of each object to be modified, which takes time and space you may be unable or unwilling to make available.
 
 ## Item 30: Understand the ins and outs of inlining
 
