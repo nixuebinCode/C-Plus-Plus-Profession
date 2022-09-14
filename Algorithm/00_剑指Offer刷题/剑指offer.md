@@ -122,11 +122,104 @@ A& A::getInstance(){
 
 太懒了，只有需要单例时，才去创建。
 
-## ？面试题3：数组中重复的数字
+## 面试题3-1：找出数组中重复的数字
 
 ### 题目
 
 在一个长度为 n 的数组里的所有数字都在 0 ~ n-1 的范围内。数组中某些数字是重复的，但不知道有几个数字重复了，也不知道每个数字重复了几次。请找出数组中任意一个重复的数字。例如，如果输入长度为 7 的数组 {2, 3, 1, 0, 2, 5, 3}, 那么对应的输出是重复的数字 2 或者 3。
+
+### 解题思路
+
+我们尝试去实现时间复杂度为 O(n)，空间复杂度为 O(1) 的解法：
+
+我们注意到数组中的数字都在 0 ~ n - 1 的范围内。如果这个数组中没有重复的数字，那么当数组排序之后数字 i 将出现在下标为 i 的位置。现在让我们重排这个数组：
+
+我们从头到尾依次扫描这个数组中的每个数字。当扫描到下标为 i 的数字时，首先比较这个数字（用 m 表示）是不是等于 i 。如果是，说明该数字位于正确的位置，则接着扫描下一个数字；如果不是，则再拿它和第 m 个数字进行比较，如果它和第 m 个数字相等，就找到了一个重复的数字；如果它和第m 个数字不相等，就把第 i 个数字和第 m 个数字交换， 把 m 放到属于它的位置。接下来再重复这个比较、交换的过程，直到我们发现一个重复的数字。、
+
+### 代码实现
+
+```c++
+bool duplicate(int numbers[], int length, int* duplication) {
+	if (numbers == nullptr || length < 2)
+		return false;
+	// 不要忘记检查非法输入
+	for (int i = 0; i != length; ++i)
+	{
+		if (numbers[i] < 0 || numbers[i] > length - 1)
+			return false;
+	}
+	int i = 0;
+	while (i != length) {
+		int m = numbers[i];
+		if (m == i) {
+			++i;
+		}
+		else {
+			if (m == numbers[m]) {
+				*duplication = m;
+				return true;
+			}
+			else {
+				numbers[i] = numbers[m];
+				numbers[m] = m;
+			}
+		}
+	}
+	return false;
+}
+```
+
+## 面试题3-2：不修改数组找出重复的数字
+
+### 题目
+
+在一个长度为 n+1 的数组里的所有数字都在 1~n 的范围内，所以数组中至少有一个数字是重复的。请找出数组中任意一个重复的数字，但不能修改输入的数组。例如，如果输入长度为 8 的数组 {2, 3, 5, 4, 3, 2, 6, 7}，那么对应的输出是重复的数字 2 或者 3 。
+
+### 解题思路
+
+我们可以很容易想到借助一个辅助数组，然后逐一把原数组的每个数字复制到辅助数组中。如果原数组中被复制的数字是 m，则把它复制到辅助数组下标位置为 m 的位置。这样很容易找到重复的数字，但是这种方案需要 O(n) 的辅助空间。
+
+接下来思考不借助辅助空间的做法。通常数组的查找可以按照**<font color='red'>二分查找的思路</font>**:
+
+为什么数组中会有重复的数字？假如没有重复的数字，那么在从 1 ~ n 的范围里只有 n 个数字。由于数组里包含超过 n 个数字，所以一定包含了重复的数字。看起来在某范围里数字的个数对解决这个问题很重要。
+
+我们把从 1 ~ n 的数字从中间的数字 m 分为两部分，前面一半为 1 ~ m，后面一半为 m+ 1 ~ n 。**<font color='red'>如果 1 ~ m 的数字的数目超过 m, 那么这一半的区间里一定包含重复的数字</font>**；否则，另一半 m + 1 ~ n 的区间里一定包含重复的数字。我们可以继续把包含重复数字的区间一分为二， 直到找到一个重复的数字。也就是说我们需要一个统计一定区间中数字的数目的函数。
+
+### 代码实现
+
+```c++
+int countRange(const int* numbers, int length, int start, int end);
+
+int getDuplication(const int* numbers, int length) {
+	if (numbers == nullptr || length < 1)
+		return -1;
+	for (int i = 0; i != length; ++i) {
+		if (numbers[i] < 1 || numbers[i] > length - 1)
+			return -1;
+	}
+	int low = 1, high = length - 1;
+	while (low < high) {
+		int mid = (low + high) / 2;
+		int cnt = countRange(numbers, length, low, mid);
+		if (cnt > mid - low + 1) {
+			high = mid;
+		}
+		else {
+			low = mid + 1;
+		}
+	}
+	return low;
+}
+
+int countRange(const int* numbers, int length, int start, int end) {
+	int ret = 0;
+	for (int i = 0; i != length; ++i) {
+		if (numbers[i] >= start && numbers[i] <= end)
+			++ret;
+	}
+	return ret;
+}
+```
 
 ## 面试题4：二维数组中的查找
 

@@ -2670,15 +2670,16 @@ void PrettyMenu::changeBackground(istream& imgSrc)
 
 ## Item 30: Understand the ins and outs of inlining
 
-Inline functions look like functions, act like functions, and you can call them without having to incur the overhead of a function call.
+`inline` functions look like functions, act like functions, and you can call them without having to incur the overhead of a function call.
 
-The idea behind an inline function is to replace each call of that function with its code body, thus this is likely to increase the size of your object code. On the other hand, if an inline function body is very short, the code generated for the function body may be smaller than the code generated for a function call.
+The idea behind an `inline` function is to replace each call of that function with its code body, thus this is likely to increase the size of your object code. On the other hand, if an `inline` function body is very short, the code generated for the function body may be smaller than the code generated for a function call.
 
-Bear in mind that `inline` is a **request** to compilers, not a command.
+### 30.1 Define an `inline` function
 
-### Define an inline function
+**<font color='red'>`inline` functions must typically be in header files</font>**, because most build environments **do inlining during compilation**. In order to replace a function
+call with the body of the called function, compilers must know what the function looks like.
 
-* **The implicit way to define an inline function**: Define a function inside a class definition:
+* **The implicit way to define an `inline` function**: Define a function inside a class definition:
 
   ```c++
   class Person {
@@ -2693,34 +2694,29 @@ Bear in mind that `inline` is a **request** to compilers, not a command.
 
   Such functions are usually member functions, but friend functions can also be defined inside classes. When they are, they're also implicitly declared inline.
 
-* **The explicit way to define an inline function**: Precede its definition with the inline keyword
+* **The explicit way to define an inline function**: Precede its definition with the `inline` keyword
 
+  For example, this is how the standard `max` template (from `<algorithm>`) is often implemented:
+  
   ```c++
   template<typename T> 								// an explicit inline
-  inline const T& std::max(const T& a, const T& b) 	// request: std::max is preceded by "inline"
+  inline const T& max(const T& a, const T& b) 		// request: std::max is preceded by "inline"
   { return a < b ? b : a; }
   ```
+  
+  When you declare the template `inline`, all the functions instantiated from the template would be inlined.
 
-### inline functions and templates
+### 30.2 `inline` is a request that compilers may ignore
 
-Inline functions must typically be in header files, because most build environments **do inlining during compilation**. In order to replace a function
-call with the body of the called function, compilers must know what the function looks like.
+* Most compilers refuse to inline functions they deem too complicated (e.g., those that contain **loops** or are **recursive**)
 
-Templates are typically in header files, because compilers need to know what a template looks like in order to instantiate it when it's used.
-
-Template instantiation is independent of inlining
-
-### `inline` is a request that compilers may ignore
-
-* **Most compilers refuse to inline functions they deem too complicated (e.g., those that contain loops or are recursive)**
-
-* **All but the most trivial calls to virtual functions defy inlining**
+* All but the most trivial calls to **virtual functions** defy inlining
 
   `virtual` means “wait until runtime to figure out which function to call,” and `inline` means “before execution, replace the call site with the called function.” If compilers don't know which function will be called, you can hardly blame them for refusing to inline the function's body.
   
-* **Sometimes compilers generate a function body for an inline function even when they are perfectly willing to inline the function**
+* Compilers typically don't perform inlining across calls through **function pointers**
 
-  For example, if your program takes the address of an inline function, compilers must typically generate an outlined function body for it. How can they come up with a pointer to a function that doesn't exist?
+  If your program takes the address of an inline function, compilers must typically generate an outlined function body for it. How can they come up with a pointer to a function that doesn't exist?
 
   ```c++
   inline void f() {...} 		// assume compilers are willing to inline calls to f
@@ -2730,32 +2726,65 @@ Template instantiation is independent of inlining
   pf(); 						// this call probably won't be, because it's through a function pointer
   ```
 
-* Even if you never use function pointers, sometimes compilers generate out-of-line copies of constructors and destructors so that they can get pointers to those functions for use during construction and destruction of objects in arrays.
+* **Constructors** and **destructors** are often worse candidates for inlining
 
-### Drawbacks of inline function
+  Sometimes compilers generate out-of-line copies of constructors and destructors so that they can get pointers to those functions for use during construction and destruction of objects in arrays.
 
-* If f is an inline function in a library, clients of the library compile the body of f into their applications. If a library implementer later decides to change f, all clients who've used f must **recompile**. This is often undesirable.
+  For example, consider the constructor for class `Derived` below:
 
-  On the other hand, if f is a non-inline function, a modification to f requires only that clients **relink**. This is a substantially less onerous burden than recompiling and, if the library containing the function is dynamically linked, one that may be absorbed in a way that's completely transparent to clients.
+  ```c++
+  class Base {
+  public:
+  	...
+  private:
+  	string bm1, bm2; 		// base members 1 and 2
+  };
+  
+  class Derived: public Base {
+  public:
+  	Derived() {} 
+  	...
+  private:
+  	string dm1, dm2, dm3; 	// derived members 1–3
+  };
+  ```
+
+  This constructor looks like an excellent candidate for inlining, since it contains no code. But C++ makes various guarantees about things that happen when objects are created and destroyed. There has to be some code in your program to make those things happen, and that code — the code written by compilers and inserted into your program during compilation — has to go somewhere. Sometimes it ends up in constructors and destructors,
+
+  For example, no matter how sophisticated a compiler's exception implementation, `Derived`'s constructor must at least call constructors for its data members and base class, and those calls (which might themselves be inlined) could affect its attractiveness for inlining.
+
+  Assume that if the `string` constructor happens to be inlined, the `Derived` constructor will gain five copies of that function's code, one for each of the five `string`s in a Derived object (the two it inherits plus the three it declares itself). 
+
+### 30.3 Drawbacks of `inline` function 
+
+* `inline` function replaces each call of that function with its code body, which is likely to increase the size of your object code.
+
+* It's impossible to provide binary upgrades to the client visible inline functions in a library.
+
+  If `f` is an `inline` function in a library, clients of the library **<font color='red'>compile the body of `f` into their applications.</font>** If a library implementer later decides to change `f`, all clients who've used `f` must **recompile**. This is often undesirable.
+
+  On the other hand, if `f` is a non-`inline` function, a modification to `f` requires only that clients **relink**. This is a substantially less onerous burden than recompiling.
 
 * Most debuggers have trouble with inline functions. How do you set a breakpoint in a function that isn't there?
 
-## Item 31: Minimize compilation dependencies between files
+  Although some build environments manage to support debugging of inlined functions, many environments simply disable inlining for debug builds.
+
+## ⭐Item 31: Minimize compilation dependencies between files
 
 C++ doesn't do a very good job of separating interfaces from implementations. A class definition specifies not only a class interface but also a fair number of implementation details. For example:
 
 ```c++
 class Person {
 public:
-	Person(const std::string& name, const Date& birthday, const Address& addr);
-	std::string name() const;
-	std::string birthDate() const;
-	std::string address() const;
+	Person(const string& name, const Date& birthday, const Address& addr);
+	string name() const;
+	string birthDate() const;
+	string address() const;
 	...
 private:
-	std::string theName; // implementation detail
-	Date theBirthDate; // implementation detail
-	Address theAddress; // implementation detail
+	string theName; 		// implementation detail
+	Date theBirthDate; 		// implementation detail
+	Address theAddress; 	// implementation detail
 };
 ```
 
@@ -2767,150 +2796,158 @@ Here, class `Person` can't be compiled without access to definitions for the cla
 #include "address.h"
 ```
 
-This sets up a **compilation dependency** between the file defining `Person` and these header files. If any of these header files is changed, or if any of the header files they depend on changes, the file containing the `Person` class must be recompiled, as must any files that use `Person`.
+This sets up a **<font color='blue'>compilation dependency</font>** between the file defining `Person` and these header files. If any of these header files is changed, or if any of the header files they depend on changes, the file containing the `Person` class must be recompiled, as must any files that use `Person`.
 
-### Forward Declaration
+### 31.1 Forward Declaration
+
+You may want to define `Person` this way, specifying the implementation details of the class separately:
+
 ```c++
 namespace std {
 	class string; // forward declaration (an incorrectone — see below)
 } 
 class Date; 	// forward declaration
 class Address; 	// forward declaration
+
 class Person {
 public:
-	Person(const std::string& name, const Date& birthday,const Address& addr);
-	std::string name() const;
-	std::string birthDate() const;
-	std::string address() const;
+	Person(const string& name, const Date& birthday, const Address& addr);
+	string name() const;
+	string birthDate() const;
+	string address() const;
 	...
 };
 ```
 
-If that were possible, clients of `Person` would have to recompile only if the interface to the class changed.
+If that were possible, clients of `Person` would have to recompile only if the interface to the class changed. There are two problems with this idea:
 
-There are two problems with this idea:
+* `string` is not a class, it's a typedef (for `basic_string<char>`). As a result, the forward declaration for `string` is incorrect. Furthermore, you shouldn't try to manually declare parts of the standard library. Instead, simply use the proper `#includes` and be done with it.
 
-* `string` is not a class, it's a typedef (for basic_string<char>). *And  you shouldn't try to manually declare parts of the standard library. Instead, simply use the proper `#includes` and be done with it.*
-
-* The need for compilers to know the size of objects during compilation:
+* Compilers have to know the size of objects during compilation. Consider:
 
   ```c++
   int main()
   {
-      int x; // define an int
-  	Person p( params ); // define a Person
+      int x; 					// define an int
+  	Person p( params ); 	// define a Person
   	...
   }
   ```
 
-  When compilers see the definition for `x`, they know they must allocate enough space (typically on the stack) to hold an int. No problem. Each compiler knows how big an int is.
+  When compilers see the definition for `p`, they know they have to allocate enough space for a `Person`, but how are they supposed to know how big a `Person` object is? The only way they can get that information is to**<font color='red'> consult the class definition</font>**, but if it were legal for a class definition to omit the implementation details, how would compilers know how much space to allocate? 
 
-  When compilers see the definition for `p`, they know they have to allocate enough space for a `Person`, but how are they supposed to know how big a `Person` object is? The only way they can get that information is to consult the class definition, but if it were legal for a class definition to omit the implementation details, how would compilers know how much space to allocate? Instead, you can write code like this:
 
-  ```c++
-  int main()
-  {
-  	int x; 		// define an int
-  	Person *p; 	// define a pointer to a Person
-  	...
-  }
-  ```
+###  31.2 Handle classes
 
-### Handle classes -- Hide the object implementation behind a pointer: pimpl idiom (“pointer to implementation”)
+The question above fails to arise in languages like Smalltalk and Java, because, when an object is defined in such languages, **<font color='red'>compilers allocate only enough space for a pointer to an object.</font>** That is, they handle the code above as if it had been written like this:
 
-Separate `Person` into two classes, one offering only an interface, the other implementing that interface:
+```c++
+int main()
+{
+	int x; 		// define an int
+	Person *p; 	// define a pointer to a Person
+	...
+}
+```
+
+This, of course, is legal C++, so you can play the “hide the object implementation behind a pointer” game yourself. One way to do that for `Person` is to **<font color='red'>separate it into two classes, one offering only an interface, the other implementing that interface.</font>** 
+
+If the implementation class is named `PersonImpl`, `Person` would be defined like this:
 
 ```c++
 #include <string> // standard library components shouldn't be forward-declared
-#include <memory> // for tr1::shared_ptr; see below
+#include <memory> // for shared_ptr
 class PersonImpl; // forward decl of Person impl. class
 class Date; 	  // forward decls of classes used in
 class Address; 	  // Person interface
 
 class Person {
 public:
-	Person(const std::string& name, const Date& birthday, const Address& addr);
-	std::string name() const;
-	std::string birthDate() const;
-	std::string address() const;
+	Person(const string& name, const Date& birthday, const Address& addr);
+	string name() const;
+	string birthDate() const;
+	string address() const;
 	...
 private: // ptr to implementation;
-	std::tr1::shared_ptr<PersonImpl> pImpl;
+	shared_ptr<PersonImpl> pImpl;
 };
 ```
+
+Here, the main class (`Person`) contains as a data member nothing but a pointer to its implementation class (`PersonImpl`). Such a design is often said to be using the **<font color='blue'>pimpl idiom</font>** (“pointer to implementation”).
+
+With this design, clients of `Person` are divorced from the details of dates, addresses, and persons. The implementations of those classes can be modified at will, but `Person` clients need not recompile.
+
+**<font color='red'>The key to this separation is replacement of dependencies on definitions with dependencies on declarations:</font>**
+
+1. Avoid using objects when object references and pointers will do
+
+   You may define references and pointers to a type with only a declaration for the type. Defining objects of a type necessitates the presence of the type's definition.
+
+2. Depend on class declarations instead of class definitions whenever you can
+
+   Note that **<font color='red'>you never need a class definition to declare a function using that class</font>**, not even if the function passes or returns the class type by value:
+
+   ```c++
+   class Date; 					// class declaration
+   Date today(); 					// fine — no definition
+   void clearAppointments(Date d); // of Date is needed
+   ```
+
+3. Provide separate header files for declarations and definitions
+
+   Header files need to come in pairs: one for declarations, the other for definitions. As a result, library clients should always `#include` a declaration file instead of forward-declaring something themselves, and library authors should provide both header files:
+
+   ```c++
+   #include "datefwd.h" 			// header file declaring (but not defining) class Date as before
+   Date today();
+   void clearAppointments(Date d);
+   ```
+
+Classes like `Person` that employ the pimpl idiom are often called **<font color='blue'>Handle classes</font>**. Such classes forward all their function calls to the corresponding implementation classes and have those classes do the real work:
 
 ```c++
 #include "Person.h" 	// we're implementing the Person class, so we must #include its class definition
 #include "PersonImpl.h" // we must also #include PersonImpl's class definition, otherwise we couldn't call
 						// its member functions; note that PersonImpl has exactly the same public
 						// member functions as Person — their interfaces are identical
-Person::Person(const std::string& name, const Date& birthday, const Address& addr)
+Person::Person(const string& name, const Date& birthday, const Address& addr)
 	: pImpl(new PersonImpl(name, birthday, addr))
 {}
-std::string Person::name() const
+string Person::name() const
 {
 	return pImpl->name();
 }
 ```
 
-The main class (`Person`) contains as a data member nothing but a pointer o its implementation class (`PersonImpl`). Classes like Person that employ the pimpl idiom are often called **Handle classes**.
+Making `Person` a Handle class doesn't change what `Person` does, it just changes the way it does it.
 
-With this design, clients of `Person` are divorced from the details of `dates` and `addresses`. The implementations of those classes can be modified at will, but `Person` clients need not recompile.
+### 31.3 Interface classes
 
-In addition, because clients are unable to see the details of Person's implementation, clients are unlikely to write code that somehow depends on those details. This is a true separation of interface and implementation.
+An alternative to the Handle class approach is to make `Person` a special kind of **<font color='red'>abstract base class</font>** called an **<font color='blue'>Interface class</font>**. 
 
-The key to this separation is **replacement of dependencies on definitions with dependencies on declarations**: make your header files self-sufficient whenever it's practical, and when it's not, depend on declarations in other files, not definitions.
-
-* **Avoid using objects when object references and pointers will do**
-
-  You may define references and pointers to a type with only a declaration for the type. Defining objects of a type necessitates the presence of the type's definition.
-
-* **Depend on class declarations instead of class definitions whenever you can**
-
-  Note that *you never need a class definition to declare a function using that class, not even if the function passes or returns the class type* *by value*:
-
-  ```c++
-  class Date; 					// class declaration
-  Date today(); 					// fine — no definition
-  void clearAppointments(Date d); // of Date is needed
-  ```
-
-* **Provide separate header files for declarations and definitions**
-
-  Header files need to come in pairs: one for declarations, the other for definitions. As a result, library clients should always `#include` a declaration file instead of forward-declaring something themselves, and library authors should provide both header files:
-
-  ```c++
-  #include "datefwd.h" // header file declaring (but not defining) class Date as before
-  Date today();
-  void clearAppointments(Date d);
-  ```
-
-### Interface classes
-
-An alternative to the `Person` class approach is to make `Person` a special kind of abstract base class called an **Interface class**. The purpose of such a class is to specify an interface for derived classes. As a result, it typically has no data members, no constructors, a virtual destructor, and a set of pure virtual functions that specify the interface.
+The purpose of such a class is to specify an interface for derived classes. As a result, it typically has no data members, no constructors, a virtual destructor, and a set of pure virtual functions that specify the interface：
 
 ```c++
 class Person {
 public:
 	virtual ~Person();
-	virtual std::string name() const = 0;
-	virtual std::string birthDate() const = 0;
-	virtual std::string address() const = 0;
+	virtual string name() const = 0;
+	virtual string birthDate() const = 0;
+	virtual string address() const = 0;
 	...
 };
 ```
 
-Clients of this class must program in terms of `Person` pointers and references, because it's not possible to instantiate classes containing pure virtual
-functions.
+Clients of this class must program in terms of `Person` pointers and references, because it's not possible to instantiate classes containing pure virtual functions.
 
-Clients of an Interface class must have a way to create new objects. They typically do it by calling a function that plays the role of the constructor for the derived classes that are actually instantiated. Such functions are typically called **factory functions** or **virtual constructors**. They return pointers (preferably smart pointers) to dynamically allocated objects. **Such functions are often declared static inside the Interface class**:
+Clients of an Interface class must have a way to create new objects. They typically do it by calling a function that plays the role of the constructor for the derived classes that are actually instantiated. Such functions are typically called **<font color='blue'>factory functions</font>**.**<font color='red'>They return pointers (preferably smart pointers) to dynamically allocated objects.</font>** Such functions are often declared `static` inside the Interface class:
 
 ```c++
 class Person {
 public:
 	...
-    // return a tr1::shared_ptr to a new Person initialized with the given params
-	static std::tr1::shared_ptr<Person> create(const std::string& name, const Date& birthday, const Address& addr); 
+    // return a shared_ptr to a new Person initialized with the given params
+	static shared_ptr<Person> create(const string& name, const Date& birthday, const Address& addr); 
     ...
 };
 ```
@@ -2918,12 +2955,12 @@ public:
 Clients use them like this:
 
 ```c++
-std::string name;
+string name;
 Date dateOfBirth;
 Address address;
 ...
 // create an object supporting the Person interface
-std::tr1::shared_ptr<Person> pp(Person::create(name, dateOfBirth, address));
+shared_ptr<Person> pp(Person::create(name, dateOfBirth, address));
 ...
 std::cout << pp->name() // use the object via the
 << " was born on " 		// Person interface
@@ -2933,31 +2970,31 @@ std::cout << pp->name() // use the object via the
 ... 					// the object is automatically deleted when pp goes out of scope
 ```
 
-Concrete derived class `RealPerson` that provides implementations for the virtual functions it inherits:
+Concrete derived class like `RealPerson` will provide implementations for the virtual functions it inherits:
 
 ```c++
 class RealPerson: public Person {
 public:
-	RealPerson(const std::string& name, const Date& birthday, const Address& addr)
+	RealPerson(const string& name, const Date& birthday, const Address& addr)
 		: theName(name), theBirthDate(birthday), theAddress(addr)
 	{}
 	virtual ~RealPerson() {}
-	std::string name() const; 		// implementations of these
-	std::string birthDate() const; 	// functions are not shown, but
-	std::string address() const; 	// they are easy to imagine
+	string name() const; 		// implementations of these
+	string birthDate() const; 	// functions are not shown, but
+	string address() const; 	// they are easy to imagine
 private:
-	std::string theName;
+	string theName;
 	Date theBirthDate;
 	Address theAddress;
 };
 ```
 
-Given RealPerson, it is truly trivial to write `Person::create`:
+Given `RealPerson`, it is truly trivial to write `Person::create`:
 
 ```c++
-std::tr1::shared_ptr<Person> Person::create(const std::string& name, const Date& birthday, const Address& addr)
+shared_ptr<Person> Person::create(const string& name, const Date& birthday, const Address& addr)
 {
-	return std::tr1::shared_ptr<Person>(new RealPerson(name, birthday, addr));
+	return shared_ptr<Person>(new RealPerson(name, birthday, addr));
 }
 ```
 
@@ -2967,14 +3004,20 @@ A more realistic implementation of `Person::create` would create different types
 
 ## Item 32: Make sure public inheritance models “is-a.”
 
-If you write that class D (“Derived”) publicly inherits from class B (“Base”), you are telling C++ compilers (as well as human readers of your code) that every object of type D is also an object of type B, but not vice versa. You are saying that B represents a more general concept than D, that D represents a more specialized concept than B.
+If you write that class `D` (“Derived”) publicly inherits from class `B` (“Base”)：
+
+* You are telling C++ compilers that every object of type `D` is also an object of type `B`, but not vice versa. 
+* You are saying that `B` represents a more general concept than `D`, that `D` represents a more specialized concept than `B`. 
+* You are asserting that anywhere an object of type `B` can be used, an object of type `D` can be used just as well, because every object of type `D` is an object of type `B`. On the other hand, if you need an object of type `D`, an object of type `B` will not do: every `D` **<font color='blue'>is-a</font>** `B`, but not vice versa.
+
+Consider this example:
 
 ```c++
 class Person {...};
 class Student: public Person {...};
 ```
 
-Any function that expects an argument of type Person (or pointer-to-Person or reference-to-Person) will also take a Student object (or pointer-to-Student or reference-to-Student):
+Any function that expects an argument of type `Person` (or pointer-to-`Person` or reference-to-`Person`) will also take a `Student` object (or pointer-to-`Student` or reference-to-`Student`):
 
 ```c++
 void eat(const Person& p); 		// anyone can eat
@@ -2982,42 +3025,59 @@ void study(const Student& s); 	// only students study
 Person p; 	// p is a Person
 Student s; 	// s is a Student
 eat(p); 	// fine, p is a Person
-eat(s); 	// fine, s is a Student,
-			// and a Student is-a Person
+eat(s); 	// fine, s is a Student, and a Student is-a Person
 study(s); 	// fine
 study(p); 	// error! p isn't a Student
 ```
 
-The equivalence of public inheritance and is-a sounds simple, but sometimes your intuition can mislead you:
+### 32.1 Everything that applies to base classes must also apply to derived classes
+The equivalence of public inheritance and is-a sounds simple, but sometimes your intuition can mislead you. For example, it is a fact that a penguin is a
+bird, and it is a fact that birds can fly. If we naively try to express this in C++, our effort yields:
 
 ```C++
 class Bird {
 public:
-	virtual void fly(); // birds can fly
+	virtual void fly(); 		// birds can fly
 	...
 };
-class Penguin: public Bird { // penguins are birds
+class Penguin: public Bird { 	// penguins are birds
 	...
 };
 ```
 
-Suddenly we are in trouble, because this hierarchy says that penguins can fly, which we know is not true. **Public inheritance asserts that everything that applies to base class objects — everything! — also applies to derived class objects**. In the case of birds and penguins that assertion fails to hold, so using public inheritance to model their relationship is simply incorrect.
-
-Instead, we would come up with the following hierarchy, which models reality much better:
+Suddenly we are in trouble, because this hierarchy says that penguins can fly, which we know is not true. When we say that birds can fly, we don't mean that all types of birds can fly, only that, in general, birds have the ability to fly. If we were more precise, we'd recognize that there are several types of non-flying birds, and we would come up with the following hierarchy：
 
 ```c++
 class Bird {
 	... // no fly function is declared
 };
+
 class FlyingBird: public Bird {
 public:
 	virtual void fly();
 	...
 };
+
 class Penguin: public Bird {
 	... // no fly function is declared
 };
 ```
+
+There is another school of thought on how to handle what I call the “All birds can fly, penguins are birds, penguins can't fly, uh oh” problem. That is to
+redefine the `fly` function for penguins so that it generates a runtime error:
+
+```c++
+void error(const string& msg); // defined elsewhere
+class Penguin: public Bird {
+public:
+	virtual void fly() { error("Attempt to make a penguin fly!"); }
+	...
+};
+```
+
+This does not say, “Penguins can't fly.” This says, “Penguins can fly, but it's an error for them to actually try to do it.” How can you tell the difference? From the time at which the error is detected. The injunction, “Penguins can't fly,” can be enforced by compilers, but violations of the rule, “It's an error for penguins to actually try to fly,” can be detected **only at runtime**.  
+
+Public inheritance asserts that everything that applies to base class objects — everything! — also applies to derived class objects. In the case of birds and penguins, that assertion fails to hold, so using public inheritance to model their relationship is simply incorrect.
 
 ## Item 33: Avoid hiding inherited names（避免遮掩继承而来的名称）
 
