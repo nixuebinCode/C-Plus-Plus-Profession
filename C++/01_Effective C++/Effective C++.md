@@ -1772,7 +1772,7 @@ if (operator*(a, b) == operator*(c, d))
 
 Each of the calls to `operator*` will return a reference to the `static` `Rational` object inside `operator*`. Thus, `operator==` will be asked to compare the value of the `static Rational` object inside `operator*` with the value of the `static Rational` object inside `operator*`. It would be surprising indeed if they did not compare equal. Always.
 
-### 21.4 Summary
+### Summary
 
 The right way to write a function that must return a new object is to have that function return a new object:
 
@@ -2183,7 +2183,7 @@ global scope or in the same namespace as the type `T`.
 
 If no `T`-specific `swap` exists, compilers will use `swap` in `std`, thanks to the `using` declaration that makes `std::swap` visible in this function. Even then, however, compilers will prefer a `T`-specific specialization of `std::swap` over the general template, so if `std::swap` has been specialized for `T`, the specialized version will be used.
 
-### 25.5 Summary
+### Summary
 
 If the default implementation of `swap` isn't efficient enough, do the following:
 
@@ -3079,9 +3079,53 @@ This does not say, “Penguins can't fly.” This says, “Penguins can fly, but
 
 Public inheritance asserts that everything that applies to base class objects — everything! — also applies to derived class objects. In the case of birds and penguins, that assertion fails to hold, so using public inheritance to model their relationship is simply incorrect.
 
-## Item 33: Avoid hiding inherited names（避免遮掩继承而来的名称）
+## ⭐Item 33: Avoid hiding inherited names（避免遮掩继承而来的名称）
 
-When we're inside a derived class member function and we refer to something in a base class (e.g., a member function, a typedef, or a data member), compilers can find what we're referring to because derived classes inherit the things declared in base classes. The way that actually works is that **the scope of a derived class is nested inside its base class's scope.**
+We know that when we're inside a derived class member function and we refer to something in a base class (e.g., a member function, a typedef, or a data member), compilers can find what we're referring to because derived classes inherit the things declared in base classes. 
+
+The way that actually works is that **<font color='red'>the scope of a derived class is nested inside its base class's scope.</font>** 
+
+```c++
+class Base {
+private:
+	int x;
+public:
+	virtual void mf1() = 0;
+	virtual void mf2();
+	void mf3();
+	...
+};
+class Derived: public Base {
+public:
+	virtual void mf1();
+	void mf4();
+	...
+};
+```
+
+This example includes a mix of `public` and `private` names as well as names of both data members and member functions. The member functions are pure virtual, simple (impure) virtual, and non-virtual. That's to emphasize that **<font color='red'>we're talking about names. The only thing that matters in this discussion is that they're names. What they're names *of* is irrelevant. </font>**
+
+Suppose `mf4` in the derived class is implemented, in part, like this:
+
+```c++
+void Derived::mf4()
+{
+	...
+	mf2();
+	...
+}
+```
+
+When compilers see the use of the name `mf2` here, they have to figure out what it refers to. They do that by searching scopes for a declaration of something named mf2:
+
+* First they look in the **<font color='red'>local scope</font>** (that of `mf4`), but they find no declaration for anything called `mf2`. 
+* They then search the containing scope, that of the **<font color='red'>class `Derived`.</font>** They still find nothing named `mf2`
+* They move on to the next containing scope, that of the **<font color='red'>base class</font>**. There they find something named `mf2`, so the search stops. 
+* If there were no `mf2` in `Base`, the search would continue, first to the **<font color='red'>namespace(s) containing `Derived`</font>**, if any, and finally to the **<font color='red'>global scope</font>**.
+
+### 33.1 Overloads and name hiding
+
+Consider the previous example again, except this time let's overload `mf1` and `mf3`, and let's add a version of `mf3` to `Derived`：
 
 ```c++
 class Base {
@@ -3104,22 +3148,23 @@ public:
 };
 ```
 
-All functions named `mf1` and `mf3` in the base class are hidden by the functions named `mf1` and `mf3` in the derived class. <font color='red'>From the perspective of name lookup, Base::mf1 and Base::mf3 are no longer inherited by Derived!</font>
+The scope-based name hiding rule hasn't changed, so all functions named `mf1` and `mf3` in the base class are hidden by the functions named `mf1` and `mf3` in the derived class. From the perspective of name lookup, `Base::mf1` and `Base::mf3` are no longer inherited by `Derived`!
 
 ```c++
+// C++ 先 name lookup 然后再检查函数类型匹配
 Derived d;
 int x;
 ...
-d.mf1(); // fine, calls Derived::mf1
-d.mf1(x); // error! Derived::mf1 hides Base::mf1
-d.mf2(); // fine, calls Base::mf2
-d.mf3(); // fine, calls Derived::mf3
-d.mf3(x); // error! Derived::mf3 hides Base::mf3
+d.mf1(); 	// fine, calls Derived::mf1
+d.mf1(x); 	// error! Derived::mf1 hides Base::mf1
+d.mf2(); 	// fine, calls Base::mf2
+d.mf3(); 	// fine, calls Derived::mf3
+d.mf3(x); 	// error! Derived::mf3 hides Base::mf3
 ```
 
-As you can see, this applies even though the functions in the base and derived classes take different parameter types, and it also applies regardless of whether the functions are virtual or non-virtual. The function `mf3` in `Derived` hides a `Base` function named `mf3` that has a different type.
+###  33.2 Inherit the overloads with `using` declarations
 
-### Inherit the overloads with `using` declarations
+If you want to inherit the overloads, you do it with `using` declarations:
 
 ```c++
 class Base {
@@ -3135,8 +3180,8 @@ public:
 };
 class Derived: public Base {
 public:
-	using Base::mf1; // make all things in Base named mf1 
-	using Base::mf3; // and mf3 visible (and public) in Derived's scope
+	using Base::mf1; 	// make all things in Base named mf1 
+	using Base::mf3; 	// and mf3 visible (and public) in Derived's scope
 	virtual void mf1();
 	void mf3();
 	void mf4();
@@ -3146,20 +3191,20 @@ public:
 Derived d;
 int x;
 ...
-d.mf1(); // still fine, still calls Derived::mf1
-d.mf1(x); // now okay, calls Base::mf1
-d.mf2(); // still fine, still calls Base::mf2
-d.mf3(); // fine, calls Derived::mf3
-d.mf3(x); // now okay, calls Base::mf3
+d.mf1(); 	// still fine, still calls Derived::mf1
+d.mf1(x); 	// now okay, calls Base::mf1
+d.mf2(); 	// still fine, still calls Base::mf2
+d.mf3(); 	// fine, calls Derived::mf3
+d.mf3(x); 	// now okay, calls Base::mf3
 ```
 
-This means that if you **inherit** from a base class with **overloaded functions** and you want to redefine or **override** only **some of them**, you need to **include a `using` declaration** for each name you'd otherwise be hiding. If you don't, some of the names you'd like to inherit will be hidden.
+This means that if you inherit from a base class with overloaded functions and you want to redefine or override only some of them, you need to include a `using` declaration for each name you'd otherwise be hiding.
 
-### Forwarding Function
+### 33.3 Forwarding Function
 
-It's conceivable that you sometimes won't want to inherit all the functions from your base classes. Under public inheritance, this should never be the case, because it violates public inheritance's is-a relationship between base and derived classes. Under private inheritance, however, it can make sense.
+Under `private` inheritance, you sometimes won't want to inherit all the functions from your base classes. (Under `public` inheritance, this should never be the case, because it violates `public` inheritance's is-a relationship between base and derived classes.)
 
-Suppose `Derived` privately inherits from `Base`, and the only version of `mf1` that `Derived` wants to inherit is the one taking no parameters. A using declaration won't do the trick here, because a using declaration makes all inherited functions with a given name visible in the derived class. In this case, you can use a technique named **forwarding function**（转交函数）.
+For example, suppose `Derived` privately inherits from `Base`, and the only version of `mf1` that `Derived` wants to inherit is the one taking no parameters. A `using` declaration won't do the trick here, because **<font color='red'>a `using` declaration makes all inherited functions with a given name visible in the derived class</font>**. No, this is a case for a different technique, namely, a simple **<font color='blue'>forwarding function</font>**:
 
 ```c++
 class Base {
@@ -3182,11 +3227,20 @@ d.mf1(x); // error! Base::mf1() is hidden
 ```
 
 ## Item 34: Differentiate between inheritance of interface and inheritance of implementation
+
+As a class designer, you have 3 choices for the derived classes:
+
+* Sometimes you want derived classes to **<font color='red'>inherit only the interface</font>** (declaration) of a member function. 
+* Sometimes you want derived classes to **<font color='red'>inherit both a function's interface and implementation, but you want to allow them to override the implementation</font>** they inherit. 
+* Sometimes you want derived classes to **<font color='red'>inherit a function's interface and implementation without allowing them to override anything</font>**.
+
+Consider a class hierarchy for representing geometric shapes in a graphics application:
+
 ```c++
 class Shape {
 public:
 	virtual void draw() const = 0;
-	virtual void error(const std::string& msg);
+	virtual void error(const string& msg);
 	int objectID() const;
 	...
 };
@@ -3194,167 +3248,44 @@ class Rectangle: public Shape { ... };
 class Ellipse: public Shape { ... };
 ```
 
-### pure virtual function: `draw`
+Three functions are declared in the `Shape` class：
 
-Pure virtual functions must be redeclared by any concrete class that inherits them, and they typically have no definition in abstract classes.
+* `draw`, draws the current object on an implicit display, which is a **<font color='red'>pure virtual function</font>**.
 
-The purpose of declaring a pure virtual function is to have derived classes inherit a function **interface only**.
+* `error`, is called when an error needs to be reported, which is a **<font color='red'>simple virtual function</font>**.
 
-The declaration of `Shape::draw` says to designers of concrete derived classes, “You must provide a draw function, but I have no idea how you're going to implement it.”
+* `objectID`, returns a unique integer identifier for the current object, which is a **<font color='red'>non-virtual function</font>**.
 
-Incidentally, it is possible to provide a definition for a pure virtual function. but the only way to call it would be to qualify the call with the class name:
+### 34.1 pure virtual function: `draw`
 
-```c++
-Shape *ps = new Shape; 		// error! Shape is abstract
-Shape *ps1 = new Rectangle; // fine
-ps1->draw(); 				// calls Rectangle::draw
-Shape *ps2 = new Ellipse; 	// fine
-ps2->draw(); 				// calls Ellipse::draw
-ps1->Shape::draw(); 		// calls Shape::draw
-ps2->Shape::draw(); 		// calls Shape::draw
-```
+The two most salient features of pure **<font color='red'>virtual functions</font>** are that they **<font color='red'>must be redeclared by any concrete class that inherits them</font>**, and they typically have no definition in abstract classes. Put these two characteristics together, and you realize that:
 
-### simple virtual function: `error`
+**<font color='red'>The purpose of declaring a pure virtual function is to have derived classes inherit a function interface only.</font>**
 
-As usual, derived classes inherit the interface of the function, but simple virtual functions provide an implementation that derived classes may override.
+This makes perfect sense for the `Shape::draw` function, because it is a reasonable demand that all `Shape` objects must be drawable, but the `Shape` class can provide no reasonable default implementation for that function. The algorithm for drawing an `ellipse` is very different from the algorithm for
+drawing a `rectangle`, for example. The declaration of `Shape::draw` says to designers of concrete derived classes, “You **<font color='red'>must </font>**provide a draw function, but I have no idea how you're going to implement it.”
 
-The purpose of declaring a simple virtual function is to have derived classes inherit a function **interface as well as a default implementation**.
+### 34.2 simple virtual function: `error`
 
-The declaration of `Shape::error` says to designers of derived classes, “You've got to support an error function, but if you don't want to write your own, you can fall back on the default version in the `Shape` class.”
+As usual, derived classes inherit the interface of the function, but simple virtual functions provide an implementation that derived classes may override. If you think about this for a minute, you'll realize that:
 
-It turns out that it can be dangerous to allow simple virtual functions to specify both a function interface and a default implementation. 
+**<font color='red'>The purpose of declaring a simple virtual function is to have derived classes inherit a function interface as well as a default implementation.</font>**
 
-Consider a hierarchy of airplanes for XYZ Airlines. XYZ has only two kinds of planes, the Model A and the Model B, and both are flown in exactly the same way. Hence, XYZ designs the following hierarchy:
+The interface says that every class must support a function to be called when an error is encountered, but each class is free to handle errors in whatever
+way it sees fit. If a class doesn't want to do anything special, it can just fall back on the default error handling provided in the `Shape` class.
 
-```c++
-class Airport { ... }; // represents airports
-class Airplane {
-public:
-	virtual void fly(const Airport& destination);
-	...
-};
-void Airplane::fly(const Airport& destination)
-{
-	// default code for flying an airplane to the given destination
-}
-class ModelA: public Airplane { ... };
-class ModelB: public Airplane { ... };
-```
+That is, the declaration of `Shape::error` says to designers of derived classes, “You've got to support an `error` function, but if you don't want to write your own, you can fall back on the default version in the `Shape` class.”
 
-Now suppose that XYZ decides to acquire a new type of airplane, the Model C. The Model C is flown differently from Model A and Model B.
+### 34.3 non-virtual function: `objectID`
 
-XYZ's programmers add the class for Model C to the hierarchy, but foget to redefine the fly function:
+When a member function is non-virtual, it's not supposed to behave differently in derived classes. In fact, a non-virtual member function specifies an invariant over specialization, because it identifies behavior that is not supposed to change, no matter how specialized a derived class becomes. As
+such,
 
-```c++
-class ModelC: public Airplane {
-	... // no fly function is declared
-};
-Airport PDX(...); // PDX is the airport near my home
-Airplane *pa = new ModelC;
-...
-pa->fly(PDX); 		// calls Airplane::fly! This is a disaster: an attempt is being made to fly a ModelC object as if it were
-					//a ModelA or a ModelB.
-```
+**<font color='red'>The purpose of declaring a non-virtual function is to have derived classes inherit a function interface as well as a mandatory implementation.</font>**
 
-The problem here is not that `Airplane::fly` has default behavior, but that ModelC was allowed to inherit that behavior **without explicitly saying that it wanted to**. 
+You can think of the declaration for `Shape::objectID` as saying, “Every `Shape` object has a function that yields an object identifier, and that object identifier is always computed the same way. That way is determined by the definition of `Shape::objectID`, and no derived class should try to change how it's done.”
 
-#### define a non-virtual function: `defaultFly`
-
-To fix the problem above, we can sever the connection between the interface of the virtual function and its default implementation:
-
-```c++
-class Airplane {
-public:
-	virtual void fly(const Airport& destination) = 0;
-	...
-protected:
-	void defaultFly(const Airport& destination);
-};
-
-void Airplane::defaultFly(const Airport& destination)
-{
-	default code for flying an airplane to the given destination
-}
-```
-
-`Airplane::fly` has been turned into a pure virtual function, providing the interface for flying. The default implementation is in the form of an independent function, `defaultFly`,which is a non-virtual function. This means no derived class should redefine this function. Classes like `ModelA` and `ModelB` that want to use the default behavior simply make an inline call to defaultFly inside their body of fly:
-
-```c++
-class ModelA: public Airplane {
-public:
-	virtual void fly(const Airport& destination)
-	{ defaultFly(destination); }
-	...
-};
-class ModelB: public Airplane {
-public:
-	virtual void fly(const Airport& destination)
-	{ defaultFly(destination); }
-	...
-};
-```
-
-For the `ModelC` class, there is no possibility of accidentally inheriting the incorrect implementation of fly, because the pure virtual in `Airplane` forces
-`ModelC` to provide its own version of fly.
-
-```c++
-class ModelC: public Airplane {
-public:
-	virtual void fly(const Airport& destination);
-		...
-};
-void ModelC::fly(const Airport& destination)
-{
-	code for flying a ModelC airplane to the given destination
-}
-```
-
-#### implement the pure virtual function: `fly`
-
-Some people may think that adding the `defaultFlyit` function pollutes the class namespace with a proliferation of closely related function names. Instead, they write the hierarchy like this:
-
-```c++
-class Airplane {
-public:
-	virtual void fly(const Airport& destination) = 0;
-	...
-};
-void Airplane::fly(const Airport& destination) // an implementation of a pure virtual function
-{ 
-	// default code for flying an airplane to the given destination
-}
-class ModelA: public Airplane {
-public:
-	virtual void fly(const Airport& destination)
-	{ Airplane::fly(destination); }
-	...
-};
-class ModelB: public Airplane {
-public:
-	virtual void fly(const Airport& destination)
-	{ Airplane::fly(destination); }
-	...
-};
-class ModelC: public Airplane {
-public:
-	virtual void fly(const Airport& destination);
-	...
-};
-void ModelC::fly(const Airport& destination)
-{
-	// code for flying a ModelC airplane to the given destination
-}
-```
-
-This is almost exactly the same design as before, except that the body of the pure virtual function Airplane::fly takes the place of the independent function `Airplane::defaultFly`.
-
-### non-virtual function: `objectID`
-
-When a member function is non-virtual, it's not supposed to behave differently in derived classes.
-
-The purpose of declaring a non-virtual function is to have derived classes inherit a function **interface as well as a mandatory implementation**.
-
-The declaration of `Shape::objectID` says to designers of derived classes, "Every `Shape` object has a function that yields an object identifier, and that object identifier is always computed the same way. That way is determined by the definition of `Shape::objectID`, and no derived class should try to change how it's done.”
+Because a non-virtual function identifies an invariant over specialization, it should never be redefined in a derived class.
 
 ### Summary
 
@@ -3364,30 +3295,32 @@ The declaration of `Shape::objectID` says to designers of derived classes, "Ever
 
 ## Item 35: Consider alternatives to virtual functions
 
-Suppose you're working on a video game, and you're designing a hierarchy for characters in the game. And you decide to offer a member function, `healthValue`, that returns an integer indicating how healthy the character is. Because different characters may calculate their health in different ways, declaring `healthValue` virtual seems the obvious way to design things:
+Suppose you're working on a video game, and you're designing a hierarchy for characters in the game. You decide to offer a member function, `healthValue`, that returns an integer indicating how healthy the character is. Because different characters may calculate their health in different ways, declaring `healthValue` virtual seems the obvious way to design things:
 
 ```c++
 class GameCharacter {
 public:
-	virtual int healthValue() const; // return character's health rating;
-	... 							// derived classes may redefine this
+	virtual int healthValue() const; 	// return character's health rating;
+	... 								// derived classes may redefine this
 };
 ```
 
-Some other ways to approach this problem:
+This is, indeed, the obvious way to design things. Let's consider some other ways to approach this problem:
 
-### The Template Method Pattern via the Non-Virtual Interface Idiom
-Retain `healthValue` as a public member function but make it non-virtual and have it call a private virtual function to do the real work:
+### 35.1 The Template Method Pattern via the Non-Virtual Interface Idiom
+We'll begin with an interesting school of thought that argues that virtual functions should almost always be `private`. 
+
+Adherents to this school would suggest that a better design would **<font color='red'>retain `healthValue` as a public member function but make it non-virtual and have it call a `private` virtual function to do the real work, say, `doHealthValue`:</font>**
 
 ```c++
 class GameCharacter {
 public:
-	int healthValue() const // derived classes do not redefine this
+	int healthValue() const 			// derived classes do not redefine this
 	{
 		... // do "before" stuff
-		int retVal = doHealthValue(); // do the real work
+		int retVal = doHealthValue(); 	// do the real work
 		... // do "after" stuff 
-	return retVal;
+		return retVal;
 	}
 	...
 private:
@@ -3398,14 +3331,19 @@ private:
 };
 ```
 
-This basic design — having clients call private virtual functions indirectly through public non-virtual member functions — is known as the **non-virtual**
-**interface (NVI) idiom**. I call the non-virtual function (e.g., `healthValue`) the virtual function's wrapper.
+This basic design — having clients call private virtual functions indirectly through public non-virtual member functions — is known as the **<font color='blue'>non-virtual
+interface (NVI) idiom</font>**. It's a particular manifestation of the more general design pattern called **<font color='blue'>Template Method</font>**.
 
-An advantage of the NVI idiom is suggested by the “do 'before' stuff” and “do 'after' stuff” comments in the code. This means that the wrapper ensures that before a virtual function is called, the proper context is set up, and after the call is over, the context is cleaned up.
+An advantage of the NVI idiom is suggested by the “do 'before' stuff” and “do 'after' stuff” comments in the code. Those comments identify code segments guaranteed to be called before and after the virtual function that does the real work. This means that the wrapper ensures that before a virtual
+function is called, the proper context is set up, and after the call is over, the context is cleaned up.
 
-### The Strategy Pattern via Function Pointers
+### 35.2 The Strategy Pattern via Function Pointers
 
-A more dramatic design assertion would be to say that calculating a character's health is independent of the character's type — that such calculations need not be part of the character at all. For example, we could require that each character's constructor be passed a pointer to a health calculation function, and we could call that function to do the actual calculation:
+The NVI idiom is an interesting alternative to `public` virtual functions, but from a design point of view, it's little more than window dressing. After all, we're still using virtual functions to calculate each character's health. 
+
+A more dramatic design assertion would be to say that calculating a character's health is independent of the character's type — that such calculations need not be part of the character at all. 
+
+For example, we could require that each character's constructor be passed a pointer to a health calculation function, and we could call that function to do the actual calculation:
 
 ```c++
 class GameCharacter; // forward declaration
@@ -3430,11 +3368,11 @@ Compared to approaches based on virtual functions in the `GameCharacter` hierarc
 * Different instances of the same `character` type can have different health calculation functions.
 * Health calculation functions for a particular character may be changed at runtime.
 
-On the other hand, the fact that the health calculation function is no longer a member function of the `GameCharacter` hierarchy means that it has no special access to the internal parts of the object whose health it's calculating. As a general rule, the only way to resolve the need for non-member functions to have access to non-public parts of a class is to weaken the class's encapsulation: Declare the non-member functions to be friends or offer public accessor functions.
+### 35.3 The Strategy Pattern via `function`
 
-### The Strategy Pattern via tr1::function
+Replace the use of a function pointer (such as `healthFunc`) with an object of type `function`. Such objects may hold any callable entity (i.e., function pointer, function object, or member function pointer).
 
-Replace the use of a function pointer (such as `healthFunc`) with an object of type `tr1::function`. Such objects may hold any callable entity (i.e., function pointer, function object, or member function pointer):
+Here's the design we just saw, this time using `function`:
 
 ```c++
 class GameCharacter; // as before
@@ -3444,7 +3382,7 @@ public:
 	// HealthCalcFunc is any callable entity that can be called with
 	// anything compatible with a GameCharacter and that returns anything
 	// compatible with an int; see below for details
-	typedef std::tr1::function<int (const GameCharacter&)> HealthCalcFunc;
+	typedef function<int (const GameCharacter&)> HealthCalcFunc;
 	explicit GameCharacter(HealthCalcFunc hcf = defaultHealthCalc)
 		: healthFunc(hcf) {}
 	int healthValue() const { return healthFunc(*this); }
@@ -3454,54 +3392,46 @@ private:
 };
 ```
 
-An object of this `tr1::function` type (i.e., of type `HealthCalcFunc`) may hold any callable entity compatible with the target signature. To be compatible means that `const GameCharacter&` either is or can be converted to the type of the entity’s parameter, and the entity’s return type either is or can be
-implicitly converted to int.
+An object of this `function` type (i.e., of type `HealthCalcFunc`) may hold any callable entity compatible with the target signature. To be compatible means that `const GameCharacter&` either is or can be converted to the type of the entity’s parameter, and the entity’s return type either is or can be
+implicitly converted to `int`.
 
 ```c++
-short calcHealth(const GameCharacter&); // health calculation function;
-										// note non-int return type
+short calcHealth(const GameCharacter&); 		// health calculation function;
+												// note non-int return type
 
-struct HealthCalculator { // class for health calculation function objects
+struct HealthCalculator { 						// class for health calculation function objects
 	int operator()(const GameCharacter&) const
 		{ ... }
 };
 
 class GameLevel {
 public:
-	float health(const GameCharacter&) const; // health calculation mem function; note non-int return type
+	float health(const GameCharacter&) const; 	// health calculation mem function; note non-int return type
 };
 
-class EvilBadGuy: public GameCharacter { // as before
+class EvilBadGuy: public GameCharacter {
 	...
 };
-class EyeCandyCharacter: public GameCharacter { // another character type
+class EyeCandyCharacter: public GameCharacter {
 	... 
 };
 
-EvilBadGuy ebg1(calcHealth); // character using a health calculation function
-EyeCandyCharacter ecc1(HealthCalculator()); // character using a health calculation function object
+EvilBadGuy ebg1(calcHealth); 								// character using a health calculation function
+EyeCandyCharacter ecc1(HealthCalculator()); 				// character using a health calculation function object
 
 GameLevel currentLevel;
-EvilBadGuy ebg2(std::tr1::bind(&GameLevel::health, currentLevel, _1)); // character using a health calculation member function
+EvilBadGuy ebg2(bind(&GameLevel::health, currentLevel, _1)); // character using a health calculation member function
 ```
 
-#### the call to tr1::bind
+### ⭐35.4 The “Classic” Strategy Pattern
 
-`GameLevel::health` is a function that is declared to take one parameter (a reference to a `GameCharacter`), but **it really takes two, because it also gets an implicit `GameLevel` parameter — the one this points to**.
-
-Health calculation functions for `GameCharacters`, however, take a single parameter: the `GameCharacter` whose health is to be calculated.
-
-If we're to use `GameLevel::health` for `ebg2`'s health calculation, we have to somehow “adapt” it so that instead of taking two parameters (a `GameCharacter` and a `GameLevel`), it takes only one (a `GameCharacter`).
-
-In this example, we always want to use `currentLevel` as the `GameLevel` object for `ebg2`'s health calculation, so we “bind” `currentLevel` as the `GameLevel` object to be used each time `GameLevel::health` is called
-
-### The “Classic” Strategy Pattern
-
-Make the health-calculation function a virtual member function of a separate health-calculation hierarchy.
+If you're more into design patterns than C++ coolness, a more conventional approach to Strategy would be to **<font color='red'>make the health-calculation function a virtual member function of a separate health-calculation hierarchy.</font>** The resulting hierarchy design would look like this:
 
  ![image-20220329160105260](images\image-20220329160105260.png)
 
-Each object of type GameCharacter contains a pointer to an object from the HealthCalcFunc hierarchy:
+Each object of type `GameCharacter` contains a pointer to an object from the `HealthCalcFunc` hierarchy.
+
+Here's the corresponding code skeleton:
 
 ```c++
 class GameCharacter; // forward declaration
@@ -3526,27 +3456,7 @@ private:
 };
 ```
 
-This approach offers the possibility that an existing health calculation algorithm can be tweaked by adding a derived class to the HealthCalcFunc hierarchy.
-
-### Summary
-
-The alternatives to virtual functions:
-
-* **non-virtual interface idiom (NVI idiom)**
-
-  A form of the *Template Method design pattern* that wraps public non-virtual member functions around less accessible virtual functions.
-
-* **Replace virtual functions with function pointer data members**
-
-  A stripped-down manifestation of the *Strategy design pattern*.
-
-* **Replace virtual functions with `tr1::function` data members**
-
-  Allowing use of any callable entity with a signature compatible with what you need. This, too, is a form of the `Strategy design pattern`
-
-* **Replace virtual functions in one hierarchy with virtual functions in another hierarchy**
-
-  This is the conventional implementation of the *Strategy design pattern*
+This approach offers the possibility that an existing health calculation algorithm can be tweaked by adding a derived class to the `HealthCalcFunc` hierarchy.
 
 ## Item 36: Never redefine an inherited non-virtual function
 Suppose we have the following class hierarchy:
@@ -3557,6 +3467,7 @@ public:
 	void mf();
 	...
 };
+
 class D: public B {
 public:
 	void mf(); // hides B::mf; see Item 33
@@ -3571,12 +3482,15 @@ D *pD = &x; 	// get pointer to x
 pD->mf(); 		// calls D::mf
 ```
 
-The reason for this two-faced behavior is that non-virtual functions like `B::mf` and `D::mf` are **statically bound**. That means that because `pB` is declared to be of type pointer-to-`B`, non-virtual functions invoked through `pB` will always be those defined for class `B`, even if `pB` points to an object of a class derived from `B`.
+In both cases you're invoking the member function `mf` on the object `x`. Because it's the same function and the same object in both cases, it should behave the same way, right? It might not.
 
-Virtual functions, on the other hand, are **dynamically bound**.
+Non-virtual functions like `B::mf` and `D::mf` are **<font color='red'>statically bound</font>**. That means that because `pB` is declared to be of type pointer-to-`B`, non-virtual functions invoked through `pB` will always be those defined for class `B`, even if `pB` points to an object of a class derived from `B`, as it does in this example.
 
-If you are writing class `D` and you redefine a non-virtual function `mf` that you inherit from class `B`, `D` objects will likely exhibit inconsistent behavior. In
-particular, any given `D` object may act like either a `B` or a `D` when `mf` is called, and the determining factor will have nothing to do with the object itself, but with the declared type of the pointer or reference that points to it.
+Item 32 explains that `public` inheritance means is-a, and Item 34 describes why declaring a non-virtual function in a class establishes an invariant over specialization for that class. If `D` redefines `mf`, there is a contradiction in your design.
+
+1.  If `D` really needs to implement `mf` differently from `B`, and if every `B` object — no matter how specialized — really has to use the `B` implementation for `mf`, then it's simply not true that every `D` is-a `B`. In that case, `D` shouldn't publicly inherit from `B`. 
+2. On the other hand, if `D` really has to publicly inherit from `B`, and if `D` really needs to implement `mf` differently from `B`, then it's just not true that `mf` reflects an invariant over specialization for `B`. In that case, `mf` should be virtual. 
+3. Finally, if every `D` really is-a `B`, and if `mf` really corresponds to an invariant over specialization for `B`, then `D` can't honestly need to redefine `mf`, and it shouldn't try to.
 
 ## Item 37: Never redefine a function's inherited default parameter value
 
