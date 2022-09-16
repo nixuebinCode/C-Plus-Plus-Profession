@@ -4562,9 +4562,72 @@ int MaxDiff(const int* numbers, unsigned length){
 }
 ```
 
-## ？面试题64：求1 +2+···+n
+## 面试题64：求1 +2+···+n
 
 ### 题目
+
+求 1 +2+···+n，要求不能使用乘除法、for、while、if、else、switch、case 等关键字及条件判断语句（A？B：C）
+
+### 解题思路一：利用构造函数求解
+
+求解该问题最简单的做法就是利用循环来解决，但是题中要求我们不能使用相关的循环语句。我们完全可以不用 for 和 while 来达到这个效果。我们先定义一个类型，接着创建 n 个该类型的实例（最简单的方法就是创建一个包含 n 个元素的该类型的数组），那么这个类型的构造函数就会被调用 n 次。我们将累加相关的代码放到构造函数里即可。
+
+### 代码实现
+
+```c++
+class Temp {
+public:
+	Temp() {
+		++number;
+		sum += number;
+	}
+	static int getVal() {
+		return sum;
+	}
+	static void reset() {
+		sum = 0;
+		number = 0;
+	}
+private:
+	static int sum;
+	static int number;
+};
+int Temp::sum = 0;
+int Temp::number = 0;
+
+unsigned Sum_Solution1(unsigned n) {
+	Temp::reset();
+	Temp *ptr = new Temp[n];
+	int ret = Temp::getVal();
+	delete[] ptr;
+	return ret;
+}
+```
+
+### 解题思路二：利用函数指针求解
+
+循环的另外一种代替方案就是递归，但是递归需要 if 语句判断递归终止的条件。既然不能在一个函数中判断是不是应该终止递归，那么我们不妨定义两个函数，一个函数充当递归函数的角色，另一个函数处理终止递归的情况。
+
+我们需要做的是在两个函数里二选一，即问题是如何把数值变量 n 转换成布尔值。我们知道对一个 int 类型的整数两次取反后可以将值转化为 0 或者 1。即当 n 不为 0 时，`!!n` 的值为 `true`，即为 `1`；当 n 为 0 时，`!!n` 的值为 `false`，即为 `0`。我们可以利用这个特点，将上文提到的两个函数存在一个数组中，根据 `!!n` 的值来做为数组的下标，从而在 n 为 0 时，选择终止递归的函数进行执行。
+
+### 代码实现
+
+```c++
+typedef unsigned(*pf) (unsigned);
+
+unsigned Sum_Solution2_Terminator(unsigned n) {
+	return 0;
+}
+
+unsigned Sum_Solution2(unsigned n) {
+	static pf funcArry[2] = { Sum_Solution2_Terminator , Sum_Solution2 };
+	return n + funcArry[!!n](n - 1);
+}
+```
+
+### ？解题思路三：利用模板元编程求解
+
+
 
 ## 面试题65：不用加减乘除做加法
 
