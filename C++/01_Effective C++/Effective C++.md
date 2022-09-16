@@ -3494,15 +3494,13 @@ Item 32 explains that `public` inheritance means is-a, and Item 34 describes why
 
 ## Item 37: Never redefine a function's inherited default parameter value
 
-As discussed in item 36, you should not redefine a non-virtual function, so we can safely limit our discussion here to the situation in which you *inherit a virtual function with a default parameter value.*
+As discussed in item 36, you should not redefine a non-virtual function, so we can safely limit our discussion here to the situation in which you **inherit a virtual function with a default parameter value.**
 
-Remember that virtual functions are dynamically bound, but default parameter values are statically bound.
+### 37.1 virtual functions are dynamically bound
 
-#### virtual functions are dynamically bound
+#### Static Type
 
-An object's **static type** is the type you declare it to have in the program text.
-
-An object's **dynamic type** is determined by the type of the object to which it currently refers.
+An object's **<font color='blue'>static type</font>** is the type you declare it to have in the program text. Consider this class hierarchy:
 
 ```c++
 // a class for geometric shapes
@@ -3513,21 +3511,38 @@ public:
 	virtual void draw(ShapeColor color = Red) const = 0;
 	...
 };
+
 class Rectangle: public Shape {
 public:
-// notice the different default parameter value — bad!
-virtual void draw(ShapeColor color = Green) const;
+	// notice the different default parameter value — bad!
+	virtual void draw(ShapeColor color = Green) const;
 ...
 };
+
 class Circle: public Shape {
 public:
 	virtual void draw(ShapeColor color) const;
 	...
 };
+```
 
+Now consider these pointers:
+
+```c++
 Shape *ps; 					// static type = Shape*		doesn't really have a dynamic type 
 Shape *pc = new Circle; 	// static type = Shape*		dynamic type = Circle*
 Shape *pr = new Rectangle; 	// static type = Shape*		dynamic type = Rectangle*
+```
+
+In this example, `ps`, `pc`, and `pr` are all declared to be of type pointer-to-`Shape`, so they all have that as their static type.
+
+#### Dynamic Type
+
+Dynamic types, as their name suggests, can change as a program runs, typically through assignments:
+
+```c++
+ps = pc; 		// ps's dynamic type is now Circle*
+ps = pr; 		// ps's dynamic type is now Rectangle*
 ```
 
 Virtual functions are dynamically bound, meaning that the particular function called is determined by the dynamic type of the object through which it's
@@ -3538,9 +3553,9 @@ pc->draw(Shape::Red); // calls Circle::draw(Shape::Red)
 pr->draw(Shape::Red); // calls Rectangle::draw(Shape::Red)
 ```
 
-### default parameter values are statically bound
+### 37.2 default parameter values are statically bound
 
-That means you may end up invoking a virtual function defined in a derived class but using a default parameter value from a base class:
+Virtual functions are dynamically bound, but default parameters are statically bound. That means you may end up **<font color='red'>invoking a virtual function defined in a derived class but using a default parameter value from a base class:</font>**
 
 ```c++
 pr->draw(); // calls Rectangle::draw(Shape::Red)!
@@ -3548,27 +3563,11 @@ pr->draw(); // calls Rectangle::draw(Shape::Red)!
 
 In this case, pr's dynamic type is `Rectangle*`, so the `Rectangle` virtual function is called, just as you would expect. In `Rectangle::draw`, the default parameter value is `Green`. Because `pr`'s static type is `Shape*`, however, the default parameter value for this function call is taken from the `Shape` class, not the `Rectangle` class!
 
-### Use alternative designs to virtual function
+Why does C++ insist on acting in this perverse manner? The answer has to do with **runtime efficiency**. If default parameter values were dynamically bound, compilers would have to come up with a way to determine the appropriate default value(s) for parameters of virtual functions at runtime, which would be slower and more complicated than the current mechanism of determining them **during compilation**.
 
-What happens if you try to offer default parameter values to users of both base and derived classes：
+### ⭐37.3 Use alternative designs to virtual function
 
-```c++
-class Shape {
-public:
-	enum ShapeColor { Red, Green, Blue };
-	virtual void draw(ShapeColor color = Red) const = 0;
-	...
-};
-class Rectangle: public Shape {
-public:
-	virtual void draw(ShapeColor color = Red) const;
-	...
-};
-```
-
-Code duplication with dependencies: if the default parameter value is changed in `Shape`, all derived classes that repeat it must also be changed.
-
-Instead, use the *non-virtual interface idiom* (NVI idiom):
+When you're having trouble making a virtual function behave the way you'd like, it's wise to consider alternative designs introduced in item 35. One of the alternatives is the **<font color='blue'>non-virtual interface idiom</font>** (NVI idiom). Here we have the non-virtual function specify the default parameter, while the virtual functions does the actual work:
 
 ```c++
 class Shape {
@@ -3595,132 +3594,112 @@ private:
 Because non-virtual functions should never be overridden by derived classes (see Item 36), this design makes clear that the default value for `draw`'s color parameter should always be `Red`.
 
 ## Item 38: Model “has-a” or “is-implemented-in-terms of” through composition
-Composition is that objects of one type contain objects of another type.
-
-Composition means either “has a” or “is-implemented-in-terms-of” :
-
-* Some objects in your programs correspond to things in the world you are modeling, e.g., people, vehicles, video frames, etc. Such objects are part of the **application domain**. When composition occurs between objects in the application domain, it expresses a has-a relationship.
-
-* Other objects are purely implementation artifacts, e.g., buffers, mutexes, search trees, etc. These kinds of objects correspond to your software's
-  **implementation domain**. When it occurs in the implementation domain, it expresses an is-implemented-in-terms-of relationship.
-
-### has-a relationship
+Composition is the relationship between types that arises when objects of one type contain objects of another type. For example:
 
 ```c++
-class Address { ... }; // where someone lives
+class Address { ... };
 class PhoneNumber { ... };
 class Person {
 public:
 	...
 private:
-	std::string name; 			// composed object
+	string name; 				// composed object
 	Address address; 			// ditto
 	PhoneNumber voiceNumber; 	// ditto
 	PhoneNumber faxNumber; 		// ditto
 };
 ```
 
-In this example, `Person` objects are composed of `string`, `Address`, and `PhoneNumber` objects. 
+In this example, `Person` objects are composed of `string`, `Address`, and `PhoneNumber` objects.
 
-The Person class above demonstrates the has-a relationship. A Person object has a name, an address, and voice and fax telephone numbers.
+Item 32 explains that public inheritance means “is-a.” Composition means either “**<font color='blue'>has a</font>**” or “**<font color='blue'>is-implemented-in-terms-of</font>**” :
 
-### is-implemented-in-terms-of relationship
+* Some objects in your programs correspond to things in the world you are modeling, e.g., people, vehicles, video frames, etc. Such objects are part of the **application domain**.
 
-Suppose you need a template for classes representing fairly small sets of objects, i.e., collections without duplicates. Your first instinct is to employ the standard library's `set` template, but it typically incurs an overhead of three pointers per element. 
+* Other objects are purely implementation artifacts, e.g., buffers, mutexes, search trees, etc. These kinds of objects correspond to your software's
+  **implementation domain**.
 
-Firstly, you decide to have your nascent `Set` template inherit from `list`:
+When composition occurs between objects in the application domain, it expresses a has-a relationship. When it occurs in the implementation domain, it expresses an is-implemented-in-terms-of relationship.
+
+The `Person` class above demonstrates the has-a relationship. A `Person` object has a name, an address, and voice and fax telephone numbers. Confusion between the roles of is-a and has-a is relatively rare.
+
+### 38.1 The difference between is-a and is-implemented-in-terms-of
+
+Suppose you need a template for classes representing fairly small sets of objects, i.e., collections without duplicates. Your first instinct is to employ the standard library's `set` template, but it typically incurs an overhead of three pointers per element. It seems you'll need to write your own template after
+all:
+
+Firstly, you decide to have your nascent `Set` template inherit from `list`. That is, `Set<T>` will inherit from `list<T>`. After all, in your implementation, a
+`Set` object will in fact be a `list` object. You thus declare your `Set` template like this:
 
 ```c++
 template<typename T> // the wrong way to use list for Set
-class Set: public std::list<T> { ... };
+class Set: public list<T> { ... };
 ```
 
 Public inheritance means is-a. However, a `list` object may contain duplicates. In contrast, a `Set` may not contain duplicates. It is thus untrue that a `Set` is-a `list`, because some of the things that are true for `list` objects are not true for `Set` objects.
 
-The right way is to realize that a `Set` object can be implemented in terms of a `list` object:
+Because the relationship between these two classes isn't is-a, public inheritance is the wrong way to model that relationship. The right way is to realize that a `Set` object can be implemented in terms of a `list` object:
 
 ```c++
-template<class T> // the right way to use list for Set
+template<class T> 				// the right way to use list for Set
 class Set {
 public:
 	bool member(const T& item) const;
 	void insert(const T& item);
 	void remove(const T& item);
-	std::size_t size() const;
+	size_t size() const;
 private:
-	std::list<T> rep; // representation for Set data
+	list<T> rep; 				// representation for Set data
 };
 ```
 
-`Set`'s member functions can lean heavily on functionality already offered by `list` and other parts of the standard library：
+## Item 39: Use `private` inheritance judiciously
 
-```c++
-template<typename T>
-bool Set<T>::member(const T& item) const
-{
-	return std::find(rep.begin(), rep.end(), item) != rep.end();
-} 
-template<typename T>
-void Set<T>::insert(const T& item)
-{
-	if (!member(item)) rep.push_back(item);
-} 
-template<typename T>
-void Set<T>::remove(const T& item)
-{
-	typename std::list<T>::iterator it =  std::find(rep.begin(), rep.end(), item);
-	if (it != rep.end()) rep.erase(it);
-}
-template<typename T>
-std::size_t Set<T>::size() const
-{
-	return rep.size();
-}
-```
+### 39.1 `private` inheritance
 
-## Item 39: Use private inheritance judiciously
+It's worth repeating a portion of the `Student` example in Item 32 using `private` inheritance instead of `public` inheritance:
 
-### private inheritance
 ```c++
 class Person { ... };
-class Student: private Person { ... }; // inheritance is now private
-void eat(const Person& p); // anyone can eat
-void study(const Student& s); // only students study
+class Student: private Person { ... }; 	// inheritance is now private
+void eat(const Person& p); 				// anyone can eat
+void study(const Student& s); 			// only students study
 Person p; 		// p is a Person
 Student s; 		// s is a Student
 eat(p); 		// fine, p is a Person
 eat(s); 		// error! a Student isn't a Person
 ```
 
-* In contrast to public inheritance, compilers will generally not convert a derived class object (such as `Student`) into a base class object (such as `Person`). That's why the call to `eat` fails for the object `s`.
-* Members inherited from a private base class become private members of the derived class, even if they were protected or public in the base class.
+* In contrast to `public` inheritance, compilers will generally not convert a derived class object (such as `Student`) into a base class object (such as `Person`). That's why the call to `eat` fails for the object `s`.
+* Members inherited from a `private` base class become `private` members of the derived class, even if they were `protected` or `public` in the base class.
 
-### Private inheritance means is-implemented-in-terms-of
+**<font color='red'>Private inheritance means is-implemented-in-terms-of.</font>** If you make a class `D` privately inherit from a class `B`, you do so because you are interested in taking advantage of some of the features available in class `B`, not because there is any conceptual relationship between objects of types `B` and `D`. As such, `private` inheritance is purely an implementation technique.
 
-If you make a class `D` privately inherit from a class `B`, you do so because you are interested in taking advantage of some of the features available in class `B`, not because there is any conceptual relationship between objects of types `B` and `D`. As such, private inheritance is purely an implementation technique.
+Using the terms introduced in Item 34, `private` inheritance means that implementation only should be inherited; interface should be ignored. If `D` privately inherits from `B`, it means that `D` objects are implemented in terms of `B` objects, nothing more. Private inheritance means nothing during software design, only during software implementation.
 
-Private inheritance means nothing during *software design*, only during *software implementation*.
+### 39.2 `private` inheritance and composition
 
-### Private inheritance and composition
+Both composition and `private` inheritance mean is-implemented-in-terms-of, but **<font color='red'>composition is easier to understand, so you should use it whenever you can.</font>**
 
-Both composition and private inheritance mean is-implemented-in-terms-of, but composition is easier to understand, so you should use it whenever you can:
+Suppose we're working on an application involving `Widget`s. And we decide to modify the `Widget` class to keep track of how many times each member function is called. At runtime, we'll periodically examine that information. To make this work, we'll need to set up a timer of some kind so that we'll know when it's time to collect the usage statistics.
 
-Suppose we're working on an application involving `Widgets`. And we decide to modify the Widget class to keep track of how many times each member function is called. At runtime, we'll periodically examine that information:
+Preferring to reuse existing code over writing new code, we rummage around in our utility toolkit and are pleased to find the following class:
 
 ```c++
-// A Timer object can be configured to tick
-// with whatever frequency we need, and on each tick, it calls a virtual function.
+// A Timer object can be configured to tick with whatever frequency we need,
+// and on each tick, it calls a virtual function.
+// We can redefine that virtual function so that it examines the current state of the Widget world.
 class Timer {
 public:
 	explicit Timer(int tickFrequency);
 	virtual void onTick() const; // automatically called for each tick
 	...
 };
-
-
 ```
 
-#### use private inheritance
+#### use `private` inheritance
+
+In order for `Widget` to redefine a virtual function in `Timer`, `Widget` must inherit from `Timer`. But `public` inheritance is inappropriate in this case. It's not true that a `Widget` is-a `Timer`. We thus inherit privately:
 
 ```c++
 class Widget: private Timer {
@@ -3730,11 +3709,11 @@ private:
 };
 ```
 
-By virtue of private inheritance, Timer's public `onTick` function becomes private in `Widget`, and we keep it there when we redeclare it.
+By virtue of private inheritance, `Timer`'s public `onTick` function becomes `private` in `Widget`, and we keep it there when we redeclare it. What's more, putting `onTick` in the `public` interface would mislead clients into thinking they could call it, and that would violate Item 18.
 
 #### use composition
 
-We'd just declare a private nested class inside `Widget` that would publicly inherit from `Timer`, redefine `onTick` there, and put an object of that type inside `Widget`.
+We can just declare a `private` nested class inside `Widget` that would `publicly` inherit from `Timer`, redefine `onTick` there, and put an object of that type inside `Widget`:
 
 ```c++
 class Widget {
@@ -3749,34 +3728,42 @@ private:
 };
 ```
 
-Two reasons why you might prefer public inheritance plus composition over private inheritance:
+ ![image-20220916104711398](images/image-20220916104711398.png)
 
-* You might want to design `Widget` to allow for derived classes, but you might also want to prevent derived classes from redefining `onTick`. If `Widget` inherits from `Timer`, that's not possible, not even if the inheritance is private. (Recall from Item 35 that **derived classes may redefine virtual functions even if they are not permitted to call them**.) But if `WidgetTimer` is private in `Widget` and inherits from `Timer`, `Widget`'s derived classes have no access to `WidgetTimer`, hence can't inherit from it or redefine its virtual functions.
+
+
+This design is more complicated than the one using only `private` inheritance, because it involves both (`public`) inheritance and composition, as well as the introduction of a new class (`WidgetTimer`).
+
+But there are two reasons why you might prefer `public` inheritance plus composition over `private` inheritance:
+
+* You might want to design `Widget` to allow for derived classes, but you might also want to prevent derived classes from redefining `onTick`. If `Widget` inherits from `Timer`, that's not possible, not even if the inheritance is `private`. (Recall from Item 35 that **derived classes may redefine virtual functions even if they are not permitted to call them**.) But if `WidgetTimer` is `private` in `Widget` and inherits from `Timer`, `Widget`'s derived classes have no access to `WidgetTimer`, hence can't inherit from it or redefine its virtual functions.
 
 * You might want to minimize `Widget`'s compilation dependencies. If `Widget` inherits from `Timer`, `Timer`'s definition must be available when `Widget` is compiled, so the file defining `Widget` probably has to `#include Timer.h`. 
 
   On the other hand, if `WidgetTimer` is moved out of `Widget` and `Widget` contains only a pointer to a `WidgetTimer`, `Widget` can get by with a simple declaration for the `WidgetTimer` class; it need not `#include` anything to do with `Timer`.
 
-#### private inheritance can enable the empty base optimization
+### 39.3 EBO (empty base optimization, 空白基类最优化）
 
-When you're dealing with a class that has no data in it. Such classes have no non-static data members; no virtual functions (because the existence of such functions adds a vptr to each object); and no virtual base classes (because such base classes also incur a size overhead — see Item 40).
+There was an edge case involving space optimization that could nudge you to prefer private inheritance over composition.The edge case is when you're dealing with a class that has no data in it:
 
-Conceptually, objects of such empty classes should use no space, because there is no per-object data to be stored. However, there are technical reasons for C++ decreeing that freestanding objects must have non-zero size:
+Such classes have no non-static data members; no virtual functions (because the existence of such functions adds a `vptr` to each object); and no virtual base classes (because such base classes also incur a size overhead — see Item 40). Conceptually, objects of such empty classes should use no space, because there is no per-object data to be stored. 
+
+However, there are technical reasons for C++ decreeing that **<font color='red'>freestanding objects must have non-zero size</font>**:
 
 ```c++
 class Empty {}; 	// has no data, so objects should use no memory
 class HoldsAnInt { 	// should need only space for an int
 private:
 	int x;
-	Empty e; // should require no memory
+	Empty e; 		// should require no memory
 };
 ```
 
 You'll find that `sizeof(HoldsAnInt) > sizeof(int)`; an `Empty` data member requires memory. 
 
-With most compilers, `sizeof(Empty)` is 1, because C++'s edict against zero-size **freestanding objects** is typically satisfied by the silent insertion of a char into “empty” objects. However, **alignment** requirements may cause compilers to add padding to classes like `HoldsAnInt`, so it's likely that `HoldsAnInt` objects wouldn't gain just the size of a char, they would actually enlarge enough to hold a second int.
+With most compilers, `sizeof(Empty)` is 1, because C++'s edict against zero-size **freestanding objects** is typically satisfied by the**<font color='red'> silent insertion of a `char` into “empty” objects.</font>** However, **alignment** requirements may cause compilers to add padding to classes like `HoldsAnInt`, so it's likely that `HoldsAnInt` objects wouldn't gain just the size of a `char`, they would actually enlarge enough to hold a second `int`.
 
-This constraint doesn't apply to base class parts of derived class objects, because they're not freestanding:
+But perhaps you've noticed that I've been careful to say that “freestanding” objects mustn't have zero size. This constraint doesn't apply to base class parts of derived class objects, because they're not freestanding.
 
 ```c++
 class HoldsAnInt: private Empty {
@@ -3785,27 +3772,27 @@ private:
 };
 ```
 
-You're almost sure to find that `sizeof(HoldsAnInt) == sizeof(int)`. This is known as the *empty base optimization* (EBO). 
+You're almost sure to find that `sizeof(HoldsAnInt) == sizeof(int)`. This is known as the **<font color='blue'>empty base optimization</font>** (EBO). 
 
-Note that EBO is generally viable only under single inheritance.
+If you're a library developer whose clients care about space, the EBO is worth knowing about. Also worth knowing is that the EBO is generally viable only under single inheritance.
 
 ## Item 40: Use multiple inheritance judiciously
 
 MI (Multiple inheritance)  just means inheriting from more than one base class.
 
-### ambiguity issues
+### 40.1 Ambiguity issues
 
 One of the first things to recognize is that when MI enters the designscape, it becomes possible to inherit the same name (e.g., function, typedef, etc.) from more than one base class:
 
 ```c++
 class BorrowableItem { // something a library lets you borrow
 public:
-	void checkOut(); // check the item out from the library
+	void checkOut(); 		// check the item out from the library
 	...
 };
 class ElectronicGadget {
 private:
-	bool checkOut() const; // perform self-test,return whether test succeeds
+	bool checkOut() const; 	// perform self-test,return whether test succeeds
 };
 class MP3Player: public BorrowableItem, public ElectronicGadget	   // note MI here
 { ... }; 				 										   // class definition is unimportant
@@ -3814,7 +3801,11 @@ MP3Player mp;
 mp.checkOut(); // ambiguous! which checkOut?
 ```
 
-The call to `checkOut` is ambiguous, even though only one of the two functions is accessible. (`checkOut` is public in `BorrowableItem` but private in `ElectronicGadget`.)--before seeing whether a function is accessible, C++ first identifies the function that's the best match for the call.
+The call to `checkOut` is ambiguous, even though only one of the two functions is accessible. (`checkOut` is `public` in `BorrowableItem` but `private` in `ElectronicGadget`.)
+
+That's in accord with the C++ rules for resolving calls to overloaded functions: before seeing whether a function is accessible, C++ first identifies the function that's the best match for the call. It checks accessibility only after finding the best-match function. 
+
+In this case, the name `checkOut` is ambiguous during name lookup, so neither function overload resolution nor best match determination takes place. The accessibility of `ElectronicGadget::checkOut` is therefore never examined.
 
 To resolve the ambiguity, you must specify which base class's function to call:
 
@@ -3822,9 +3813,12 @@ To resolve the ambiguity, you must specify which base class's function to call:
 mp.BorrowableItem::checkOut(); // ah, that checkOut...
 ```
 
-### virtual inheritance
+### 40.2 deadly MI diamond（钻石型多重继承）and virtual base class
 
-Considering the following hierachy:
+Multiple inheritance just means inheriting from more than one base class, but it is not uncommon for MI to be found in hierarchies that have higher-level
+base classes, too.（**<font color='red'>多重继承的意思是继承一个以上的 base classes, 但这些 base classes 并不常在继承体系中又有更高级的base classes</font>**）
+
+That can lead to what is sometimes known as the “**<font color='blue'>deadly MI diamond</font>**”. Consideri the following hierachy:
 
 ```c++
 class File { ... };
@@ -3836,14 +3830,14 @@ class IOFile: public InputFile, public OutputFile
 
  ![image-20220401195227252](images\image-20220401195227252.png)
 
-Any time you have an inheritance hierarchy with more than one path between a base class and a derived class (such as between `File` and `IOFile` above, which has paths through both `InputFile` and `OutputFile`), you must confront the question of whether you want the data members in the base class to be **replicated** for each of the paths.
+Any time you have an inheritance hierarchy with more than one path between a base class and a derived class (such as between `File` and `IOFile` above, which has paths through both `InputFile` and `OutputFile`), you must confront the question of **<font color='red'>whether you want the data members in the base class to be replicated for each of the paths.</font>**
 
 For example, suppose that the `File` class has a data member, `fileName`. How many copies of this field should `IOFile` have? There may be two possible answers:
 
 * `IOFile` inherits a copy from each of its base classes, so that suggests that `IOFile` should have **two** `fileName` data members.
 * Simple logic says that an `IOFile` object has **only one** file name, so the `fileName` field it inherits through its two base classes should not be replicated.
 
-C++'s  default is to perform the replication. If that's not what you want, you must make the class with the data (i.e., `File`) a **virtual base class**. To do that, you have all classes that **immediately inherit** from it use **virtual inheritance**:
+**<font color='red'>C++'s  default is to perform the replication.</font>** If that's not what you want, you must make **<font color='red'>the class with the data</font>** (i.e., `File`) a **<font color='blue'>virtual base class</font>**. To do that, you have all classes that **immediately inherit** from it use **virtual inheritance**:
 
 ```c++
 class File { ... };
@@ -3861,16 +3855,14 @@ Virtual inheritance imposes costs in size, speed, and complexity of initializati
 
 * Objects created from classes using virtual inheritance are generally larger than they would be without virtual inheritance
 * Access to data members in virtual base classes is also slower than to those in non-virtual base classes
-* The responsibility for initializing a virtual base is borne by the most derived class in the hierarchy.
+* The responsibility for initializing a virtual base is borne by **the most derived class in the hierarchy**（继承体系的最底层）.
+  * Classes derived from virtual bases that require initialization must be aware of their virtual bases, no matter how far distant the bases are.
+  * when a new derived class is added to the hierarchy, it must assume initialization responsibilities for its virtual bases (both direct and indirect).
 
-#### advice on virtual base classes
 
-* Don't use virtual bases unless you need to. By default, use non-virtual inheritance. 
-* If you must use virtual base classes, try to avoid putting data in them. That way you won't have to worry about oddities in the initialization (and, as it turns out, assignment) rules for such classes
+### 40.3 An example that MI can be helpful
 
-### An example that MI can be helpful
-
-Multiple inheritance does have legitimate uses. One scenario involves combining **public inheritance from an Interface class** with **private inheritance from a class that helps with implementation**.
+Multiple inheritance does have legitimate uses. One scenario involves **<font color='red'>combining public inheritance from an Interface class with private inheritance from a class that helps with implementation.</font>**
 
 Consider the following C++ Interface class (see Item 31) for modeling persons:
 
@@ -3878,15 +3870,24 @@ Consider the following C++ Interface class (see Item 31) for modeling persons:
 class IPerson {
 public:
 	virtual ~IPerson();
-	virtual std::string name() const = 0;
-	virtual std::string birthDate() const = 0;
+	virtual string name() const = 0;
+	virtual string birthDate() const = 0;
 };
 ```
 
-Now we will create some concrete class derived from `IPerson` , suppose this class is called `CPerson`. As a concrete class, `CPerson` must provide
-implementations for the pure virtual functions it inherits from `IPerson`. It could write these from scratch, but it would be better to take advantage of
-existing components that do most or all of what's necessary. For example, suppose an old database-specific class `PersonInfo` offers the essence of what
-`CPerson` needs:
+`IPerson` clients must program in terms of `IPerson` pointers and references, because abstract classes cannot be instantiated. To create objects that can be manipulated as `IPerson` objects, clients of `IPerson` use factory functions to instantiate concrete classes derived from `IPerson`:
+
+```c++
+// factory function to create a Person object from a unique database ID
+shared_ptr<IPerson> makePerson(DatabaseID personIdentifier);
+// function to get a database ID from the user
+DatabaseID askUserForDatabaseID();
+
+DatabaseID id(askUserForDatabaseID());
+shared_ptr<IPerson> pp(makePerson(id));
+```
+
+To let `makePerson` create the objects to which it returns pointers, we will create some concrete class derived from `IPerson` , suppose this class is called `CPerson`. And suppose an old database-specific class `PersonInfo` offers the essence of what `CPerson` needs:
 
 ```c++
 class PersonInfo {
@@ -3901,71 +3902,31 @@ private:
 	virtual const char * valueDelimClose() const; // below
 	...
 };
-
-const char * PersonInfo::valueDelimOpen() const
-{
-	return "["; // default opening delimiter
-}
-const char * PersonInfo::valueDelimClose() const
-{
-	return "]"; // default closing delimiter
-}
-const char * PersonInfo::theName() const
-{
-	// reserve buffer for return value; because this is
-	// static, it's automatically initialized to all zeros
-	static char value[Max_Formatted_Field_Value_Length];
-    
-	// write opening delimiter
-	std::strcpy(value, valueDelimOpen());
-    
-	// append to the string in value this object's name field
-	...
-        
-	// write closing delimiter
-	std::strcat(value, valueDelimClose());
-    
-	return value;
-}
 ```
 
-`theName` calls `valueDelimOpen` to generate the opening delimiter of the string it will return, then it generates the name value itself, then it calls `valueDelimClose`. Because `valueDelimOpen` and `valueDelimClose` are virtual functions, the result returned by `theName` is dependent not only on
-`PersonInfo` but also on the classes derived from `PersonInfo`. As the implementer of `CPerson`, that's good news, because while perusing the fine print in the `IPerson` documentation, you discover that `name` and `birthDate` are required to return with no delimiters are allowed.
-
-The relationship between `CPerson` and `PersonInfo` is that `PersonInfo` happens to have some functions that would make `CPerson` easier to implement. That's all. Their relationship is thus is-implemented-in-terms-of which can be represented in composition or privare inheritance.
-
-But `CPerson` must also implement the `IPerson` interface, and that calls for public inheritance. This leads to one reasonable application of multiple inheritance: combine public inheritance of an interface with private inheritance of an implementation:
+You come to discover that `PersonInfo` was designed to facilitate printing database fields in various formats, with the beginning and end of each field value delimited by special strings. By default, the field value “`Ring-tailed Lemur`” would be formatted this way:
 
 ```c++
-class IPerson { // this class specifies the interface to be implemented
-public:
-	virtual ~IPerson();
-	virtual std::string name() const = 0;
-	virtual std::string birthDate() const = 0;
-};
+[Ring-tailed Lemur]
+```
 
-class DatabaseID { ... }; // used below details are unimportant
+In recognition of the fact that square brackets are not universally desired by clients of `PersonInfo`, the virtual functions `valueDelimOpen` and `valueDelimClose` allow derived classes to specify their own opening and closing delimiter strings.
 
-class PersonInfo { // this class has functions useful in implementing the IPerson interface
-public:
-	explicit PersonInfo(DatabaseID pid);
-	virtual ~PersonInfo();
-	...
-private:
-	virtual const char * theName() const;
-	virtual const char * theBirthDate() const;
-	virtual const char * valueDelimOpen() const;
-	virtual const char * valueDelimClose() const;
-	...
-};
+As the implementer of `CPerson`, you may wanto implement the class using the existing `PersonInfo`. And in `CPerson`, you discover that `name` and `birthDate` are required to return unadorned values, i.e., no delimiters are allowed.  So `CPerson` needs to redefine `valueDelimOpen` and
+`valueDelimClose` in `PersonInfo`.
 
-class CPerson: public IPerson, private PersonInfo { // note use of MI
+The relationship between `CPerson` and `PersonInfo` is that `PersonInfo` happens to have some functions that would make `CPerson` easier to implement. Their relationship is thus **<font color='blue'>is-implemented-in-terms-of</font>** which can be represented in composition or `privare` inheritance.
+
+Item 39 explains that with a bit more work, `CPerson` could also use a combination of composition and inheritance, but `CPerson` must also implement the `IPerson` interface, and that calls for public inheritance. This leads to one reasonable application of multiple inheritance: **<font color='red'>combine public inheritance of an interface with private inheritance of an implementation</font>**:
+
+```c++
+class CPerson: public IPerson, private PersonInfo { 		// note use of MI
 public:
 	explicit CPerson( DatabaseID pid): PersonInfo(pid) {}
     // implementations of the required IPerson member functions
-	virtual std::string name() const 
+	virtual string name() const 
 		{ return PersonInfo::theName(); }
-	virtual std::string birthDate() const
+	virtual string birthDate() const
 		{ return PersonInfo::theBirthDate(); }
 private: 
 	// redefinitions of inherited virtual delimiter functions
@@ -3974,6 +3935,8 @@ private:
 
 };
 ```
+
+In UML, the design looks like this:
 
  ![image-20220401202859516](images\image-20220401202859516.png)
 
