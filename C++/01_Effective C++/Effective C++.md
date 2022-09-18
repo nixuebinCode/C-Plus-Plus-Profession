@@ -3944,14 +3944,14 @@ In UML, the design looks like this:
 
 ## Item 41: Understand implicit interfaces and compiletime polymorphism
 
-The world of object-oriented programming revolves around `explicit` interfaces and `runtime` polymorphism:
+The world of **object-oriented programming** revolves around explicit interfaces and runtime polymorphism:
 
 ```c++
 class Widget {
 public:
 	Widget();
 	virtual ~Widget();
-	virtual std::size_t size() const;
+	virtual size_t size() const;
 	virtual void normalize();
 	void swap(Widget& other); // see Item 25
 	...
@@ -3969,12 +3969,11 @@ void doProcessing(Widget& w)
 
 In `doProcessing`:
 
-* Because `w` is declared to be of type `Widget`, `w` must support the `Widget` interface. We can look up this interface in the source code (e.g., the .h
-  file for `Widget`) to see exactly what it looks like, so I call this an **explicit interface** — one explicitly visible in the source code.
-* Because some of `Widget`'s member functions are virtual, `w`'s calls to those functions will exhibit runtime polymorphism: the specific function to call
-  will be determined at runtime based on `w`'s dynamic type.
+* Because `w` is declared to be of type `Widget`, `w` must support the `Widget` interface. We can look up this interface in the source code (e.g., the `.h`
+  file for `Widget`) to see exactly what it looks like, so I call this an **<font color='blue'>explicit interface</font>** — one explicitly visible in the source code.
+* Because some of `Widget`'s member functions are `virtual`, `w`'s calls to those functions will exhibit **<font color='blue'>runtime polymorphism</font>**: the specific function to call will be determined at runtime based on `w`'s dynamic type.
 
-The world of templates and generic programming is fundamentally different: 
+The world of **templates and generic programming** is fundamentally different. In that world, explicit interfaces and runtime polymorphism continue to exist, but they're less important. Instead, implicit interfaces and compile-time polymorphism move to the fore.
 
 ```c++
 template<typename T>
@@ -3990,71 +3989,57 @@ void doProcessing(T& w)
 
 in `doProcessing`:
 
-* The interface that `w` must support is determined by the operations performed on `w` in the template. In this example, it appears that `w`'s type (T)
-  must support the `size`, `normalize`, and `swap` member functions; copy construction (to create temp); and comparison for inequality (for comparison with `someNastyWidget`).
-* The calls to functions involving w such as `operator>` and `operator!=` may involve instantiating templates to make these calls succeed. Such
+* The interface that `w` must support is determined by the operations performed on `w` in the template.
+* The calls to functions involving `w` such as `operator>` and `operator!=` may involve instantiating templates to make these calls succeed. Such
   instantiation occurs during compilation. Because instantiating function templates with different template parameters leads to different functions
-  being called, this is known as compile-time polymorphism.
+  being called, this is known as **<font color='blue'>compile-time polymorphism</font>**.
 
-### An explicit interface consists of function signatures, i.e., function names, parameter types, return types, etc.
-
-The `Widget` class public interface consists of a constructor, a destructor, and the functions `size`, `normalize`, and `swap`, along with the parameter types, return types, and constnesses of these functions.
-
-### An implicit interface consists of valid expressions:
-
-Consider the conditional at the beginning of the `doProcessing` template:
+An explicit interface consists of function signatures, i.e., function names, parameter types, return types, etc.  An implicit interface is quite different. It is not based on function signatures. Rather, it consists of **<font color='blue'>valid expressions</font>**. Look again at the conditional at the beginning of the `doProcessing` template:
 
 ```c++
-template<typename T>
-void doProcessing(T& w)
-{
-	if (w.size() > 10 && w != someNastyWidget) {
-	...
+if (w.size() > 10 && w != someNastyWidget)
 ```
 
-The conditional part of an if statement must be a boolean expression, so regardless of the exact types involved, whatever `w.size() > 10 && w != someNastyWidget` yields, it must be compatible with bool. The rest of the interface required by `doProcessing` is that calls to the copy constructor, to `normalize`, and to `swap` must be valid for objects of type T.
+The implicit interface for `T` (`w`'s type) appears to have these constraints:
 
+* It must offer a member function named `size` that returns an integral value.
+* It must support an `operator!=` function that compares two objects of type `T`.
 
-
-The implicit interfaces imposed on a template's parameters are just as real as the explicit interfaces imposed on a class's objects, and both are checked
-during compilation. Just as you can't use an object in a way contradictory to the explicit interface its class offers (the code won't compile), you can't try to
+The implicit interfaces imposed on a template's parameters are just as real as the explicit interfaces imposed on a class's objects, and both are checked during compilation. Just as you can't use an object in a way contradictory to the explicit interface its class offers (the code won't compile), you can't try to
 use an object in a template unless that object supports the implicit interface the template requires (again, the code won't compile).
 
-## Item 42: Understand the two meanings of typename
+## Item 42: Understand the two meanings of `typename`
 
 When declaring a template type parameter, `class` and `typename` mean exactly the same thing：
 
 ```c++
-template<class T> class Widget; // uses "class"
-template<typename T> class Widget; // uses "typename"
+template <class T> class Widget; 	// uses "class"
+template <typename T> class Widget; // uses "typename"
 ```
 
-### Sometimes you must use `typename`
+### 42.1 nested dependent type name
 
-Suppose we have a template for a function that takes an STL-compatible container holding objects that can be assigned to ints. And this function simply prints the value of its second element:
+Suppose we have a template for a function that takes an STL-compatible container holding objects that can be assigned to `int`s. And this function simply prints the value of its second element:
 
 ```c++
 template<typename C> 					// print 2nd element in container;
 void print2nd(const C& container) 	 	// this is not valid C++!	
 {
 	if (container.size() >= 2) {
-		C::const_iterator iter(container.begin()); // get iterator to 1st element
-		++iter; // move iter to 2nd element
-		int value = *iter; // copy that element to an int
-		std::cout << value; // print the int
+		C::const_iterator iter(container.begin()); 	// get iterator to 1st element
+		++iter; 									// move iter to 2nd element
+		int value = *iter; 							// copy that element to an int
+		std::cout << value; 						// print the int
 	}
 }
 ```
 
-* **nested dependent type name**
+Note the two local variables in this functiom: `iter` and `value`:
 
-  `C::const_iterator` is a type that depends on the template parameter `C`. Names in a template that are dependent on a template parameter are called **dependent names**. When a dependent name is nested inside a class, I call it a **nested dependent name**. `C::const_iterator` is a `nested dependent type name`, i.e., a nested dependent name that refers to a type.
+* The type of `iter` is `C::const_iterator`, a type that depends on the template parameter `C`. Names in a template that are dependent on a template parameter are called **<font color='blue'>dependent names</font>**. When a dependent name is nested inside a class, I call it a **<font color='blue'>nested dependent name</font>**. `C::const_iterator` is a nested dependent name. In fact, it's a **<font color='blue'>nested dependent type name</font>**, i.e., a dependent name that refers to a type.
+* The type of `value` is `int`. `int` is a name that does not depend on any template parameter. Such names are known as **<font color='blue'>non-dependent names</font>**
 
-* **non-dependent names**
-
-  `value` has type `int`. `int` is a name that does not depend on any template parameter. Such names are known as non-dependent names
-
-Nested dependent names can lead to parsing difficulties:
+Nested dependent names can lead to parsing difficulties. For example, suppose we made `print2nd` even sillier by starting it this way:
 
 ```c++
 template<typename C>
@@ -4067,10 +4052,10 @@ void print2nd(const C& container)
 
 This looks like we're declaring `x` as a local variable that's a pointer to a `C::const_iterator`. But it looks that way only because we “know” that `C::const_iterator` is a type. 
 
-But what if `C::const_iterator` weren't a type? What if `C` had a static data member that happened to be named `const_iterator`, and what if `x` happened to be the name of a global variable? In that case, the code above wouldn't declare a local variable, it would be a multiplication of
+But what if `C::const_iterator` weren't a type? What if `C` had a `static` data member that happened to be named `const_iterator`, and what if `x` happened to be the name of a global variable? In that case, the code above wouldn't declare a local variable, it would be a multiplication of
 `C::const_iterator` by `x`!
 
-**C++ has a rule to resolve this ambiguity: if the parser encounters a nested dependent name in a template, it assumes that the name is not a type unless you tell it otherwise.** So we have to tell C++ that `C::const_iterator` is a type. We do that by putting `typename` immediately in front of it:
+C++ has a rule to resolve this ambiguity: **<font color='red'>if the parser encounters a nested dependent name in a template, it assumes that the name is not a type unless you tell it otherwise.</font>** So we have to tell C++ that `C::const_iterator` is a type. We do that by putting `typename` immediately in front of it:
 
 ```c++
 template<typename C> // this is valid C++
@@ -4083,55 +4068,23 @@ void print2nd(const C& container)
 }
 ```
 
-### `typename` should be used to identify only nested dependent type names; other names shouldn't have it
+The general rule is simple: **<font color='red'>anytime you refer to a nested dependent type name in a template, you must immediately precede it by the word `typename`.</font>**
 
-```c++
-template<typename C> 				// typename allowed (as is "class")
-void f(const C& container, 			// typename not allowed
-       typename C::iterator iter); 	// typename required
-```
+### 42.2 `typename` used in standard trait class
 
-`C` is not a nested dependent type name (it's not nested inside anything dependent on a template parameter), so it must not be preceded by `typename`
-when declaring container.
-
-`C::iterator` is a nested dependent type name, so it's required to be preceded by typename.
-
-### The exception to the “typename must precede nested dependent type names” rule
-`typename` must not precede nested dependent type names in **a list of base classes** or as **a base class identifier in a member initialization list**
-
-```c++
-template<typename T>
-class Derived: public Base<T>::Nested { // base class list: typename not allowed
-public:
-	explicit Derived(int x)
-		: Base<T>::Nested(x) // base class identifier in mem. init. list: typename not allowed
-	{ 
-		typename Base<T>::Nested temp; 	// use of nested dependent type name not in a base class list
-		... 							//  or as a base class identifier in a mem. init. list: typename required
-	}
-	... // 
-};
-```
-
-### One last `typename` example which you're going to see in real code
-
-Suppose we're writing a function template that takes an iterator, and we want to make a local copy, `temp`, of the object the iterator points to.
+Let's look at one last `typename` example, because it's representative of something you're going to see in real code. Suppose we're writing a function template that takes an iterator, and we want to make a local copy, `temp`, of the object the iterator points to. We can do it like this:
 
 ```c++
 template<typename IterT>
 void workWithIterator(IterT iter)
 {
-	typename std::iterator_traits<IterT>::value_type temp(*iter);
+	typename iterator_traits<IterT>::value_type temp(*iter);
 	...
 }
 ```
 
-The statement declares a local variable (`temp`) of the same type as what `IterT` objects point to, and it initializes `temp` with the object that `iter` points to. If `IterT` is `vector<int>::iterator`, `temp` is of type `int`. If `IterT` is `list<string>::iterator`, `temp` is of type `string`.
-
-Because `std::iterator_traits<IterT>::value_type` is a nested dependent type name (`value_type` is nested inside `iterator_traits<IterT>`, and
-`IterT` is a template parameter), we must precede it by `typename`.
-
-If you're like most programmers, the thought of typing `std::iterator_traits<IterT>::value_type`more than once is ghastly, so you'll want to create a `typedef`:
+The `iterator_traits<IterT>::value_type` is just a use of a standard traits class. The statement declares a local variable (`temp`) of the same type as what `IterT` objects point to, and it initializes `temp` with the object that `iter` points to. Because `iterator_traits<IterT>::value_type` is a nested
+dependent type name (`value_type` is nested inside `iterator_traits<IterT>`, and `IterT` is a template parameter), we must precede it by `typename`.
 
 ```c++
 template<typename IterT>
@@ -4144,33 +4097,37 @@ void workWithIterator(IterT iter)
 ```
 
 ## Item 43: Know how to access names in templatized base classes
-### When we cross from Object-Oriented C++ to Template C++, inheritance stops working
+### 43.1 when cross from Object-Oriented to Template, inheritance stops working
 Suppose we need to write an application that can send messages to several different companies. Messages can be sent in either encrypted or cleartext
-(unencrypted) form：
+(unencrypted) form.
+
+If we have enough information during compilation to determine which messages will go to which companies, we can employ a **<font color='blue'>template-based solution</font>**:
 
 ```c++
 class CompanyA {
 public:
 	...
-	void sendCleartext(const std::string& msg);
-	void sendEncrypted(const std::string& msg);
+	void sendCleartext(const string& msg);
+	void sendEncrypted(const string& msg);
 	...
 };
 class CompanyB {
 public:
 	...
-	void sendCleartext(const std::string& msg);
-	void sendEncrypted(const std::string& msg);
+	void sendCleartext(const string& msg);
+	void sendEncrypted(const string& msg);
 	...
 };
+
 class MsgInfo { ... }; // class for holding information used to create a message
+
 template<typename Company>
 class MsgSender {
 public:
 	... // ctors, dtor, etc.
 	void sendClear(const MsgInfo& info)
 	{
-		std::string msg;
+		string msg;
 		// create msg from info;
 		Company c;
 		c.sendCleartext(msg);
@@ -4180,124 +4137,110 @@ public:
 };
 ```
 
-Moreover, suppose we have a class `CompanyZ` that insists on encrypted communications:
-
-```c++
-class CompanyZ { // this class offers no sendCleartext function
-public:
-	...
-	void sendEncrypted(const std::string& msg);
-	...
-};
-```
-
-The general `MsgSender` template is inappropriate for `CompanyZ`, because that template offers a `sendClear` function that makes no sense for `CompanyZ` objects. To rectify that problem, we can create a specialized version of `MsgSender` for `CompanyZ`:
-
-```c++
-template<> // a total specialization of MsgSender;
-class MsgSender<CompanyZ> { //  the same as the general template, except sendClear is omitted
-public:
-	... 
-	void sendSecret(const MsgInfo& info)
-	{ ... }
-};
-```
-
-And now we want to log some information each time we send a message. We can implement this in a derived class:
+This will work fine, but suppose we sometimes want to log some information each time we send a message. A derived class can easily add that capability,
+and this seems like a reasonable way to do it:
 
 ```c++
 template<typename Company>
 class LoggingMsgSender: public MsgSender<Company> {
 public:
-	... // ctors, dtor, etc.
-	void sendClearMsg(const MsgInfo& info)
+    ... // ctors, dtor, etc.
+    void sendClearMsg(const MsgInfo& info)
 	{
-		...write "before sending" info to the log;
-		sendClear(info); 	// call base class function; 
-        					// if Company == CompanyZ, this function doesn't exist!
+		write "before sending" info to the log;
+		sendClear(info); 	// call base class function;
 							// this code will not compile!
-		...write "after sending" info to the log;
+		write "after sending" info to the log;
 	}
 	...
 };
 ```
 
-The code above will not compile, compilers will complain that `sendClear` doesn't exist. We can see that `sendClear` is in the base class, but compilers
-won't look for it there.
+The code above won't compile! Compilers will complain that `sendClear` doesn't exist. **<font color='red'>We can see that `sendClear` is in the base class, but compilers
+won't look for it there.</font>**
 
 The problem is that when compilers encounter the definition for the class template `LoggingMsgSender`, they don't know what class it inherits from. Sure,
 it's `MsgSender<Company>`, but `Company` is a template parameter, one that won't be known until later (when `LoggingMsgSender` is instantiated). Without knowing what `Company` is, there's no way to know what the class `MsgSender<Company>` looks like. In particular, there's no way to know if it has a `sendClear` function.
 
-To make the problem concrete, this code makes no sense when the base class is `MsgSender<CompanyZ>`, because that class offers no `sendClear` function.
-
-C++ recognizes that base class templates may be specialized and that such specializations may not offer the same interface as the general template. As a result, **it generally refuses to look in templatized base classes for inherited names**.
+**<font color='red'>C++</font>** recognizes that base class templates may be specialized and that such specializations may not offer the same interface as the general template. As a result, it **<font color='red'>generally refuses to look in templatized base classes for inherited names.</font>**
 
 ### Disable C++'s “don't look in templatized base classes” behavior
-* **Preface calls to base class functions with `this->`**
 
-  ```c++
-  template<typename Company>
-  class LoggingMsgSender: public MsgSender<Company> {
-  public:
-  	...
-  	void sendClearMsg(const MsgInfo& info)
-  	{
-  		...write "before sending" info to the log;
-  		this->sendClear(info); // okay, assumes that sendClear will be inherited
-  		...write "after sending" info to the log;
-  	}
-  	...
-  };
-  ```
+There are three ways to do this:
 
-* **Employ a `using` declaration**
+1. **Preface calls to base class functions with `this->`**
 
-  ```c++
-  template<typename Company>
-  class LoggingMsgSender: public MsgSender<Company> {
-  public:
-  	using MsgSender<Company>::sendClear; // tell compilers to assume that sendClear is in the base class
-  	...
-  	void sendClearMsg(const MsgInfo& info)
-  	{
-  		...
-  		sendClear(info); // okay, assumes that sendClear will be inherited
-  		... 
-  	}
-  	...
-  };
-  ```
+   ```c++
+   template<typename Company>
+   class LoggingMsgSender: public MsgSender<Company> {
+   public:
+   	...
+   	void sendClearMsg(const MsgInfo& info)
+   	{
+   		...write "before sending" info to the log;
+   		this->sendClear(info); 			// okay, assumes that sendClear will be inherited
+   		...write "after sending" info to the log;
+   	}
+   	...
+   };
+   ```
 
-* **Explicitly specify that the function being called is in the base class**
+2. **Employ a `using` declaration**
 
-  ```c++
-  template<typename Company>
-  class LoggingMsgSender: public MsgSender<Company> {
-  public:
-  	...
-  	void sendClearMsg(const MsgInfo& info)
-  	{
-  		...
-  		MsgSender<Company>::sendClear(info); // okay, assumes that sendClear will be inherited
-  		... 
-  	}
-  	...
-  };
-  ```
+   ```c++
+   template<typename Company>
+   class LoggingMsgSender: public MsgSender<Company> {
+   public:
+   	using MsgSender<Company>::sendClear; 	// tell compilers to assume that sendClear is in the base class
+   	...
+   	void sendClearMsg(const MsgInfo& info)
+   	{
+   		...
+   		sendClear(info); // okay, assumes that sendClear will be inherited
+   		... 
+   	}
+   	...
+   };
+   ```
 
-  This is generally the least desirable way to solve the problem, because if the function being called is virtual, **explicit qualification turns off the virtual binding behavior.**
+3. **Explicitly specify that the function being called is in the base class**
 
-## Item 44: Factor parameter-independent code out of templates
+   ```c++
+   template<typename Company>
+   class LoggingMsgSender: public MsgSender<Company> {
+   public:
+   	...
+   	void sendClearMsg(const MsgInfo& info)
+   	{
+   		...
+   		MsgSender<Company>::sendClear(info); // okay, assumes that sendClear will be inherited
+   		... 
+   	}
+   	...
+   };
+   ```
+
+   This is generally the least desirable way to solve the problem, because if the function being called is `virtual`, **explicit qualification turns off the virtual binding behavior.**
+
+From a name visibility point of view, each of these approaches does the same thing:
+
+It promises compilers that any subsequent specializations of the base class template will support the interface offered by the general template.
+
+## Item 44: Factor parameter-independent code out of templates（将与参数无关的代码抽离 templates）
 
 Templates are a wonderful way to save time and avoid code replication. But sometimes. If you're not careful, using templates can lead to code bloat: binaries with replicated (or almost replicated) code, data, or both.
 
-In template code, replication is implicit: there's only one copy of the template source code, so you have to train yourself to sense the replication that may take place when a template is instantiated multiple times.
+if you're writing a class and you realize that some parts of the class are the same as parts of another class, you don't replicate the common parts. Instead, you move the common parts to a new class, then you use inheritance or composition to give the original classes access to the common features.
 
-For example, suppose you'd like to write a template for fixed-size square matrices that, among other things, support matrix inversion:
+When writing templates, you do the same analysis, and you avoid replication in the same ways, but there's a twist. In non-template code, replication is
+explicit: you can see that there's duplication between two functions or two classes. **<font color='red'>In template code, replication is implicit:</font>** there's only one copy of the
+template source code, so you have to train yourself to sense the replication that may take place when a template is instantiated multiple times.
+
+For example, suppose you'd like to write a template for fixed-size square matrices:
 
 ```c++
-template<typename T, std::size_t n>	// template for n x n matrices of objects of type T
-class SquareMatrix { 				// on the size_t parameter
+template<typename T, size_t n>		// template for n x n matrices of objects of type T
+class SquareMatrix { 				
 public:
 	...
 	void invert(); // invert the matrix in place
@@ -4314,19 +4257,23 @@ This template takes a type parameter and a non-type parameter.
 
 When we create `sm1`, `sm2` and call their `ivert`, two copies of `invert` will be instantiated here. The functions won't be identical, because one will work on 5×5 matrices and one will work on 10 × 10 matrices, but other than the constants 5 and 10, the two functions will be the same. This is a classic way for template-induced code bloat to arise.
 
-### Replacing template parameters with function parameters
+### 44.1 Replacing template parameters with function parameters
 
-Create a version of the function that took a value as a parameter, then call the parameterized function with 5 or 10 instead of replicating the code:
+What would you do if you saw two functions that were character-for-character identical except for the use of `5` in one version and `10` in the other?
+Your instinct would be to create a version of the function that took a value as a parameter, then call the parameterized function with `5` or `10` instead of
+replicating the code.
+
+That is a first pass at doing for SquareMatrix: Create a version of the function that took a value as a parameter, then call the parameterized function with `5` or `10` instead of replicating the code:
 
 ```c++
 template<typename T> // size-independent base class for square matrices
 class SquareMatrixBase {
 protected:
 	...
-	void invert(std::size_t matrixSize); // invert matrix of the given size
+	void invert(size_t matrixSize); // invert matrix of the given size
 	...
 };
-template<typename T, std::size_t n>
+template<typename T, size_t n>
 class SquareMatrix: private SquareMatrixBase<T> {	// private inheritance: is-implemented-in-terms-of
 private:
 	using SquareMatrixBase<T>::invert; // make base class version of invert visible in this class
@@ -4336,26 +4283,28 @@ public:
 };
 ```
 
-The base class, `SquareMatrixBase` is templatized only on the type of objects in the matrix, not on the size of the matrix. Hence, all matrices holding a given type of object will share a single `SquareMatrixBase` class. They will thus share a single copy of that class's version of invert.
+Like `SquareMatrix`, `SquareMatrixBase` is a template, but unlike `SquareMatrix`, it's templatized only on the type of objects in the matrix, not on the size of the matrix. Hence, all matrices holding a given type of object will share a single `SquareMatrixBase` class. They will thus share a single copy of that class's version of `invert`.
 
-### Replacing template parameters with class data members
+### 44.2 Replacing template parameters with class data members
 
-Have `SquareMatrixBase` store a pointer to the memory for the matrix values as well as the matrix size:
+So far, so good, but there's a sticky issue we haven't addressed yet. `SquareMatrixBase::invert` knows the size of the matrix from its parameter, but how does it know where the data for a particular matrix is? Presumably only the derived class knows that. 
+
+How does the derived class communicate that to the base class so that the base class can do the inversion? An alternative is to have `SquareMatrixBase` store a pointer to the memory for the matrix values. And as long as it's storing that, it might as well store the matrix size, too. The resulting design looks like this:
 
 ```c++
 template<typename T>
 class SquareMatrixBase {
 protected:
-	SquareMatrixBase(std::size_t n, T *pMem) // store matrix size and a ptr to matrix values
+	SquareMatrixBase(size_t n, T *pMem) 		// store matrix size and a ptr to matrix values
 		: size(n), pData(pMem) {}
-	void setDataPtr(T *ptr) { pData = ptr; } // reassign pData
-...
+	void setDataPtr(T *ptr) { pData = ptr; } 	// reassign pData
+	...
 private:
 	std::size_t size; // size of matrix
 	T *pData; // pointer to matrix values
 };
 
-template<typename T, std::size_t n>
+template<typename T, size_t n>
 class SquareMatrix: private SquareMatrixBase<T> {
 public:
 	SquareMatrix() // send matrix size and data ptr to base class
@@ -4366,9 +4315,15 @@ private:
 };
 ```
 
-Now many — maybe all — of `SquareMatrix`'s member functions can be simple inline calls to (non-inline) base class versions that are shared with all other matrices holding the same type of data, regardless of their size. At the same time, SquareMatrix objects of different sizes are distinct types.
+Now many — maybe all — of `SquareMatrix`'s member functions can be simple inline calls to (non-inline) base class versions that are shared with all other matrices holding the same type of data, regardless of their size. At the same time, `SquareMatrix` objects of different sizes are distinct types.
 
-e.g., `SquareMatrix<double, 5>` and `SquareMatrix<double, 10>` objects use the same member functions in `SquareMatrixBase<double>`
+e.g., `SquareMatrix<double, 5>` and `SquareMatrix<double, 10>` objects use the same member functions in `SquareMatrixBase<double>`.
+
+### 44.3 Template with type parameters
+
+This Item has discussed only bloat due to non-type template parameters, but type parameters can lead to bloat, too. For example, all pointer types have the same binary representation, so templates holding pointer types (e.g., `list<int*>`, `list<const int*>`, `list<SquareMatrix<long, 3>*>`, etc.) should often be able to use a single underlying implementation for each member function. 
+
+Typically, this means implementing member functions that work with strongly typed pointers (i.e., `T*` pointers) by having them call functions that work with untyped pointers (i.e., `void*` pointers). 
 
 ## Item 45: Use member function templates to accept “all compatible types.”
 Built-in pointers support implicit conversions:
