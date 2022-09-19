@@ -1909,7 +1909,7 @@ Consider our `Rational` class:
 ```c++
 class Rational {
 public:
-	Rational(int numerator = 0, nt denominator = 1);  		// ctor is deliberately not explicit; 																							// allows implicit int-to-Rational conversions	
+	Rational(int numerator = 0, int denominator = 1);  		// ctor is deliberately not explicit; 																							// allows implicit int-to-Rational conversions	
 	int numerator() const; 							
 	int denominator() const;
 private:
@@ -3942,7 +3942,7 @@ In UML, the design looks like this:
 
 # 7. Templates and Generic Programming
 
-## Item 41: Understand implicit interfaces and compiletime polymorphism
+## Item 41: Understand implicit interfaces and compile-time polymorphism
 
 The world of **object-oriented programming** revolves around explicit interfaces and runtime polymorphism:
 
@@ -4325,8 +4325,9 @@ This Item has discussed only bloat due to non-type template parameters, but type
 
 Typically, this means implementing member functions that work with strongly typed pointers (i.e., `T*` pointers) by having them call functions that work with untyped pointers (i.e., `void*` pointers). 
 
-## Item 45: Use member function templates to accept “all compatible types.”
-Built-in pointers support implicit conversions:
+## Item 45: Use member function templates to accept “all compatible types（所有兼容类型）”
+One of the things that real pointers do well is support implicit conversions. Derived class pointers implicitly convert into base class pointers, pointers to
+non-`const` objects convert into pointers to `const` objects, etc:
 
 ```c++
 class Top { ... };
@@ -4337,7 +4338,7 @@ Top *pt2 = new Bottom; // convert Bottom* ⇒ Top*
 const Top *pct2 = pt1; // convert Top* ⇒ const Top*
 ```
 
-Emulating such conversions in user-defined smart pointer classes is tricky:
+Emulating such conversions in user-defined smart pointer classes is tricky. We'd need the following code to compile:
 
 ```c++
 template<typename T>
@@ -4353,27 +4354,33 @@ SmartPtr<const Top> pct2 = pt1; 				  // convert SmartPtr<Top> ⇒ SmartPtr<cons
 
 There is no inherent relationship among different instantiations of the same template, so compilers view `SmartPtr<Middle>` and `SmartPtr<Top>` as completely different classes. To get the conversions among `SmartPtr` classes that we want, we have to program them explicitly.
 
-### constructor template
+### 45.1 constructor template
 
-Such templates are examples of member function templates (often just known as member templates) — templates that generate member functions of a class:
+In the smart pointer sample code above, each statement creates a new smart pointer object, so for now we'll focus on how to write smart pointer constructors that behave the way we want. In principle, the number of constructors we need is unlimited. Since a template can be instantiated to generate an unlimited number of functions, it seems that we don't need a constructor function for `SmartPtr`, we need a **<font color='blue'>constructor template</font>**. Such templates are examples of **<font color='blue'>member function templates</font>** — templates that generate member functions of a class:
 
 ```c++
 template<typename T>
 class SmartPtr {
 public:
-	template<typename U> SmartPtr(const SmartPtr<U>& other);// member template for a "generalized copy constructor"
+	template<typename U>
+    SmartPtr(const SmartPtr<U>& other);// member template for a "generalized copy constructor"
 	... 
 };
 ```
 
 This says that for every type `T` and every type `U`, a `SmartPtr<T>` can be created from a `SmartPtr<U>`, because `SmartPtr<T>` has a constructor that takes a `SmartPtr<U>` parameter.
 
-Constructors like this — ones that create one object from another object whose type is a different instantiation of the same template (e.g., create a `SmartPtr<T>` from a `SmartPtr<U`>) — are sometimes known as **generalized copy constructors**.
+Constructors like this — ones that create one object from another object whose type is a different instantiation of the same template (e.g., create a `SmartPtr<T>` from a `SmartPtr<U`>) — are sometimes known as **<font color='blue'>generalized copy constructors</font>**.
 
-### restrict the conversions
+### 45.2 restrict the conversions
 
-We want to be able to create a `SmartPtr<Top>` from a `SmartPtr<Bottom>`, but we don't want to be able to create a `SmartPtr<Bottom>` from a `SmartPtr<Top>`, as that's contrary to the meaning of public inheritance. We also don't want to be able to create a `SmartPtr<int>` from a
-`SmartPtr<double>`, because there is no corresponding implicit conversion from `int*` to `double*`.
+As declared, the generalized copy constructor for `SmartPtr` offers more than we want:
+
+* We want to be able to create a `SmartPtr<Top>` from a `SmartPtr<Bottom>`, but we don't want to be able to create a `SmartPtr<Bottom>` from a `SmartPtr<Top>`, as that's contrary to the meaning of public inheritance. 
+
+* We also don't want to be able to create a `SmartPtr<int>` from a `SmartPtr<double>`, because there is no corresponding implicit conversion from `int*` to `double*`.
+
+Assuming that `SmartPtr` offers a `get` member function that returns a copy of the built-in pointer held by the smart pointer object, we can use the implementation of the constructor template to restrict the conversions to those we want:
 
 ```c++
 template<typename T>
@@ -4390,29 +4397,17 @@ private:
 
 We use the member initialization list to initialize `SmartPtr<T>`'s data member of type `T*` with the pointer of type `U*` held by the `SmartPtr<U>`. This will compile only if there is an implicit conversion from a `U*` pointer to a `T*` pointer, and that's precisely what we want.
 
-### member function templates for assignment
+The net effect is that `SmartPtr<T>` now has a generalized copy constructor that will compile only if passed a parameter of a compatible type. 
 
-An excerpt from TR1's specification for `tr1::shared_ptr`:
+### 45.3 member templates don't change the rules of the language
 
-```c++
-template<class T> class shared_ptr {
-public:
-	template<class Y> explicit shared_ptr(Y * p);					// construct from any compatible built-in pointer,
-	template<class Y> shared_ptr(shared_ptr<Y> const& r);			//	shared_ptr, (the generalized copy constructor)
-	template<class Y> explicit shared_ptr(weak_ptr<Y> const& r);	// weak_ptr
-	template<class Y> explicit shared_ptr(auto_ptr<Y>& r);			// or auto_ptr
+Item 5 explains that two of the four member functions that compilers may generate are the copy constructor and the copy assignment operator.  `SmartPtr` declares a generalized copy constructor, and it's clear that when the types `T` and `U` are the same, the generalized copy constructor could be instantiated to create the “normal” copy constructor. 
 
-	template<class Y> shared_ptr& operator=(shared_ptr<Y> const& r);// assign from any compatible shared_ptr 
-	template<class Y> shared_ptr& operator=(auto_ptr<Y>& r); 		// or auto_ptr
-	...
-};
-```
+So will compilers generate a copy constructor for `SmartPtr`, or will they instantiate the generalized copy constructor template when one `SmartPtr` object is constructed from another`SmartPtr` object of the same type?
 
-### member templates don't change the rules of the language
+As I said, member templates don't change the rules of the language, and the rules state that if a copy constructor is needed and you don't declare one, one will be generated for you automatically.
 
-The rules state that if a copy constructor is needed and you don't declare one, one will be generated for you automatically.
-
-Declaring a generalized copy constructor (a member template) in a class doesn't keep compilers from generating their own copy constructor (a non-template), so if you want to control all aspects of copy construction, you must declare both a generalized copy constructor as well as the “normal” copy constructor. The same applies to assignment:
+**<font color='red'>Declaring a generalized copy constructor (a member template) in a class doesn't keep compilers from generating their own copy constructor (a non-template)</font>**, so if you want to control all aspects of copy construction, you must declare both a generalized copy constructor as well as the “normal” copy constructor. The same applies to assignment:
 
 ```C++
 template<class T> class shared_ptr {
@@ -4427,7 +4422,7 @@ public:
 ```
 
 ## Item 46: Define non-member functions inside templates when type conversions are desired
-Templatizes both `Rational` and `operator*` in Item 24:
+Templatize both `Rational` and `operator*` in Item 24:
 
 ```c++
 template<typename T>
@@ -4441,22 +4436,26 @@ public:
 template<typename T>
 const Rational<T> operator*(const Rational<T>& lhs, const Rational<T>& rhs)
 { ... }
+```
 
+As in Item 24, we want to support mixed-mode arithmetic, so we want the code below to compile:
+
+```c++
 Rational<int> oneHalf(1, 2);
 Rational<int> result = oneHalf * 2; // error! mix mode multiplication won't compile
 ```
 
-The fact that the last statement fails to compile suggests that there's something that the templatized `Rational` is different from the non-template version:
-
-In the non-template version, compilers know what function we're trying to call (operator* taking two Rationals), but here, compilers do not know which function we want to call. Instead, they're trying to figure out what function to instantiate from the template named `operator*`, taking two parameters of type `Rational<T>`
+In Item 24 (the non-template version), compilers know what function we're trying to call (`operator*` taking two Rationals), but here, **<font color='red'>compilers</font>** do not know which function we want to call. Instead, they'**<font color='red'>re trying to figure out what function to instantiate from the template named `operator*`.</font>** They know that they're supposed to instantiate some function named `operator*` taking two parameters of type `Rational<T>`, but in order to do the instantiation,**<font color='red'> they have to figure out what `T` is. The problem is, they can't</font>**:
 
 In attempting to deduce `T`, they look at the types of the arguments being passed in the call to `operator*`. In this case, those types are `Rational<int>` and `int`. Each parameter is considered separately.
 
 * The deduction using `Rational<int>` is easy. `operator*`'s first parameter is declared to be of type `Rational<T>`, and the first argument passed to `operator*` (`oneHalf`) is of type `Rational<int>`, so `T` must be `int`.
-* Unfortunately, the deduction for the other parameter is not so simple. `operator*`'s second parameter is declared to be of type `Rational<T>`, but the second argument passed to `operator*` (2) is of type `int`. You might expect them to use `Rational<int>`'s non-explicit constructor to convert 2 into a `Rational<int>`, thus allowing them to deduce that `T` is `int`, but they don't do that. **Because implicit type conversion functions are never considered during template argument deduction**.
+* Unfortunately, the deduction for the other parameter is not so simple. `operator*`'s second parameter is declared to be of type `Rational<T>`, but the second argument passed to `operator*` (`2`) is of type `int`. You might expect them to use `Rational<int>`'s non-explicit constructor to convert `2` into a `Rational<int>`, thus allowing them to deduce that `T` is `int`, but they don't do that. Because implicit type conversion functions are never considered during template argument deduction.
 
-### A `friend` declaration in a template class can refer to a specific function
-The class `Rational<T>` can declare `operator*` for `Rational<T>` as a friend function. So T is always known at the time the class `Rational<T>` is instantiated.
+### 46.1 define the function as `friend` inside the class template
+We can relieve compilers of the challenge of template argument deduction by taking advantage of the fact that a `friend` declaration in a template class can refer to a specific function.
+
+That means the class `Rational<T>` can declare `operator*` for `Rational<T>` as a `friend` function. Class templates don't depend on template argument deduction (that process applies only to function templates), so `T` is always known at the time the class `Rational<T>` is instantiated. That makes it easy for the `Rational<T>` class to declare the appropriate `operator*` function as a friend:
 
 ```c++
 template<typename T>
@@ -4472,12 +4471,11 @@ const Rational<T> operator*(const Rational<T>& lhs, const Rational<T>& rhs)//
 { ... }
 ```
 
-In this case, when the object `oneHalf` is declared to be of type `Rational<int>`, the class `Rational<int>` is instantiated, and as part of that process, the friend function `operator*` that takes `Rational<int>` parameters is automatically declared. As a declared function (not a function template), compilers can use implicit conversion functions (such as `Rational`'s non-explicit constructor) when calling it, and that's how they make the mixed-mode call succeed.
+Now our mixed-mode calls to `operator*` will compile, because when the object `oneHalf` is declared to be of type `Rational<int>`, the class `Rational<int>` is instantiated, and as part of that process, the friend function `operator*` that takes `Rational<int>` parameters is automatically declared.
 
-### Define those functions as friends inside the class template
-Although the code above will compile, it won't link:
+As a declared function (not a function template), compilers can use implicit conversion functions when calling it, and that's how they make the mixed-mode call succeed.
 
-The mixed-mode code compiles, because compilers know that we want to call a specific function (`operator*` taking a `Rational<int>` and a `Rational<int>`), but that function is only declared inside `Rational`, not defined there. If we declare a function ourselves (which is what we're doing inside the `Rational` template), we're also responsible for defining that function. In this case, we never provide a definition, and that's why linkers can't find one.
+However, although the code will compile, **<font color='red'>it won't link</font>**. The mixed-mode code compiles, because compilers know that we want to call a specific function (`operator*` taking a `Rational<int>` and a `Rational<int>`), but **<font color='red'>that function is only declared inside `Rational`, not defined there.</font>** 
 
 The simplest thing that could possibly work is to merge the body of `operator*` into its declaration:
 
@@ -4493,39 +4491,22 @@ public:
 };
 ```
 
-Functions defined inside a class are implicitly declared `inline`, and that includes friend functions like `operator*`. You can minimize the impact of such `inline` declarations by having `operator*` do nothing but **call a helper function defined outside of the class**.
+Indeed, this works as intended: mixed-mode calls to `operator*` now compile, link, and run. 
+
+> When writing a class template that offers functions related to the template that support implicit type conversions on all parameters, define those functions as friends inside the class template.
+
+## ⭐Item 47: Use traits classes for information about types
+
+One of useful utility templates the STL provided is called `advance`. advance moves a specified iterator a specified distance:
 
 ```c++
-template<typename T> class Rational; // declare Rational template
-
-template<typename T> // declare helper template
-const Rational<T> doMultiply(const Rational<T>& lhs, const Rational<T>& rhs);
-
-template<typename T>
-class Rational {
-public:
-	...
-	friend const Rational<T> operator*(const Rational<T>& lhs, const Rational<T>& rhs) // Have friend call helper
-		{ return doMultiply(lhs, rhs); }
-	...
-};
+template<typename IterT, typename DistT> 	// move iter d units forward; 
+void advance(IterT& iter, DistT d);			// if d < 0, move iter backward
 ```
 
-```c++
-template<typename T> // define helper template in header file, if necessary
-const Rational<T> doMultiply(const Rational<T>& lhs, const Rational<T>& rhs) 
-{ 
-	return Rational<T>(lhs.numerator() * rhs.numerator(), lhs.denominator() * rhs.denominator());
-}
-```
+Conceptually, `advance` just does `iter += d`, but `advance` can't be implemented that way, because only random access iterators support the `+=` operation. Less powerful iterator types have to implement advance by iteratively applying `++` or `--` `d` times.
 
-As a template, of course, `doMultiply` won't support mixed-mode multiplication, but it doesn't need to. In essence, the function `operator*` supports
-whatever type conversions are necessary to ensure that two `Rational` objects are being multiplied, then it passes these two objects to an appropriate
-instantiation of the `doMultiply` template to do the actual multiplication.
-
-## Item 47: Use traits classes for information about types
-
-### STL iterator categories
+There are five categories of iterators, corresponding to the operations they support：
 
 * **Input iterators**
 
@@ -4547,7 +4528,7 @@ instantiation of the `doMultiply` template to do the actual multiplication.
 
   Random access iterators add to bidirectional iterators the ability to perform “iterator arithmetic,” i.e., to jump forward or backward an arbitrary distance in constant time. Iterators for `vector`, `deque`, and `string` are random access iterators.
 
-The inheritance relationships among these iterators:
+For each of the five iterator categories, C++ has a “tag struct” in the standard library that serves to identify it:
 
 ```c++
 struct input_iterator_tag {};
@@ -4557,18 +4538,7 @@ struct bidirectional_iterator_tag: public forward_iterator_tag {};
 struct random_access_iterator_tag: public bidirectional_iterator_tag {};
 ```
 
-### `advance`：a utility template of STL
-
-`advance` moves a specified iterator a specified distance：
-
-```c++
-template<typename IterT, typename DistT> 	// move iter d units forward; 
-void advance(IterT& iter, DistT d);			// if d < 0, move iter backward
-```
-
-Conceptually, `advance` just does iter += d, but `advance` can't be implemented that way, because only random access iterators support the += operation. Less powerful iterator types have to implement advance by iteratively applying ++ or -- `d` times.
-
-To implement `advance`, random access iterators support constant-time iterator arithmetic, and we'd like to take advantage of that ability when it's present. We might write code like this:
+Given the different iterator capabilities, what we really want to do is implement advance essentially like this:
 
 ```c++
 template<typename IterT, typename DistT>
@@ -4584,9 +4554,11 @@ void advance(IterT& iter, DistT d)
 }
 ```
 
-In other words, we need to get some information about a type. That's what **traits** let you do: they allow you to get information about a type during compilation.
+In other words, we need to get some information about a type. That's what **traits** let you do: they allow you to get information about a type **<font color='red'>during compilation</font>**.
 
-### traits
+### 47.1 traits classes
+
+Traits aren't a keyword or a predefined construct in C++; they're a technique and a convention followed by C++ programmers.
 
 The standard technique is to put trait into a template and one or more specializations of that template. For iterators, the template in the standard library is named `iterator_traits`:
 
@@ -4595,11 +4567,11 @@ template<typename IterT> 	// template for information about
 struct iterator_traits; 	// iterator types
 ```
 
-By convention, traits are always implemented as structs. The structs used to implement traits are known as traits classes.
+As you can see, `iterator_traits` is a struct. By convention, traits are always implemented as structs. Another convention is that the structs used to implement traits are known as **<font color='blue'>traits classes</font>**.
 
-The way `iterator_traits` works is that for each type `IterT`, a typedef named `iterator_category` is declared in the struct `iterator_traits<IterT>`:
+The way `iterator_traits` works is that for each type `IterT`, a `typedef` named `iterator_category` is declared in the struct `iterator_traits<IterT>`. This `typedef` identifies the iterator category of `IterT`.
 
-* First, it imposes the requirement that any user-defined iterator type must contain a nested typedef named `iterator_category` that identifies the appropriate tag struct:
+* First, it imposes the requirement that any user-defined iterator type must contain a nested `typedef` named `iterator_category` that identifies the appropriate tag struct:
 
   ```c++
   template < ... > 	// deque's iterators are random access
@@ -4623,8 +4595,12 @@ The way `iterator_traits` works is that for each type `IterT`, a typedef named `
   	};
   	...
   };
-  
-  // the iterator_category for type IterT is whatever IterT says it is;
+  ```
+
+  **<font color='red'>`iterator_traits` just parrots back the iterator class's nested `typedef`:</font>**
+
+  ```c++
+  // the iterator_category for type IterT is whatever IterT says it is
   template<typename IterT>
   struct iterator_traits {
   	typedef typename IterT::iterator_category iterator_category;
@@ -4632,9 +4608,9 @@ The way `iterator_traits` works is that for each type `IterT`, a typedef named `
   };
   ```
 
-  This works well for user-defined types, but it doesn't work at all for iterators that are pointers, because there's no such thing as a pointer with a nested typedef.
+  This works well for user-defined types, but it doesn't work at all for iterators that are pointers, because there's no such thing as a pointer with a nested `typedef`.
 
-* Second, to handle iterators that are pointers,  `iterator_traits` offers a **partial template specialization** for pointer types.
+* Second, to handle iterators that are pointers,  `iterator_traits` offers a **partial template specialization** for pointer types. Pointers act as random access iterators, so that's the category `iterator_traits` specifies for them:
 
   ```c++
   template<typename T> 		// partial template specialization
@@ -4651,16 +4627,20 @@ Given `iterator_traits`,  we can refine our pseudocode for `advance`:
 template<typename IterT, typename DistT>
 void advance(IterT& iter, DistT d)
 {
-	if (typeid(typename std::iterator_traits<IterT>::iterator_category) == typeid(std::random_access_iterator_tag))
+	if (typeid(typename iterator_traits<IterT>::iterator_category) == typeid(random_access_iterator_tag))
 		...
 }
 ```
 
-### using overload to evaluate the conditional construct during compilation
+### 47.2 using overload to evaluate the conditional construct during compilation
 
-The code above has a issue: `IterT`'s type is known during compilation, so `iterator_traits<IterT>::iterator_category` can also be determined during compilation. Yet the `if` statement is evaluated at runtime. Why do something at runtime that we can do during compilation? It wastes time (literally), and it bloats our executable. What we really want is a conditional construct (i.e., an if...else statement) for types that is evaluated during compilation.
+The code above has a issue: `IterT`'s type is known during compilation, so `iterator_traits<IterT>::iterator_category` can also be determined during compilation. Yet the `if` statement is evaluated at runtime. **<font color='red'>Why do something at runtime that we can do during compilation?</font>** It wastes time (literally), and it bloats our executable. 
 
-When you overload some function `f`, you specify different parameter types for the different overloads. When you call `f`, compilers pick the best overload, based on the arguments you're passing. To get `advance` to behave the way we want, all we have to do is create multiple versions of an overloaded function containing the “guts” of advance, declaring each to take a different type of `iterator_category` object.
+What we really want is a conditional construct (i.e., an `if...else` statement) for types that is evaluated during compilation. As it happens, C++ already has a way to get that behavior. It's called overloading.
+
+When you overload some function `f`, you specify different parameter types for the different overloads. When you call `f`, compilers pick the best overload, based on the arguments you're passing. A compile-time conditional construct for types.
+
+To get `advance` to behave the way we want, all we have to do is create multiple versions of an overloaded function containing the “guts” of `advance`, declaring each to take a different type of `iterator_category` object.
 
 ```c++
 template<typename IterT, typename DistT> // use this impl for random access iterators
@@ -4697,7 +4677,7 @@ void advance(IterT& iter, DistT d)
 } 
 ```
 
-### Summary
+### 47.3 Summary
 
 How to design and implement a traits class:
 
@@ -4717,13 +4697,13 @@ Template metaprogramming (TMP) is the process of writing template-based C++ prog
 
 Reconsider the code in Item 47, there are two approches to implemt the `advance`: `typeid`-based approach and the one using traits.
 
-`typeid`-based approach: 
+This typeid-based approach is less efficient than the one using traits, because with this approach, (1) the type testing occurs at runtime instead of during compilation, and (2) the code to do the runtime type testing must be present in the executable. Moreover, this approach can lead to compilation problems:
 
 ```c++
 template<typename IterT, typename DistT>
 void advance(IterT& iter, DistT d)
 {
-	if (typeid(typename std::iterator_traits<IterT>::iterator_category) == typeid(std::random_access_iterator_tag))
+	if (typeid(typename iterator_traits<IterT>::iterator_category) == typeid(random_access_iterator_tag))
 		iter += d;
 	}
 	else {
@@ -4731,14 +4711,8 @@ void advance(IterT& iter, DistT d)
 		else { while (d++) --iter; }
 	}
 }
-```
 
-This typeid-based approach is less efficient than the one using traits, because with this approach, (1) the type testing occurs at runtime instead of during compilation, and (2) the code to do the runtime type testing must be present in the executable. 
-
-Moreover, this approach can lead to compilation problems:
-
-```c++
-std::list<int>::iterator iter;
+list<int>::iterator iter;
 ...
 advance(iter, 10); // move iter 10 elements forward;
 				   // won't compile with above impl.
@@ -4747,10 +4721,10 @@ advance(iter, 10); // move iter 10 elements forward;
 Consider the version of `advance` that will be generated for the above call. After substituting `iter`'s and `10`'s types for the template parameters `IterT` and `DistT`, we get this:
 
 ```c++
-void advance(std::list<int>::iterator& iter, int d)
+void advance(list<int>::iterator& iter, int d)
 {
-	if (typeid(std::iterator_traits<std::list<int>::iterator>::iterator_category) ==
-			typeid(std::random_access_iterator_tag)) {
+	if (typeid(iterator_traits<list<int>::iterator>::iterator_category) ==
+			typeid(random_access_iterator_tag)) {
 		iter += d; // error! won’t compile
 	}
 	else {
@@ -4762,11 +4736,13 @@ void advance(std::list<int>::iterator& iter, int d)
 
 In this case, we're trying to use `+=` on a `list<int>::iterator`, but `list<int>::iterator` is a bidirectional iterator, so it doesn't support `+=`. Although we know that the `typeid` test will always fail for `list<int>::iterators`, but compilers are obliged to make sure that all source code is valid, even if it's not executed, and “`iter += d`” isn't valid when `iter` isn't a random access iterator.
 
-### loops in TMP
+Contrast this with the traits-based TMP solution, where code for different types is split into separate functions, each of which uses only operations applicable to the types for which it is written.
 
-TMP has no real looping construct, so the effect of loops is accomplished via recursion -- *recursive template instantiations*
+### 48.1 loops in TMP
 
-TMP factorial computation:
+Item 47 shows how `if...else` conditionals in TMP are expressed via templates and template specializations. For another glimpse into how things work in TMP, let's look at loops. TMP has no real looping construct, so the effect of loops is accomplished via recursion. Even the recursion isn't the normal kind, however, because TMP loops don't involve recursive function calls, they involve **<font color='red'>recursive template instantiations</font>**.
+
+Let's begin with the TMP factorial computation:
 
 ```c++
 template<unsigned n> // general case: the value of Factorial<n> is n times the value of Factorial<n-1>
@@ -4781,7 +4757,7 @@ struct Factorial<0> {
 ```
 
 Given this template metaprogram (really just the single template metafunction `Factorial`), you get the value of factorial(n) by referring to
-`Factorial<n>::value`.
+`Factorial<n>::value`:
 
 ```c++
 int main()
@@ -4790,6 +4766,8 @@ int main()
 	std::cout << Factorial<10>::value; // prints 3628800
 }
 ```
+
+The looping part of the code occurs where the template instantiation `Factorial<n>` references the template instantiation `Factorial<n-1>`. Like all good recursion, there's a special case that causes the recursion to terminate. Here, it's the template specialization `Factorial<0>`.
 
 # 8. Customizing new and delete
 
