@@ -4625,9 +4625,23 @@ unsigned Sum_Solution2(unsigned n) {
 }
 ```
 
-### ？解题思路三：利用模板元编程求解
+### 解题思路三：利用模板元编程求解
 
+利用模板的递归实例化模拟递归的过程
 
+### 代码实现
+
+```c++
+template <unsigned n>
+struct Sum_Solution3 {
+	enum {value = n + Sum_Solution3<n - 1>::value};
+};
+
+template <>
+struct Sum_Solution3<0> {
+	enum {value = 0};
+};
+```
 
 ## 面试题65：不用加减乘除做加法
 
