@@ -5200,7 +5200,7 @@ public:
 
 ## Item 53: Pay attention to compiler warnings
 
-For example, here's an error everybody makes at one time or another:
+in C++, it's a good bet compiler writers have a better grasp of what's going on than you do. For example, here's an error everybody makes at one time or another:
 
 ```c++
 class B {
@@ -5219,7 +5219,7 @@ The idea is for `D::f` to redefine the virtual function `B::f`, but there's a mi
 warning: D::f() hides virtual B::f()
 ```
 
-This compiler is trying to tell you that the `f` declared in `B` has not been redeclared in `D`; instead, it's been hidden entirely.
+This compiler is trying to tell you that the `f` declared in `B` has not been redeclared in `D`; instead, it's been hidden entirely. Ignoring this compiler warning will almost certainly lead to erroneous program behavior, followed by a lot of debugging to discover something this compiler detected in the first place.
 
-So in C++, take compiler warnings seriously, and strive to compile **warning-free** at the maximum warning level supported by your compilers.
+So in C++, take compiler warnings seriously, and strive to compile **warning-free** at the maximum warning level supported by your compilers. But don't become dependent on compiler warnings, because different compilers warn about different things. Porting to a new compiler may eliminate warning messages you've come to rely on.
 
