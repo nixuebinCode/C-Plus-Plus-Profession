@@ -921,3 +921,591 @@ __uninitialized_fill_n_aux(ForwardIterator first, Size n,
 }
 ```
 
+# 第三章 迭代器 (iterators) 概念与 traits 编程技法
+## 3.1 迭代器设计思维一STL 关键所在
+
+STL 的中心思想在于：将数据容器 (containers) 和算法 (algorithms) 分开，彼此独立设计，最后再以一帖胶着剂将它们撮合在一起。而迭代器就是扮演粘胶角色。
+
+以算法 `find()` 为例，它接受两个迭代器和一个搜寻目标：
+
+```c++
+template <class InputIterator, class T>
+InputIterator find(InputIterator first, InputIterator last, const T& value) {
+  while (first != last && *first != value) ++first;
+  return first;
+}
+```
+
+只要给予不同的迭代器，`find()` 便能够对不同的容器进行查找操作。
+
+## 3.2 迭代器 (iterator) 是一种 smart pointer
+
+迭代器是一种行为类似指针的对象，而指针的各种行为中最常见也最重要的便是 dereference 和 member access，因此，迭代器最重要的编程工作就是对`operator*` 和 `operator-> `进行重载工作。
+
+现在我们来为 `list` 设计一个迭代器。假设 list 及其节点的结构如下：
+
+```c++
+template <typename T>
+class List {
+public:
+	void insert_front(T value);
+	void insert_end(T value);
+	void displace(ostream &os = cout) const;
+	// ...
+private:
+	ListItem<T>* _end;
+	ListItem<T>* _front;
+	long _size;
+};
+
+template <typename T>
+class ListItem{
+public:
+	T value() const { return _value; }
+	ListItem* next() const { return _next; }
+	// ...
+private:
+	T _value;
+	List Item* _next; / /单向链表(single linked list)
+};
+```
+
+当我们 dereference 这一迭代器时，传回的应该是个 `ListItem` 对象；当我们递增该迭代器时，它应该指向下一个 `ListItem` 对象。为了让该迭代器适用于任何型态的节点，而不只限于 `ListItem`，我们可以将它设计为一个 class template:
+
+```c++
+template <class Item>	// Item 可以是单向链表节点或双向链表节点。
+struct ListIter {		// 此处这个迭代器特定只为链表服务，因为其独特的 operator++ 之故
+	Item *ptr;			// 保持与容器之间的一个联系
+	ListIter(Item *p = 0): ptr(p) { }	// 默认构造函数
+	// 不必实现copy ctor, 因为编译器提供的缺省行为己足够
+	// 不必实现operator = ，因为编译器提供的缺省行为己足够
+
+	Item& operator*() const { return *ptr; }
+	Item* operator->() const { return ptr; }
+
+	// pre-increment operator
+	ListIter& operator++() {
+		ptr = ptr->next();
+		return *this;
+	}
+	// post-increment operator
+	ListIter operator++(int) {
+		ListIter tmp = *this;
+		++*this;
+		return tmp;
+	}
+
+	bool operator==(const ListIter &rhs) { return ptr == rhs.ptr; }
+	bool operator!=(const ListIter &rhs) { return ptr != rhs.ptr; }
+
+};
+```
+
+现在我们可以将 `List` 和 `find()` 藉由 `ListIter` 粘合起来：
+
+```c++
+// 3mylist-iter-test.cpp
+void main(){
+	List<int> mylist;
+	for(int i=O; i<5; ++i) {
+		mylist.insert_front(i);
+		mylist.insert_end(i+2);
+    }	
+	mylist.display ();	// 10 (4 3 2 1 0 2 3 4 5 6)
+	ListIter<ListItem<int> > begin(mylist.front());
+	ListIter<ListItem<int> > end; 	// default 0, null
+	ListIter<ListItem<int> > iter; 	// default O, null
+    iter = find(begin, end, 3);
+    ...
+}
+```
+
+从以上实现可以看出，为了完成一个针对 List 而设计的迭代器，我们无可避免地暴露了太多 List 实现细节：
+
+1. 在 `main()` 之中为了制作 `begin` 和 `end` 两个迭代器，我们暴露了 `ListItem`; 
+2. 在 `ListIter` 之中为了达成 `operator++` 的目的，我们暴露了 `ListItem` 的操作函数 `next`。
+
+如果不是为了迭代器， `ListItem` 原本应该完全隐藏起来不曝光的。换句话说，**<font color='red'>要设计出 `ListItem`，首先必须对 `List` 的实现细节有非常丰富的了解。</font>**既然这无可避免，干脆就把迭代器的开发工作交给 `List` 的设计者好了，如此一来，所有实现细节反而得以封装起来不被使用者看到。这正是为什么每一种 STL 容器都提供有专属迭代器的缘故。
+
+## 3.3 迭代器相应型别 (associated types)
+
+什么是相应型别？迭代器所指之物的型别便是其一。假设算法中有必要声明一个变量，以 ”迭代器所指对象的型别” 为型别，如何是好？毕竟 C++ 只支持 `sizeof()`, 并未支持 `typeof()` ！即便动用 RTII 性质中的 `typeid()`，获得的也只是型别名称，不能拿来做变量声明之用。
+
+解决办法是：**<font color='red'>利用 function template 的参数推导机制</font>**：
+
+```c++
+template <class I, class T>
+void func_impl(I iter, T t){
+    T tmp;		// 这里解决了问题, T 就是迭代器所指之物的型别，本例为int
+    // ... 这里做原本 func() 应该做的全部工作
+};
+
+template <class I>
+inline func(I iter){
+    func_impl(iter, *iter);	// func 的工作全部移往 func_impl
+}
+
+int main(){
+    int i;
+    func(&i);
+}
+```
+
+我们以 `func()` 为对外接口，却把实际操作全部置于 `func_impl()` 之中。由于 `func_impl()` 是一个function template ，一旦被调用，编译器会自动进行 template 参数推导。于是导出型别 `T`, 顺利解决了问题。
+
+## 3.4 Traits 编程技法——STL 源代码门钥
+
+迭代器所指对象的型别，称为该迭代器的 value type。上述的参数型别推导技巧虽然可用于 value type，却非全面可用：
+
+万一 value type 必须用于函数的传回值，就束手无策了，毕竟函数的 "template 参数推导机制” 推而导之的只是参数，无法推导函数的返回值型别。我们需要其它的方法，**<font color='red'>声明内嵌型别</font>**似乎是个好主意：
+
+```c++
+template <class T>
+struct MyIter{
+    typedef T value_type;	// 内嵌型别声明（nested type）
+    T* ptr;
+    ...
+};
+
+template <class I>
+typename I::value_type func(I ite){ return *ite; }
+```
+
+看起来不错，但是**<font color='red'>并不是所有迭代器都是 class type。原生指针就不是！如果不是 class type，就无法为它定义内嵌型别。</font>**但STL（以及整个泛型思维）绝对必须接受原生指针作为一种迭代器，所以上面这样还不够。有没有办法可以让上述的一般化概念针对特定情况（例如针对原生指针）做特殊化处理呢？是的， **<font color='blue'>template partial specialization</font>** 可以做到。
+
+#### Partial Specialization （偏特化） 的意义
+
+偏特化是指如果 class template 拥有一个以上的 template 参数，我们可以针对其中某个（或数个，但非全部） template 参数进行特化工作。而《泛型思维》一书对 partial specialization 的定义是： “**<font color='red'>针对（任何） template 参数更进—步的条件限制所设计出来的一个特化版本</font>**”。由此，面对以下这么一个 class template：
+
+```c++
+template <typename T>
+class C{...};	// 这个泛化版本允许（接受） T 为任何型别
+```
+
+我们便很容易接受它有一个形式如下的 partial specialization:
+
+```c++
+template <typename T>
+class C<T*>{...};	// 这个特化版本仅适用于 "T 为原生指针" 的情况
+					// "T 为原生指针" 便是 ”T为任何型别“ 的一个更进一步的条件限制
+```
+
+由此我们可用解决前述原生指针并非 class，无法为其定义内嵌型别的问题了。我们可用针对 “迭代器之 template 参数为指针” 者，设计特化版的迭代器。下面这个 class template 专门用来 “萃取“ 迭代器的特性，而 value type 正是迭代器的特性之一：
+
+```c++
+template <class I>
+struct iterator_traits{		// trait 意为 “特性”
+    typedef typename I::value_type value_type;
+};
+```
+
+这个所谓的 traits, 其意义是，如果 `I` 定义有自己的 `value type`，那么通过这个 traits 的作用，萃取出来的 `value_type` 就是 `I: :value＿type` 。先前那个`func()` 可以改写成这样：
+
+```c++
+template <class I>
+typename iterator_traits<I>::value_type func(I ite){ return *ite; }
+```
+
+这样多一层间接性的好处是 traits 可以拥有特化版本。现在，我们令 `iterator_traits` 拥有一个 partial specializations 如下：
+
+```c++
+template <class T>
+struct iterator_traits<T*>{		// 偏特化版——迭代器是个原生指针
+    typedef typename T value_type;
+};
+```
+
+于是，原生指针 `int*` 虽然不是一种 class type，亦可通过 traits 取其 `value_type` 。这就解决了先前的问题。但是请注意，针对 “pointer-to-const”，下面这个
+式子得到什么结果：
+
+```c++
+iterator_traits<const int*>: :value_type
+```
+
+获得的是 `const int` 而非 `int` 。这显然不是我们想要的结果，因此，如果迭代器是个 pointer-to-const ，我们应该设法令其 `value_type` 为一个 non-const 型别。没问题，只要另外设计一个特化版本，就能解决这个问题：
+
+```c++
+template <class T>
+struct iterator_traits<const T*>{		
+    typedef typename T value_type;
+};
+```
+
+当然，若要这个 “特性萃取机” traits 能够有效运作，**<font color='red'>每一个迭代器必须遵循约定，自行以内嵌型别定义 (nested `typedef`) 的方式定义出相应型别 (associated types) </font>**。
+
+ ![image-20220924121621886](images/image-20220924121621886.png)
+
+### 3.4.1 迭代器相应型别之一： value type
+
+所谓 value type，是指迭代器所指对象的型别。
+
+### 3.4.2 迭代器相应型别之二： difference type
+
+difference type 用来表示**<font color='blue'>两个迭代器之间的距离</font>**，因此它也可以用来表示一个容器的最大容量，因为对于连续空间的容器而言，头尾之间的距离就是其最大容量：
+
+```c++
+template <class I>
+struct iterator_traits{
+	typedef typename I::difference_type difference_type;  
+};
+```
+
+针对原生指针，以 C++ 内建的 `ptrdiff_t` 作为 difference type:
+
+```c++
+// 针对原生指针而设计的偏特化版
+template <class T>
+struct iterator_traits<T*>{
+	typedef ptrdiff_t difference_type;  
+};
+
+// 针对原生的 pointer-to-const 而设计的偏特化版
+template <class T>
+struct iterator_traits<const T*>{
+	typedef ptrdiff_t difference_type;  
+};
+```
+
+现在，任何时候当我们需要任何迭代器 `I` 的 difference type, 可以这么写：
+
+```c++
+typename iterator_traits<I>::difference_type
+```
+
+### 3.4.3 迭代器相应型别之三： reference type
+
+1. 当 `p` 是个 mutable iterators 时，如果其 value type 是 `T` ，那么 `*p` 的型别不应该是 `T`，应该是 `T&` 。
+2. 当 `p` 是一个 constant iterators时，其 value type 是 `T`，那么 `*p` 的型别不应该是 `const T`, 而应该是 `const T&` 。
+
+这里所讨论的 `*p` 的型别，即所谓的 reference type 。实现细节将在下一小节一并展示。
+
+### 3.4.4 迭代器相应型别之四： pointer type
+
+reference type 和 pointer type 已在先前的 `ListIter` class 中出现过：
+
+```c++
+Item& operator*() const { return *ptr; }
+Item* operator->() const { return ptr; }
+```
+
+`Item&` 便是 `ListIter` 的reference type, 而 `Item*` 便是其 pointer type 。
+
+现在我们把 reference type 和 pointer type 这两个相应型别加入traits 内：
+
+```c++
+template <class I>
+struct iterator_traits{
+	typedef typename I::pointer pointer;
+    typedef typename I::reference reference;
+};
+
+// 针对原生指针而设计的偏特化版
+template <class T>
+struct iterator_traits<T*>{
+	typedef T* pointer;
+    typedef T& reference;
+};
+
+// 针对原生的 pointer-to-const 而设计的偏特化版
+template <class T>
+struct iterator_traits<const T*>{
+	typedef const T* pointer;
+    typedef const T& reference;
+};
+```
+
+### 3.4.5 迭代器相应型别之五： iterator_category
+
+#### 迭代器的分类
+
+* Input Iterator：只读
+* Output Iterator：只写
+* Forward Iterator：写入型
+* Bidirectional Iterator：可双向移动
+* Random Access Iterator：前四种迭代器都只供应一部分指针算术能力（前三种支持 `operator++`，第四种再加上 `operator--`) ，第五种则涵盖所有指针算术能力，包括 `p+n`, `p-n`, `p[n]`, `p1-p2`, `p1<p2` 。
+
+这些迭代器的分类与从属关系，可用下图表示：
+
+ ![image-20220926101613340](images/image-20220926101613340.png)
+
+设计算法时，如果可能，我们尽量针对某种迭代器提供一个明确定义，并针对更强化的某种迭代器提供另一种定义，这样才能在不同情况下提供最大效率。做法如下：利用 traits 萃取出迭代器的种类，利用这个 “迭代器类型” 相应型别作为算法的第三个参数，且这个相应型别一定必须是一个 class type，因为编译器需依赖它（一个型别）来进行 overloaded resolution。
+
+因此我们需要定义五个 class：
+
+```c++
+// 五个作为标记用的型别 (tag types)
+struct input_iterator_tag { };
+struct output_iterator_tag { } ;
+struct forward_iterator_tag: public input_iterator_tag { };
+struct bidirectional_iterator_tag: public forward_iterator_tag { } ;
+struct random_access_iterator—tag: public bidirectional_iterator_tag { } ;
+```
+
+这些 classes 只作为标记用，所以不需要任何成员。对应的，traits 必须再增加一个相应的型别：
+
+```c++
+template <class I>
+struct iterator_traits {
+	typedef typename I::iterator_category iterator_category;
+};
+
+// 针对原生指针而设计的偏特化版
+template <class T
+struct iterator_traits<T*> {
+	// 原生指针是一种 andom Access Iterator
+	typedef random_access_iterator_tag iterator_category;
+};
+
+// 针对原生的 pointer-to-const 而设计的偏特化版
+template <class T>
+struct iterator_traits<const T*> {
+	// 原生的 pointer-to-const 是一种 Random Access Iterator
+	typedef random_access_iterator_tag iterator_category;
+};
+```
+
+#### `advance`
+
+现在以 advance() 为例，该函数有两个参数，迭代器 `p` 和数值 `n` ，函数内部将 `p` 前进 `n` 距离：
+
+```c++
+template <class InputIterator, class Distance>
+inline void __advance(InputIterator& i, Distance n, input_iterator_tag) {
+  // 单向，逐一前进
+  while (n--) ++i;
+}
+
+template <class BidirectionalIterator, class Distance>
+inline void __advance(BidirectionalIterator& i, Distance n, 
+                      bidirectional_iterator_tag) {
+  // 双向，逐－前进
+  if (n >= 0)
+    while (n--) ++i;
+  else
+    while (n++) --i;
+}
+
+template <class RandomAccessIterator, class Distance>
+inline void __advance(RandomAccessIterator& i, Distance n, 
+                      random_access_iterator_tag) {
+  // 双向，跳跃前进
+  i += n;
+}
+
+template <class InputIterator, class Distance>
+inline void advance(InputIterator& i, Distance n) {
+  __advance(i, n, iterator_category(i));
+}
+```
+
+1. 每个 `_advance()` 的最后一个参数都只声明型别，并未指定参数名称，因为它纯粹只是用来激活重载机制，函数之中根本不使用该参数。
+2. `advance()` 的最后一个参数 `iterator_traits<Iterator>::iterator_category()` 将产生一个**<font color='red'>暂时对象</font>**，其型别应该隶属于前述五个迭代器类型之一。根据这个型别，编译器才决定调用哪一个 `_advance()` 重载函数。
+3. 注意我们并没有写 Forward Iterator 版的  `_advance()` 。这是得益于以 class 来定义迭代器的各种分类标签，不仅可以促成重载机制，通过继承，可以使 Forward Iterator 自动调用 Input Iterator 版的 `_advance()`。
+
+## 3.5 `std::iterator` 的保证
+
+为了符合规范，任何迭代器都应该提供五个内嵌相应型别，以利于 traits 萃取，否则便是自别于整个 STL 架构，可能无法与其它 STL 组件顺利搭配。
+
+然而写代码难免挂一漏万，谁也不能保证不会有粗心大意的时候。如果能够将事情简化，就好多了。STL 提供了一个 iterators class 如下，如果每个新设计的迭代器都继承自它，就可保证符合STL 所需之规范：
+
+```c++
+template<class Category,
+		 class T,
+		 class Distance = ptrdiff_t,
+		 class Pointer = T*,
+		 class Reference = T&>
+struct iterator{
+    typedef Category iterator_category;
+    typedef T value_type;
+    typedef Distance difference_type;
+    typedef Pointer pointer;
+    typedef Reference reference;
+}
+```
+
+`iterator` class 不含任何成员，纯粹只是型别定义，所以继承它并不会招致任何额外负担。由于后三个参数皆有默认值，故新的迭代器只需提供前两个参数即可。例如之前我们自己定义的 `ListIter`，可以这样写：
+
+```c++
+template <class Item>
+ListIter : public iterator<forward_iterator_tag, Item>
+{ ... }
+```
+
+> 设计适当的相应型别 (associated types) ，是迭代器的责任。设计适当的迭代器，则是容器的责任。唯容器本身，才知道该设计出怎样的迭代器来遍历自己，并执行迭代器该有的各种行为（前进、后退、取值、取用成员...)。至于算法，完全可以独立于容器和迭代器之外自行发展，只要设计时以迭代器为对外接口就行。
+
+## 3.6 SGI STL 的私房菜： __type_traits
+
+STL 只对迭代器加以规范，制定出 iterator_traits 这样的东西。SGI 把这种技法进一步扩大到迭代器以外的世界，于是有了所谓的 __ type_traits。双底线前缀词意指这是 SGI STL 内部所用的东西，不在 STL 标准规范之内。
+
+`iterator_traits` 负责萃取迭代器的特性，`__type_traits` 则负责萃取型别 (type) 的特性。此处我们所关注的型别特性是指：这个型别是否具备 non-trivial
+defalt ctor? 是否具备 non-trivial copy ctor? 是否具备non-trivial assignment operator? 是否具备non-trivial dtor? 如果答案是否定的，我们在对这个型别进行构造、析构、拷贝、赋值等操作时，就可以采用最有效率的措施（例如根本不调用身居高位，不谋实事的那些constructor, destructor) ，而采用内存直接处理操作
+如 `malloc`、`memcpy` 等等，获得最高效率。
+
+根据 `iterator_traits` 得来的经验，我们希望，程序之中可以这样运用 `__type_traits<T>`, `T` 代表任意型别：
+
+```c++
+__type_traits::has_trivial_default_constructor
+__type_traits::has_trivial_copy_constructor
+__type_traits::has_trivial_assignment_operator
+__type_traits::has_trivial_destructor
+__type_traits::is_POD_type		// POD : Plain Old Data
+```
+
+我们希望上述式子应该是个有着真／假性质的对象，因为我们希望利用其响应结果来进行**<font color='red'>参数推导</font>**，而**<font color='red'>编译器只有面对 class object 形式的参数，才会做参数推导</font>**。为此，上述式子应该传回这样的东西：
+
+```c++
+struct __true_type { };
+struct __false_type { };
+```
+
+为了达成上述五个式子，`__type_traits` 内必须定义一些 `typedef`s, 其值不是`__true_type`就是`__false_type`。下面是 SGI 的做法：
+
+```c++
+// 把所有内嵌型别都定义为 __false_type，定义出最保守的值
+// 然后再针对每一个标量型别 (scalar types) 设计适当的特化版本
+template <class type>
+struct __type_traits { 
+   typedef __true_type     this_dummy_member_must_be_first;
+
+   typedef __false_type    has_trivial_default_constructor;
+   typedef __false_type    has_trivial_copy_constructor;
+   typedef __false_type    has_trivial_assignment_operator;
+   typedef __false_type    has_trivial_destructor;
+   typedef __false_type    is_POD_type;
+};
+
+// 以下针对 C++ 基本型别char, signed char, unsigned char, short, unsigned short, int， unsigned int,
+// long, unsigned long, float, double, long double 提供特化版本。
+// 注意，每一个成员的值都是 __true_type, 表示这些型别都可采用最快速方式（例如memcpy) 来进行拷贝 (copy) 或赋值 (assign) 操作
+
+// 注意， SGI STL <stl_config.h> 将以下出现的 __STL_TEMPLATE_NULL 定义为 template<>
+__STL_TEMPLATE_NULL struct __type_traits<char> {
+   typedef __true_type    has_trivial_default_constructor;
+   typedef __true_type    has_trivial_copy_constructor;
+   typedef __true_type    has_trivial_assignment_operator;
+   typedef __true_type    has_trivial_destructor;
+   typedef __true_type    is_POD_type;
+};
+
+__STL_TEMPLATE_NULL struct __type_traits<signed char> {
+   typedef __true_type    has_trivial_default_constructor;
+   typedef __true_type    has_trivial_copy_constructor;
+   typedef __true_type    has_trivial_assignment_operator;
+   typedef __true_type    has_trivial_destructor;
+   typedef __true_type    is_POD_type;
+};
+
+__STL_TEMPLATE_NULL struct __type_traits<unsigned char> {
+   typedef __true_type    has_trivial_default_constructor;
+   typedef __true_type    has_trivial_copy_constructor;
+   typedef __true_type    has_trivial_assignment_operator;
+   typedef __true_type    has_trivial_destructor;
+   typedef __true_type    is_POD_type;
+};
+
+__STL_TEMPLATE_NULL struct __type_traits<short> {
+   typedef __true_type    has_trivial_default_constructor;
+   typedef __true_type    has_trivial_copy_constructor;
+   typedef __true_type    has_trivial_assignment_operator;
+   typedef __true_type    has_trivial_destructor;
+   typedef __true_type    is_POD_type;
+};
+
+__STL_TEMPLATE_NULL struct __type_traits<unsigned short> {
+   typedef __true_type    has_trivial_default_constructor;
+   typedef __true_type    has_trivial_copy_constructor;
+   typedef __true_type    has_trivial_assignment_operator;
+   typedef __true_type    has_trivial_destructor;
+   typedef __true_type    is_POD_type;
+};
+
+__STL_TEMPLATE_NULL struct __type_traits<int> {
+   typedef __true_type    has_trivial_default_constructor;
+   typedef __true_type    has_trivial_copy_constructor;
+   typedef __true_type    has_trivial_assignment_operator;
+   typedef __true_type    has_trivial_destructor;
+   typedef __true_type    is_POD_type;
+};
+
+__STL_TEMPLATE_NULL struct __type_traits<unsigned int> {
+   typedef __true_type    has_trivial_default_constructor;
+   typedef __true_type    has_trivial_copy_constructor;
+   typedef __true_type    has_trivial_assignment_operator;
+   typedef __true_type    has_trivial_destructor;
+   typedef __true_type    is_POD_type;
+};
+
+__STL_TEMPLATE_NULL struct __type_traits<long> {
+   typedef __true_type    has_trivial_default_constructor;
+   typedef __true_type    has_trivial_copy_constructor;
+   typedef __true_type    has_trivial_assignment_operator;
+   typedef __true_type    has_trivial_destructor;
+   typedef __true_type    is_POD_type;
+};
+
+__STL_TEMPLATE_NULL struct __type_traits<unsigned long> {
+   typedef __true_type    has_trivial_default_constructor;
+   typedef __true_type    has_trivial_copy_constructor;
+   typedef __true_type    has_trivial_assignment_operator;
+   typedef __true_type    has_trivial_destructor;
+   typedef __true_type    is_POD_type;
+};
+
+__STL_TEMPLATE_NULL struct __type_traits<float> {
+   typedef __true_type    has_trivial_default_constructor;
+   typedef __true_type    has_trivial_copy_constructor;
+   typedef __true_type    has_trivial_assignment_operator;
+   typedef __true_type    has_trivial_destructor;
+   typedef __true_type    is_POD_type;
+};
+
+__STL_TEMPLATE_NULL struct __type_traits<double> {
+   typedef __true_type    has_trivial_default_constructor;
+   typedef __true_type    has_trivial_copy_constructor;
+   typedef __true_type    has_trivial_assignment_operator;
+   typedef __true_type    has_trivial_destructor;
+   typedef __true_type    is_POD_type;
+};
+
+__STL_TEMPLATE_NULL struct __type_traits<long double> {
+   typedef __true_type    has_trivial_default_constructor;
+   typedef __true_type    has_trivial_copy_constructor;
+   typedef __true_type    has_trivial_assignment_operator;
+   typedef __true_type    has_trivial_destructor;
+   typedef __true_type    is_POD_type;
+};
+
+// 注意，以下针对原生指针设计＿＿type_traits 偏特化版本
+// 原生指针亦被视为一种标量型别
+template <class T>
+struct __type_traits<T*> {
+	typedef __true_type    has_trivial_default_constructor;
+   	typedef __true_type    has_trivial_copy_constructor;
+   	typedef __true_type    has_trivial_assignment_operator;
+   	typedef __true_type    has_trivial_destructor;
+   	typedef __true_type    is_POD_type;
+};
+```
+
+`__type_traits` 在 SGI STL 中的应用很广，例如 `copy()` 全局函数（泛型算法之一），其最基本的想法是这样的：
+
+```c++
+// 拷贝一个数组，其元素为任意型别，视情况采用最有效率的拷贝手段
+template <class T> inline void copy(T* source, T* destination, int n) {
+	copy(source, destination, n,
+         	typename __type_traits<T>::has_trivial_copy_constructor());
+}
+
+// 拷贝一个数组，其元素型别拥有 non-trivial copy constructors
+template <class T> inline void copy(T* source, T* destination, int n, __false_type){
+    ...
+}
+
+// 拷贝一个数组，其元素型别拥有 trivial copy constructors
+// 可借助 memcpy() 完成工作
+template <class T> inline void copy(T* source, T* destination, int n, __true_type){
+    ...
+}
+```
+
+> 究竟一个 class 什么时候该有自己的 non-trivial default constructor, non-trivial copy constructor, non-trivial assignment operator, non-trivial destructor 呢？一个简单的判断准则是：如果 class 内含指针成员，并且对它进行内存动态配置，那么这个 class 就需要实现出自己的 non-trivial-xxx。
