@@ -448,7 +448,7 @@ SGI 第一级配置器的 `allocate()` 和 `reallocate()` 都是在调用 `mallo
 
 SGI 第二级配置器的做法是，当区块小于 128 bytes 时，则以**<font color='blue'>内存池(memory pool) </font>**管理，此法又称为**<font color='blue'>次层配置(sub-allocation)</font>** ：
 
-每次配置一大块内存，并维护对应之**<font color='blue'>自由链表(free-list)</font>** 。下次若再有相同大小的内存需求，就直接从 free-lists 中拨出。如果客端释还小额区块，就由配置器回收到 free-lists 中。为了方便管理，**<font color='red'>SGI 第二级配置器会主动将任何小额区块的内存需求量上调至8 的倍数</font>**（例如客端要求 30 bytes, 就自动调整为 32 bytes)，并维护16 个 free-lists ，各自管理大小分别为 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128 bytes 的小额区块。free-lists 的节点结构如下：
+每次配置一大块内存，并维护对应之**<font color='blue'>自由链表(free-list)</font>** 。下次若再有相同大小的内存需求，就直接从 free-lists 中拨出。如果客端释还小额区块，就由配置器回收到 free-lists 中。为了方便管理，**<font color='red'>SGI 第二级配置器会主动将任何小额区块的内存需求量上调至 8 的倍数</font>**（例如客端要求 30 bytes, 就自动调整为 32 bytes)，并维护16 个 free-lists ，各自管理大小分别为 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128 bytes 的小额区块。free-lists 的节点结构如下：
 
 ```c++
 union obj {
@@ -713,7 +713,7 @@ __default_alloc_template<threads, inst>::chunk_alloc(size_t size, int& nobjs)
 
  ![image-20220923114025994](images/image-20220923114025994.png)
 
-万一山穷水尽，整个 system heap 空间都不够了，`malloc()` 行动失败，`chunk_alloc()` 就四处寻找有无“尚有未用区块，且区块够大”之 free lists 。找到了就挖一块交出，找不到就调用第一级配置器。第一级配置器其实也是使用 `malloc()` 来配置内存，但它有 out-of-memory 处理机制，或许有机会释放其它的内存拿来此处使用。如果可以，就成功，否则发出 `bad_alloc` 异常。
+万一山穷水尽，整个 system heap 空间都不够了，`malloc()` 行动失败，`chunk_alloc()` 就四处寻找有无 “尚有未用区块，且区块够大” 之 free lists 。找到了就挖一块交出，找不到就调用第一级配置器。第一级配置器其实也是使用 `malloc()` 来配置内存，但它有 out-of-memory 处理机制，或许有机会释放其它的内存拿来此处使用。如果可以，就成功，否则发出 `bad_alloc` 异常。
 
 ## 2.3 内存基本处理工具
 
@@ -1509,3 +1509,397 @@ template <class T> inline void copy(T* source, T* destination, int n, __true_typ
 ```
 
 > 究竟一个 class 什么时候该有自己的 non-trivial default constructor, non-trivial copy constructor, non-trivial assignment operator, non-trivial destructor 呢？一个简单的判断准则是：如果 class 内含指针成员，并且对它进行内存动态配置，那么这个 class 就需要实现出自己的 non-trivial-xxx。
+
+# 第四章 序列式容器
+
+## 4.1 容器的概观与分类
+
+下图以缩进方式表示了 SGI STL 的各种容器基层与衍生层的关系。这里所谓的衍生，并非派生（inheritance）关系，而是内含关系。例如 `heap` 内含一个 `vector`，`priority-queue` 内含一个 `heap`、`stack` 和 `queue` 都内含一个 `deque`，`set`、`map`、`multiset`、`multimap` 都内含一个 `RB-tree...`
+
+ ![image-20220927095047528](images/image-20220927095047528.png)
+
+## 4.2 `vector`
+
+### 4.2.1 `vector` 概述
+
+`vector` 的数据安排以及操作方式，与 array 非常相似。两者的唯一差别在于空间的运用的灵活性：
+
+* array 是**<font color='blue'>静态空间</font>**，一旦配置了就不能改变：要换个大（或小）一点的房子，可以，一切琐细得由客户端自己来，首先配置一块新空间，然后将元素从旧址一一搬往新址，再把原来的空间释还给系统。
+* `vector` 是**<font color='blue'>动态空间</font>**，随着元素的加入，它的内部机制会自行扩充空间以容纳新元素。
+
+### 4.2.2 `vector` 定义摘要
+
+以下是 vector 定义的源代码摘录：
+
+```c++
+template <class T, class Alloc = alloc>
+class vector {
+public:
+  // vector 的嵌套定义
+  typedef T value_type;
+  typedef value_type* pointer;
+  typedef value_type* iterator;
+  typedef value_type& reference;
+  typedef size_t size_type;
+  typedef ptrdiff_t difference_type;
+protected:
+  typedef simple_alloc<value_type, Alloc> data_allocator;
+  iterator start;						// 表示目前使用空间的头
+  iterator finish;						// 表示目前使用空间的尾
+  iterator end_of_storage;				// 表示目前可用空间的尾
+  void insert_aux(iterator position, const T& x);
+  void deallocate() {
+    if (start) data_allocator::deallocate(start, end_of_storage - start);
+  }
+
+  void fill_initialize(size_type n, const T& value) {
+    start = allocate_and_fill(n, value);
+    finish = start + n;
+    end_of_storage = finish;
+  }
+public:
+  iterator begin() { return start; }
+  iterator end() { return finish; }
+  size_type size() const { return size_type(end() - begin()); }
+  size_type capacity() const { return size_type(end_of_storage - begin()); }
+  bool empty() const { return begin() == end(); }
+  reference operator[](size_type n) { return *(begin() + n); }
+    
+  vector() : start(0), finish(0), end_of_storage(0) {}
+  vector(size_type n, const T& value) { fill_initialize(n, value); }
+  vector(int n, const T& value) { fill_initialize(n, value); }
+  vector(long n, const T& value) { fill_initialize(n, value); }
+  explicit vector(size_type n) { fill_initialize(n, T()); }
+    
+  ~vector() { 
+    destroy(start, finish);		// 全局函数
+    deallocate();				// vector的一个member函数
+  }
+  
+  reference front() { return *begin(); }		// 第一个元素
+  reference back() { return *(end() - 1); }		// 最后一个元素
+  void push_back(const T& x) {					// 将元素插入至最尾端
+    if (finish != end_of_storage) {
+      construct(finish, x);		// 全局函数
+      ++finish;
+    }
+    else
+      insert_aux(end(), x);
+  }
+  void pop_back() {								// 将最尾端元素取出
+    --finish;
+    destroy(finish);
+  }
+  iterator erase(iterator position) {			// 清楚某位置上的元素
+    if (position + 1 != end())
+      copy(position + 1, finish, position);		// 后续元素往前移动
+    --finish;
+    destroy(finish);
+    return position;
+  }
+  void resize(size_type new_size, const T& x) {
+    if (new_size < size()) 
+      erase(begin() + new_size, end());
+    else
+      insert(end(), new_size - size(), x);
+  }
+  void resize(size_type new_size) { resize(new_size, T()); }
+  void clear() { erase(begin(), end()); }
+protected:
+  // 配置空间并填满内容
+  iterator allocate_and_fill(size_type n, const T& x) {
+    iterator result = data_allocator::allocate(n);
+      uninitialized_fill_n(result, n, x);
+      return result;
+    }
+  }
+};
+```
+
+### 4.2.3 `vector` 的迭代器
+
+`vector` 维护的是一个连续线性空间，所以不论其元素型别为何，普通指针都可以作为 `vector` 的迭代器而满足所有必要条件。`vector` 支持随机存取，而普通指针正有着这样的能力。所以，`vector` 提供的是 Random Access Iterators 。
+
+```c++
+template <class T, class Alloc = alloc>
+class vector {
+public:
+  // vector 的嵌套定义
+  typedef T value_type;
+  typedef value_type* iterator;		// vector 的迭代器是普通指针
+  ...
+};
+```
+
+根据上述定义，如果客户端写出这样的代码：
+
+```c++
+vector<int>::iterator ivite;
+vector<Shape>::iterator svite;
+```
+
+`ivite` 的型别其实就是 `int*`，`svite` 的型别其实就是 `shape*`
+
+### 4.2.4 `vector` 的数据结构
+
+`vector` 所采用的数据结构非常简单：**<font color='red'>线性连续空间</font>**。它以两个迭代器 `start` 和 `finish` 分别指向配置得来的连续空间中目前已被使用的范围，并以迭代器
+`end_of_storage` 指向整块连续空间（含备用空间）的尾端：
+
+```c++
+template <class T, class Alloc = alloc>
+class vector {
+...
+protected:
+  iterator start;						// 表示目前使用空间的头
+  iterator finish;						// 表示目前使用空间的尾
+  iterator end_of_storage;				// 表示目前可用空间的尾
+...
+};
+```
+
+ ![image-20220929101058536](images/image-20220929101058536.png)
+
+运用这三个迭代器，便可轻易地提供首尾标示、大小、容量、空容器判断、下标运算符、最前端元素值、最后端元素值等机能：
+
+```c++
+template <class T, class Alloc = alloc>
+class vector {
+...
+public:
+  iterator begin() { return start; }
+  iterator end() { return finish; }
+  size_type size() const { return size_type(end() - begin()); }
+  size_type capacity() const { return size_type(end_of_storage - begin()); }
+  bool empty() const { return begin() == end(); }
+  reference operator[](size_type n) { return *(begin() + n); }
+    
+  reference front() { return *begin(); }		// 第一个元素
+  reference back() { return *(end() - 1); }		// 最后一个元素
+...
+};
+```
+
+### 4.2.5 `vector` 的构造与内存管理： `constructor`, `push_back`
+
+`vector` 缺省使用 `alloc` （第二章）作为空间配置器，并据此另外定义了一个 `data_allocator`, 为的是更方便以元素大小为配置单位：
+
+```c++
+template <class T, class Alloc = alloc>
+class vector {
+...
+protected:
+  typedef simple_alloc<value_type, Alloc> data_allocator;
+...
+};
+```
+
+#### 指定空间大小及初值的构造函数
+
+```c++
+// 构造函数，允许指定vector大小和初值value
+vector(size_type n, const T& value) { fill_initialize(n, value); }
+
+// 填充并予以初始化
+void fill_initialize(size_type n, const T& value) {
+    start = allocate_and_fill(n, value);
+    finish = start + n;
+    end_of_storage = finish;
+}
+
+// 配置而后填充
+iterator allocate_and_fill(size_type n, const T& x) {
+    iterator result = data_allocator::allocate(n);	// 配置 n 个元素空间
+    // uninitialized_fill_n 会根据第一参数的型别特性决定使用算法 fill_n 或反复调用 construct 来完成任务
+    uninitialized_fill_n(result, n, x);				// 全局函数，见 2.3 节
+    return result;
+}
+```
+
+#### `push_back`
+
+当我们以 `push_back` 将新元素插入于 `vector` 尾端时，该函数首先检查是否还有备用空间：
+
+* 如果有就直接在备用空间上**<font color='red'>构造</font>**元素，并调整迭代器 `finish`, 使 `vector` 变大
+* 如果没有备用空间了，就扩充空间（**<font color='red'>重新配置、移动数据、释放原空间</font>**）
+
+```c++
+void push_back(const T& x) {					// 将元素插入至最尾端
+    if (finish != end_of_storage) {	// 还有备用空间
+      construct(finish, x);			// 全局函数
+      ++finish;
+    }
+    else{							// 已无备用空间
+      insert_aux(end(), x);
+  	}
+}
+
+template <class T, class Alloc>
+void vector<T, Alloc>::insert_aux(iterator position, const T& x) {
+  if (finish != end_of_storage) {	// 还有备用空间
+    construct(finish, *(finish - 1));
+    ++finish;
+    T x_copy = x;
+    copy_backward(position, finish - 2, finish - 1);
+    *position = x_copy;
+  }
+  else {							// 已无备用空间
+    // 配置原则：如果原大小为0, 则配置1 （个元素大小） ;
+	// 如果原大小不为0, 则配置原大小的两倍，前半段用来放置原数据，后半段准备用来放置新数据
+    const size_type old_size = size();
+    const size_type len = old_size != 0 ? 2 * old_size : 1;	
+    
+    iterator new_start = data_allocator::allocate(len);	// 配置新空间
+    iterator new_finish = new_start;
+    try {
+      // 将原 vector 的内容拷贝到新 vector
+      new_finish = uninitialized_copy(start, position, new_start);
+      // 为新元素设定初值 x
+      construct(new_finish, x);
+      ++new_finish;
+      // 将原vector 的备用空间中的内容也忠实拷贝过来（疑惑：啥用途？）
+      new_finish = uninitialized_copy(position, finish, new_finish);
+    }
+    catch(...) {
+      // commit or rollback
+      destroy(new_start, new_finish); 
+      data_allocator::deallocate(new_start, len);
+      throw;
+    }
+    
+    // 析构并释放原 vector
+    destroy(begin(), end());
+    deallocate();
+    
+    // 调整迭代器，指向新 vector
+    start = new_start;
+    finish = new_finish;
+    end_of_storage = new_start + len;
+  }
+}
+```
+
+注意，所谓动态增加大小，并不是在原空间之后接续新空间（因为无法保证原空间之后尚有可供配置的空间），而是以原大小的两倍**<font color='red'>另外配置</font>**一块较大空间，然
+后将原内容拷贝过来，然后才开始在原内容之后构造新元素，并释放原空间。
+
+因此，**<font color='red'>对 `vector` 的任何操作，一且引起空间重新配置，指向原 `vector` 的所有迭代器就都失效了</font>**。这是程序员易犯的一个错误，务需小心。
+
+### 4.2.6 `vector` 的元素操作： `pop_back`, `erase`, `clear`, `insert`
+
+####  `pop_back`
+
+```c++
+void pop_back() {								
+    --finish;			// 将尾端标记往前移一格，表示将放弃尾端元素，注意 finish 是指向下 one pass last 处
+    destroy(finish);	// 析构尾端元素，并不调用 deallocate 释放其所在空间
+}
+```
+
+#### `erase`、`clear`
+
+```c++
+// 消除［first,last) 中的所有元素
+iterator erase(iterator first, ierator last) {
+    iterator i = copy(last, finish, first);	// 后续元素向前移动
+    destroy(i, finish);						
+    finish = finish - (last - first);
+    return first;
+}
+```
+
+```c++
+// 清除某个位置上的元素
+iterator erase(iterator position) {
+    if(position + 1 != end())
+        copy(position + 1, finish, position);	// 后续元素向前移动
+    --finish;
+    destroy(finish);						
+    return position;
+}
+```
+
+```c++
+void clear(){
+    erase(begin(), end());
+}
+```
+
+#### `insert`
+
+```c++
+template <class T, class Alloc>
+void vector<T, Alloc>::insert(iterator position, size_type n, const T& x) {
+  if (n != 0) {
+    if (size_type(end_of_storage - finish) >= n) {	// 备用空间大于等于新增元素个数
+      T x_copy = x;
+      const size_type elems_after = finish - position;
+      iterator old_finish = finish;
+      if (elems_after > n) {						// 插入点之后的现有元素个数（包括插入点） 大于 新增元素个数
+        // 在源区间末尾切出一块同待插入区间等长的部分，整体后移；因为源区间末尾之后面对的是未初始化的内存，所以调用 uninitialized_copy 
+        uninitialized_copy(finish - n, finish, finish);		
+        finish += n;
+     	// 第一步的剩余部分逆向拷贝的方式，整体右移；因为是对已初始化空间的操作而且是逆向拷贝，所以调用 copy_backward
+        copy_backward(position, old_finish - n, old_finish);
+        // 第二部分的空洞部分由待插入序列进行填充。因为是对已初始化空间的操作，所以调用 fill 
+        fill(position, position + n, x_copy);		// 从插入点开始填入新值
+      }
+      else {										// 插入点之后的现有元素个数 小于等于 新增元素个数
+        // 先把需要插入在未初始化空间的待插入元素插在容器尾端，数量为 n - elems_after
+        uninitialized_fill_n(finish, n - elems_after, x_copy);
+        finish += n - elems_after;
+        // 把原先插入点之后的元素后移到上述步骤之后，同样是在未初始化空间插入
+        uninitialized_copy(position, old_finish, finish);
+        finish += elems_after;
+        // 最后往空出来的 从插入点之后到原先容器尾端 的位置中插入待插入元素
+        fill(position, old_finish, x_copy);
+      }
+    }
+    else {											// 备用空间小于新增元素个数
+      // 首先决定新长度：旧长度的两倍，或旧长度＋新增元素个数
+      const size_type old_size = size();        
+      const size_type len = old_size + max(old_size, n);
+      // 配置新的 vector 空间
+      iterator new_start = data_allocator::allocate(len);
+      iterator new_finish = new_start;
+      try {
+        // 首先将旧 vector 的插入点之前的元素复制到新空间
+        new_finish = uninitialized_copy(start, position, new_start);
+        // 再将新增元素填入新空间
+        new_finish = uninitialized_fill_n(new_finish, n, x);
+        // 最后将旧 vector 插入点之后的元素复制到新空间
+        new_finish = uninitialized_copy(position, finish, new_finish);
+      }
+      catch(...) {
+        // commit or rollback
+        destroy(new_start, new_finish);
+        data_allocator::deallocate(new_start, len);
+        throw;
+      }
+      // 清楚并释放就 vector
+      destroy(start, finish);
+      deallocate();
+      // 更新三个迭代器
+      start = new_start;
+      finish = new_finish;
+      end_of_storage = new_start + len;
+    }
+  }
+}
+```
+
+图示说明：
+
+* 备用空间 ≥ 新增元素个数
+
+  区分下面两种情况主要是因为在 `position` 到 `finish `之间插入元素需要调用 `copy_backward` / `fill` ，而在备用空间中插入元素则需要调用`uninitialized_copy`，因此不能一起整体后移。
+
+  * 插入点之后的现有元素 ＞ 新增元素个数
+
+     ![image-20220929112811569](images/image-20220929112811569.png)
+
+  * 插入点之后的现有元素 ≤ 新增元素个数
+
+     ![image-20220929113055068](images/image-20220929113055068.png)
+
+* 备用空间 ＜新增元素个数
+
+   ![image-20220929113307819](images/image-20220929113307819.png)
