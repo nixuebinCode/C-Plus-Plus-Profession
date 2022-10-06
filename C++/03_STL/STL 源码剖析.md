@@ -1903,3 +1903,1081 @@ void vector<T, Alloc>::insert(iterator position, size_type n, const T& x) {
 * 备用空间 ＜新增元素个数
 
    ![image-20220929113307819](images/image-20220929113307819.png)
+
+## 4.3 `list`
+
+### 4.3.1 `list` 概述
+
+相较于 `vector` 的连续线性空间， `list` 就显得复杂许多，它的好处是每次插入或删除一个元素，就配置或释放一个元素空间。因此， `list` 对于空间的运用有
+绝对的精准，一点也不浪费。而且，对于任何位置的元素插入或元素移除， `list` 永远是常数时间。
+
+### 4.3.2 `list` 的节点（node）
+
+以下是 STL list 的节点结构：
+
+```c++
+template <class T>
+struct __list_node {
+  typedef void* void_pointer;
+  void_pointer next;
+  void_pointer prev;
+  T data;
+};
+```
+
+显然这是一个**<font color='red'>双向链表</font>**。
+
+### 4.3.3 `list` 的迭代器
+
+`list` 不再能够像 `vector` 一样以普通指针作为迭代器，因为其节点不保证在储存空间中连续存在。
+
+`list` 迭代器必须有能力指向 `list` 的节点，并有能力进行正确的递增、递减、取值、成员存取等操作。以下是 `list` 迭代器的设计：
+
+```c++
+template<class T, class Ref, class Ptr>
+struct __list_iterator {
+  typedef __list_iterator<T, T&, T*>             iterator;
+  typedef __list_iterator<T, Ref, Ptr>           self;
+
+  typedef bidirectional_iterator_tag iterator_category;
+  typedef T value_type;
+  typedef Ptr pointer;
+  typedef Ref reference;
+  typedef __list_node<T>* link_type;
+  typedef size_t size_type;
+  typedef ptrdiff_t difference_type;
+
+  link_type node;			// 迭代器内部当然要有一个普通指针，指向 list 的节点
+
+  // constructor
+  __list_iterator(link_type x) : node(x) {}
+  __list_iterator() {}
+  __list_iterator(const iterator& x) : node(x.node) {}
+
+  bool operator==(const self& x) const { return node == x.node; }
+  bool operator!=(const self& x) const { return node != x.node; }
+  // 对迭代器进行解引用，取的是节点的数据值
+  reference operator*() const { return (*node).data; }
+  // 迭代器成员存取的做法，返回的是指向节点数据的指针
+  pointer operator->() const { return &(operator*()); }
+
+  // 对迭代器累加 1，就是前进一个节点
+  self& operator++() { 
+    node = (link_type)((*node).next);
+    return *this;
+  }
+  self operator++(int) { 
+    self tmp = *this;
+    ++*this;
+    return tmp;
+  }
+  // 对迭代器递减 1，就是后退一个节点
+  self& operator--() { 
+    node = (link_type)((*node).prev);
+    return *this;
+  }
+  self operator--(int) { 
+    self tmp = *this;
+    --*this;
+    return tmp;
+  }
+};
+
+template <class T, class Alloc = alloc>
+class list{
+public:
+    typedef __list_iterator<T, T&, T*>             iterator;
+...
+};
+```
+
+### 4.3.4 `list` 的数据结构
+
+SGI `list` 不仅是一个双向链表，而且还是一个**<font color='red'>环状双向链表</font>**。所以它只需要一个指针，便可以完整表现整个链表：
+
+```c++
+template <class T, class Alloc = alloc>
+class list{
+protected:
+    typedef _list_node<T> list_node;
+public:
+    typedef lis_node* link_type;
+protected:
+    link_type node;	// 只要一个指针，便可表示整个环状双向链表
+...
+};
+```
+
+如果让指针 `node` 指向刻意**<font color='red'>置于尾端的一个空白节点</font>**， `node` 便能符合 STL 对于 “前闭后开“ 区间的要求，成为 last 迭代器，如图所示：
+
+ ![image-20220930095010629](images/image-20220930095010629.png)
+
+利用这个 last 迭代器，可以轻松实现下面几个函数：
+
+```c++
+iterator begin() { return (link_type)((*node).next); }
+iterator end() { return node; }
+bool empty() const { return node->next == node; }
+  	size_type size() const {
+    size_type result = 0;
+    distance(begin(), end(), result);
+    return result;
+}
+reference front() { return *begin(); }
+reference back() { return *(--end()); }
+```
+
+### 4.3.5 `list` 的构造与内存管理
+
+`list` 缺省使用 `alloc`  作为空间配置器，并据此另外定义了一个 `list_node_allocator`, 为的是更方便地以节点大小为配置单位：
+
+```c++
+template <class T, class Alloc = alloc>	// 缺省使用 alloc 为配置器
+class list{
+protected:
+    typedef _list_node<T> list_node;
+    // 专属之空间配置器，每次配置一个节点大小
+    typedef simple_alloc<list_node, Alloc> list_node_allocator;
+    ...
+};
+```
+
+list 通过 list_node_allocator 来配置、释放、构造、销毁一个节点：
+
+```c++
+// 配置一个节点并传回
+link_type get_node() { return list_node_allocator::allocate(); }
+// 释放一个节点
+void put_node(link_type p) { list_node_allocator::deallocate(p); }
+// 产生（配置并构造）一个节点，带有元素值
+link_type create_node(const T& x) {
+    link_type p = get_node();
+    construct(&p->data, x);		// 调用 construct 函数在节点数据位置构造数据
+    return p;
+}
+void destroy_node(link_type p) {
+    destroy(&p->data);			// 析构节点数据
+    put_node(p);
+}
+```
+
+#### 默认构造函数
+
+```c++
+list() { empty_initialize(); }	// 产生一个空链表
+
+void empty_initialize() { 
+	node = get_node();			// 配置一个节点空间，令 node 指向它
+    node->next = node;			// 令 node 头尾都指向自己，不设元素值
+    node->prev = node;
+}
+```
+
+ ![image-20220930103456963](images/image-20220930103456963.png)
+
+#### `insert` 函数
+
+`insert` 是一个重载函数，有多种形式。其中一种为 ”在迭代器 `position` 所指位置插入一个节点，内容为 `x`“：
+
+```c++
+iterator insert(iterator position, const T& x) {
+    link_type tmp = create_node(x);		// 产生一个节点，内容为 x
+    // 调整双向指针，使 tmp 插入进去
+    tmp->next  = position.node;			// node为list的迭代器中保存的指向当前节点的指针
+    tmp->prev = position.node->prev;
+    (link_type(position.node->prev))->next = tmp;
+    position.node->prev = tmp;
+    return tmp;
+}
+```
+
+注意，插入完成后，**<font color='red'>新节点将位于 `position` 的前方</font>**，这是 STL 对于插入操作的标准规范。
+
+**<font color='red'>由于 `list` 不像 `vector` 那样有可能在空间不足时做重新配置、数据移动操作，所以插入前的所有迭代器在插入操作之后仍然有效。</font>**
+
+### 4.3.6 `list` 的元素操作
+
+#### `push_front`, `push_back`
+
+两者均调用上一节中 `insert` 方法完成元素的插入：
+
+```c++
+// 插入一个节点，作为头节点
+void push_front(const T& x) { insert(begin(), x); }
+// 插入一个节点，作为尾节点
+void push_back(const T& x) { insert(end(), x); }
+```
+
+#### `erase`、`pop_front`、`pop_back`
+
+```c++
+iterator erase(iterator position) {
+   // 调整双向指针，从链表中移除待删除节点
+   link_type next_node = link_type(position.node->next);
+   link_type prev_node = link_type(position.node->prev);
+   prev_node->next = next_node;
+   next_node->prev = prev_node;
+   // 释放待删除节点的空间
+   destroy_node(position.node);
+   
+   return iterator(next_node);
+}
+// 移除头节点
+void pop_front() { erase(begin()); }
+// 移除尾节点
+void pop_back() { 
+   iterator tmp = end();
+   erase(--tmp);
+}
+```
+
+#### `clear` 清除所有节点
+
+```c++
+template <class T, class Alloc> 
+void list<T, Alloc>::clear()
+{
+  link_type cur = (link_type) node->next;		// node 为 list 中记录的 last 指针，node->next 即为 begin()
+  // 遍历链表，销毁每一个节点
+  while (cur != node) {							// begin != end
+  	link_type tmp = cur;
+  	cur = (link_type) cur->next;
+  	destroy_node(tmp);
+  }
+  // 恢复 node 原始状态
+  node->next = node;
+  node->prev = node;
+}
+```
+
+#### `transfer`
+
+`list` 内部提供一个所谓的迁移操作（transfer）：将某连续范围的元素迁移到某个特定位置**<font color='red'>之前</font>**。技术上很简单，节点间的指针移动而已。这个操作为其它的复
+杂操作如 `splice`, `sort`, `merge` 等奠定良好的基础。
+
+```c++
+protected:
+  void transfer(iterator position, iterator first, iterator last) {	// 注意是左闭又开区间，最终插入的是 first 到 last->prev
+    if (position != last) {
+      (*(link_type((*last.node).prev))).next = position.node;		// 将 last 的前驱的后继指向 position
+      (*(link_type((*first.node).prev))).next = last.node;			// 将 first ~ last->prev 从原链表中断开
+      (*(link_type((*position.node).prev))).next = first.node;  	// 将 position->prev->next 指向 first
+      link_type tmp = link_type((*position.node).prev);
+      (*position.node).prev = (*last.node).prev;					// 将 position->prev 指向 last->prev
+      (*last.node).prev = (*first.node).prev; 						// 将 last 的前驱指向 first 的前驱
+        															// 将 first ~ last->prev 从原链表中断开
+      (*first.node).prev = tmp;										// 将 first 的前驱指向原 position 的前驱
+    }
+  }
+```
+
+以下是 `merge`, `reverse`, `sort` 的源代码。有了 `transfer`，这些操作都不难完成。
+
+```c++
+// merge 将 x 合并到 *this 身上。两个 list 的内容都必须先经过递增排序
+template <class T, class Alloc>
+void list<T, Alloc>::merge(list<T, Alloc>& x) {
+  iterator first1 = begin();
+  iterator last1 = end();
+  iterator first2 = x.begin();
+  iterator last2 = x.end();
+  while (first1 != last1 && first2 != last2)
+    if (*first2 < *first1) {			// 如果 first2 的值 < first1 的值
+      iterator next = first2;
+      transfer(first1, first2, ++next);	// 将 first2 指向的节点插入到 first1 前面
+      first2 = next;					// 将 first2 向前进一格
+    }
+    else								// 如果 first1 的值较小
+      ++first1;							// 直接将 first1 向前进一格
+  if (first2 != last2) transfer(last1, first2, last2);
+}
+```
+
+```c++
+// reverse 将 *this 的内容逆向重置
+template <class T, class Alloc>
+void list<T, Alloc>::reverse() {
+  // 如果是空链表，或仅有一个元素，就不进行任何操作
+  if (node->next == node || link_type(node->next)->next == node) return;
+  iterator first = begin();
+  ++first;
+  // 调用 transfer 不断地进行一个头插操作
+  while (first != end()) {
+    iterator old = first;
+    ++first;
+    transfer(begin(), old, first);
+  }
+}    
+```
+
+**<font color='red'>`list` 不能使用 STL 算法 `sort`，必须使用自己的 `sort` member function，因为 STL 算法 `sort` 只接受 RamdonAccessiterator。</font>**
+
+```c++
+// 基于归并排序
+template <class T, class Alloc>
+void list<T, Alloc>::sort() {
+  // 如果是空链表，或仅有一个元素，就不进行任何操作
+  if (node->next == node || link_type(node->next)->next == node) return;
+  // 辅助链表
+  list<T, Alloc> carry;
+  list<T, Alloc> counter[64];
+    
+  int fill = 0;
+  while (!empty()) {
+    // 将 *this 链表中的首元素移入空链表 carry 中，并在 *this 中删除移走的元素
+    carry.splice(carry.begin(), *this, begin());
+      
+    int i = 0;
+    while(i < fill && !counter[i].empty()) {
+      counter[i].merge(carry);
+      carry.swap(counter[i++]);
+    }
+    // 交换 carry 和 counter[i] 两个 list
+    carry.swap(counter[i]);         
+    if (i == fill) ++fill;
+  } 
+
+  for (int i = 1; i < fill; ++i) counter[i].merge(counter[i-1]);
+  swap(counter[fill-1]);
+}
+```
+
+`sort` 中定义了含有 64 个链表的数组 `counter`，做为中转数组。当其中第 `i` 个（从 0 开始计数）链表中最多可以放 $2^i$ 个元素，当超过时，需要把其中的元素转移到第 `i + 1` 个链表中。由于一共有 64 个链表，所以最多可以处理含有 $2^{64}$ 个元素的链表。
+
+比如我们的链表中有如下几个需要排序的元素：21，45，1，30，52，3，58，47，22，59，0，58
+
+1. 取出第一个元素 21，放到 counter[0] 中：
+
+   counter[0]：21
+
+   counter[1]：null
+
+2. 取出第二个元素 45，放到 counter[0] 中（不是简单的放，调用 merge，做归并排序），此时 counter[0] 中的元素个数超过 1 个，于是把 counter[0] 中的元素转移到 counter[1] 中：
+
+   counter[0]：null
+
+   counter[1]：21，45
+
+3. 取出第三个元素 1，放到 counter[0] 中：
+
+   counter[0]：1
+
+   counter[1]：21，45
+
+4. 取出第四个元素 30，放到 counter[0] 中，此时 counter[0] 中的元素个数超过 1 个，于是把 counter[0] 中的元素转移到 counter[1] 中：
+
+   counter[0]：null
+
+   counter[1]：1，21，30，45
+
+5. 此时 counter[1]  中的元素超过 2 个了，于是把 counter[1] 中的元素转移到 counter[2] 中：
+
+   counter[0]：null
+
+   counter[1]：null
+
+   counter[2]：1，21，30，45
+
+6. 以此类推。。。
+
+## 4.4 `deque`
+
+### 4.4.1 `deque` 概述
+
+`vector` 是单向开口的连续线性空间， `deque` 则是一种双向开口的连续线性空间：
+
+ ![image-20221001100342763](images/image-20221001100342763.png)
+
+`deque` 和 `vector` 的最大差异，一在于 `deque` 允许于常数时间内对头端进行元素的插人或移除操作，二在于**<font color='red'> `deque` 没有所谓容量（capacity）观念，因为它是动态地以分段连续空间组合而成，随时可以增加一段新的空间并链接起来</font>**。换句话说，像 `vector` 那样 “因旧空间不足而重新配置一块更大空间，然后复制元素，再释放旧空间” 这样的事情在 `deque` 是不会发生的。也因此， `deque` 没有必要提供所谓的空间保留（reserve）功能。
+
+虽然 `deque` 也提供 Ramdon Access Iterater，但它的迭代器并不是普通指针，相比 `vector` 要复杂很多，这当然影响了各个运算层面。因此，除非必要，我们应尽可能选择使用 `vector` 而非 `deque` 。
+
+**<font color='red'>对 `deque` 进行的排序操作，为了最高效率，可将 `deque` 先完整复制到一个 `vector`身上，将 `vector` 排序后（利用STL `sort` 算法），再复制回 `deque` 。</font>**
+
+### 4.4.2 `deque` 的中控器
+
+`deque` 系由一段一段的定量连续空间构成。一旦有必要在 `deque` 的前端或尾端增加新空间，便配置一段定量连续空间，串接在整个 `deque` 的头端或尾端。`deque` 的最大任务，便是在这些分段的定量连续空间上，维护其**<font color='red'>整体连续的假象</font>**，并提供随机存取的接口。避开了 “重新配置、复制、释放” 的轮回，代价则是复
+杂的迭代器架构。
+
+`deque` 采用一块所谓的 `map` （注意，不是 STL 的 `map` 容器）作为主控。这里所谓 `map` 是一小块连续空间，其中每个元素（此处称为一个节点， node）都是指针，指向另一段（较大的）连续线性空间，称为**<font color='blue'>缓冲区</font>**。缓冲区才是 `deque` 的储存空间主体。SGI STL 允许我们指定缓冲区大小，默认值 0 表示将使用 512 bytes 缓冲区。
+
+```c++
+template <class T, class Alloc = alloc, size_t BufSiz = 0> 
+class deque {
+public:                         // Basic types
+  typedef T value_type;
+  typedef value_type* pointer;
+  ...
+protected:
+  typedef pointer* map_pointer;	// 元素的指针的指针
+protected:						// Data members
+  map_pointer map;				// 指向 map, map 是块连续空间，其内的每个元素都是一个指针（称为节点），指向一块缓冲区
+  size_type map_size;			// map 内可容纳多少指针
+};
+```
+
+我们可以发现， `map` 其实是一个 `T**`，也就是说它是一个指针，所指之物又是一个指针，指向型别为 `T` 的一块空间：
+
+ ![image-20221001102015711](images/image-20221001102015711.png)
+
+### 4.4.3 `deque` 的迭代器
+
+`deque` 是**<font color='red'>分段连续空间</font>**。维持其 “整体连续“ 假象的任务，落在了迭代器的 `operator++` 和 `operator--` 两个运算子身上。
+
+deque 的迭代器需要能够指出分段连续空间（亦即缓冲区）在哪里，而且**<font color='red'>它必须能够判断自己是否已经处于其所在缓冲区的边缘，如果是，一旦前进或后退时就必须跳跃至下一个或上一个缓冲区。</font>**
+
+```c++
+template <class T, class Ref, class Ptr>
+struct __deque_iterator {
+  typedef __deque_iterator<T, T&, T*>             iterator;
+  typedef __deque_iterator<T, const T&, const T*> const_iterator;
+  static size_t buffer_size() {return __deque_buf_size(0, sizeof(T)); }
+
+  typedef random_access_iterator_tag iterator_category;
+  typedef T value_type;
+  typedef Ptr pointer;
+  typedef Ref reference;
+  typedef size_t size_type;
+  typedef ptrdiff_t difference_type;
+  typedef T** map_pointer;
+
+  typedef __deque_iterator self;
+
+  // 保持与容器的联结
+  T* cur;			// 当前指向的元素
+  T* first;			// 当前缓冲区的头
+  T* last;			// 当前缓冲区的尾，含备用空间
+  map_pointer node;	// 指向 deque 的中控器
+  ...
+};
+
+// 全局函数，用来决定缓冲区的大小
+// 若 n 不为 0，传回 n，表示 buffer size 由用户自定义
+// 若 n 为 0，表示 buffer size 使用默认值，那么
+//     如果元素大小小于 512， 传回 512/sz
+//     如果元素大小大于等于 512，传回 1
+inline size_t __deque_buf_size(size_t n, size_t sz)
+{
+  return n != 0 ? n : (sz < 512 ? size_t(512 / sz) : size_t(1));
+}
+```
+
+下图所示为 deque 的中控器、缓冲区、迭代器之间的关系：
+
+ ![image-20221001110013366](images/image-20221001110013366.png)
+
+下面是 `deque` 迭代器的几个关键行为。迭代器内各种指针运算的关键就是：一旦行进时遇到缓冲区边缘，要特别当心，可能需要调用 `set_node` 跳一个缓冲区：
+
+```c++
+void set_node(map_pointer new_node) {
+    node = new_node;
+    first = *new_node;
+    last = first + difference_type(buffer_size());
+}
+```
+
+以下各个重载运算子是 `__deque_iterator` 成功运作的关键
+
+```c++
+reference operator*() const { return *cur; }
+pointer operator->() const { return &(operator*()); }
+
+difference_type operator-(const self& x) const {
+	return difference_type(buffer_size()) * (node - x.node - 1) +
+      (cur - first) + (x.last - x.cur);
+}
+
+self& operator++(){
+    cur++;						// 切换至下一个元素
+    if(cur == last){			// 如果已达到所在缓冲区的尾端
+        set_node(node + 1);		// 切换至下一个缓冲区
+        cur = first;			// 指向新缓冲区的第一个元素
+    }
+    return *this;
+}
+self operator++(int){
+    self tmp = *this;
+    ++*this;
+    return tmp;
+}
+
+self& operator--(){
+    if(cur == first){		// 如果已达所在缓冲区的头端
+        set_node(node - 1);	// 切换至上一个缓冲区
+        cur = last;			// 指向新缓冲区最后一个元素
+    }
+    --cur;
+    return *this;
+}
+self operator--(int){
+    self tmp = *this;
+    --*this;
+    return tmp;
+}
+
+// 以下实现随机存取.迭代器可以直接跳跃 n 个距离
+self& operator+=(difference_type n){
+    difference_type offset = n + (cur - first);
+    if(offset >= 0 && offset < difference_type(buffer_size()))	// 目标位置在同一缓冲区内
+        cur+=n;
+    else{
+        difference_type node_offset = 
+            offset > 0 ? offset / difference_type(buffer_size())
+            		: -difference_type((-offset - 1) / buffer_size())  - 1;
+        // 切换至正确的缓冲区
+        set_node(node + node_offset);
+        // cur 指向正确的元素
+        cur = first + (offset - node_offset * difference_type(bufffer_size()));
+    }
+    return *this;
+}
+// consider using op= instead of stand-alone op
+self operator+(difference_type n) const{
+    self tmp = *this;
+    return tmp += n;		// 调用 operator+=
+}
+// 用 operator+= 来完成 operator-=
+self& operator-=(difference_type n){
+    return *this += -n;
+}
+self operator-(difference_type n) const{
+    self tmp = *this;
+    return tmp -= n;		// 调用 operator-=
+}
+
+reference operator[](difference_type n) const{
+    return *(*this + n);	// 调用 operator+，operator*
+}
+
+bool operator==(const self& x) const{
+    return cur == x.cur;
+}
+bool operator!=(const self& x) const{
+    return !(*this == x);
+}
+bool operator<(const self& x) const{
+    return (node == x.node) ? (cur < x.cur) : (node < x.node);
+}
+```
+
+### 4.4.4 `deque` 的数据结构
+
+`deque` 除了维护一个先前说过的指向 `map` 的指针外，也维护 `start`, `finish`两个迭代器，分别指向第一缓冲区的第一个元素和最后缓冲区的最后一个元素（的
+下一位置）。此外，它当然也必须记住目前的 `map` 大小。因为一旦 `map` 所提供的节点不足，就必须重新配置更大的一块 `map` 。
+
+```c++
+template <class T, class Alloc = alloc, size_t BufSiz = 0>
+class deque{
+public:
+  typedef T value_type;
+  typedef value_type* pointer;
+  typedef size_t size_type;
+
+public:			// Iterators
+  typedef __deque_iterator<T, T&, T*, BufSiz>              iterator;
+
+protected:
+  typedef pointer* map_pointer;		// 指向元素指针的指针
+    
+protected:
+  iterator start;			// 指向第一缓冲区的第一个元素
+  iterator finish;			// 指向最后缓冲区的最后一个元素（的下一位置）
+  
+  map_pointer map;			// 指向map, map是块连续空间，其每个元素都是个指针，指向一个缓冲区
+  size_type map_size;		// map 内有多少指针
+};
+```
+
+ ![image-20221006173510812](images/image-20221006173510812.png)
+
+
+
+> 注意 `finish` 的 `cur` 指向最后一个缓冲区的最后一个元素（不含备用元素）的下一个位置，`finish` 的 `last` 指向最后一个缓冲区的最后一个元素（含备用元素）的下一个位置。
+
+有了上述结构，以下数个机能便可轻易完成：
+
+```c++
+iterator begin(){
+    return start;
+}
+iterator end(){
+    return finish;
+}
+referece operator[](size_type n){
+    return start[difference_type(n)];	// 调用__deque_iterator的operatpr[]
+}
+reference front(){
+    return *start;
+}
+referece back(){
+    iterator tmp = finish;
+    --tmp;								// 调用__deque_iterator的operatpr--
+    return *tmp;						// 调用__deque_iterator的operatpr*
+}
+
+size_type size() const { return finish - start;; }
+size_type max_size() const { return size_type(-1); }
+bool empty() const { return finish == start; }max_
+```
+
+### 4.4.5 `deque` 的构造与内存管理
+
+`deque` 自行定义了两个专属的空间配置器：
+
+```c++
+protected:
+  typedef simple_alloc<value_type, Alloc> data_allocator;	// 每次配置一个元素大小
+  typedef simple_alloc<pointer, Alloc> map_allocator;		// 每次配置一个指针大小
+  
+  pointer allocate_node() { return data_allocator::allocate(buffer_size()); }
+
+```
+
+#### 构造函数
+
+`deque` 内提供有一个构造函数如下：
+
+```c++
+  deque(size_type n, const value_type& value)
+    : start(), finish(), map(0), map_size(0)
+  {
+    fill_initialize(n, value);
+  }
+```
+
+其内所调用的 `fill_initialize()` 负责产生并安排好 `deque` 的结构，并将元素的初值设定妥当：
+
+```c++
+template <class T, class Alloc, size_t BufSize>
+void deque<T, Alloc, BufSize>::fill_initialize(size_type n,
+                                               const value_type& value) {
+  create_map_and_nodes(n);		// 把deque的结构都产生并安排好
+  map_pointer cur;
+  try {
+    // 为每个节点的缓冲区设定初值
+    for (cur = start.node; cur < finish.node; ++cur)
+      uninitialized_fill(*cur, *cur + buffer_size(), value);
+    // 最后一个节点的设定稍有不同，因为尾端可能有备用空间，不必设初值
+    uninitialized_fill(finish.first, finish.cur, value);
+  }
+  catch(...) {
+    ...
+  }
+}
+```
+
+其中 `create_map_and_nodes()` 负责产生并安排好 `deque` 的结构：
+
+```c++
+template <class T, class Alloc, size_t BufSize>
+void deque<T, Alloc, BufSize>::create_map_and_nodes(size_type num_elements) {
+  // 计算所需要的缓冲区数目，如果刚好整除，会多配送一个节点
+  size_type num_nodes = num_elements / buffer_size() + 1;
+
+  // 一个map要管理几个节点。最少8个，最多是 “所需缓冲区数加2” (前后各预留一个，扩充时可用）
+  map_size = max(initial_map_size(), num_nodes + 2);
+  map = map_allocator::allocate(map_size);		// 配置含有 map_size 个节点的 map
+
+  // 令 nstart 和 nfinish 指向 map 所拥有全部节点的最中央区段
+  // 保持在最中央，可使头尾两端的扩充能量一样大，每个节点可对应一个缓冲区
+  // num_nodes为所需要的缓冲区数，用所有的缓冲区数 map_size 减去 num_nodes 即为剩余的可使用的缓冲区数，将其除以 2，前后各留出一半
+  map_pointer nstart = map + (map_size - num_nodes) / 2;	
+  map_pointer nfinish = nstart + num_nodes - 1;
+    
+  map_pointer cur;
+  try {
+    // 为 map 内的每个现用节点配置缓冲区
+    for (cur = nstart; cur <= nfinish; ++cur)
+      *cur = allocate_node();
+  }
+  catch(...) {	// commit or rollback
+    for (map_pointer n = nstart; n < cur; ++n)
+      deallocate_node(*n);
+    map_allocator::deallocate(map, map_size);
+    throw;
+  }
+    
+  // 为 deque 的两个迭代器 start 和 finish 设定正确的内容
+  start.set_node(nstart);
+  finish.set_node(nfinish);
+  start.cur = start.first;
+  // 前面说过，如果计算缓冲区数目时刚好整除，会多配一个节点
+  // 此时 finish 的 cur 即指向这多配的一个起点
+  finish.cur = finish.first + num_elements % buffer_size();
+}
+```
+
+> 举例：假设有如下代码
+>
+> ```c++
+> deque<int, alloc, 8> ideq(20, 9);	// 构造一个 deque，有 20 个 int 元素，初值皆为 9。缓冲区大小设定为 8
+> // 为每一个元素设定新的值
+> for(int i = 0; i != ideq.size())
+>     ideq[i] = i;					// deque 内元素的值为 0,1,2,3,...,19
+> ```
+>
+> map 的 size 将为最小值 8，而一共需要 3 个缓冲区来存储这 20 个元素，deque 的状态将如下所示：
+>
+>  ![image-20221006172133958](images/image-20221006172133958.png)
+
+#### `push_back`
+
+```c++
+public:                         // push_* and pop_*
+  
+  void push_back(const value_type& t) {
+    if (finish.cur != finish.last - 1) {	// 最后一个缓冲区尚有备用空间
+      construct(finish.cur, t);				// 直接在备用空间上构造元素
+      ++finish.cur;							// 调整最后一个缓冲区的使用状态
+    }
+    else									// 最后缓冲区已经没有备用空间
+      push_back_aux(t);
+  }
+```
+
+```c++
+// Called only if finish.cur == finish.last - 1.
+template <class T, class Alloc, size_t BufSize>
+void deque<T, Alloc, BufSize>::push_back_aux(const value_type& t) {
+  value_type t_copy = t;
+  reserve_map_at_back();		// 判断是否需要扩充 map
+  *(finish.node + 1) = allocate_node();		// 配置一个新缓冲区
+  try {
+    construct(finish.cur, t_copy);			// 在最后一个缓冲区的最后一个位置上构造元素	
+    finish.set_node(finish.node + 1);		// 使 finish 迭代器向后跳一个缓冲区，会设定 finish 的 node，firs，last
+    finish.cur = finish.first;				// 设定 finish 的 cur
+  }
+  __STL_UNWIND(deallocate_node(*(finish.node + 1)));
+}
+```
+
+> 举例：假设有如下代码
+>
+> ```c++
+> for(int i = 0; i < 3; ++i)
+>     ideq.push_back(i);
+> ```
+>
+> 连续插入 3 个元素，此时最后一个缓冲区的备用空间足够，deque 的状态将如下所示：
+>
+>  ![image-20221006174048635](images/image-20221006174048635.png)
+>
+> 紧接着，又有如下代码：
+>
+> ```c++
+> ideq.push_back(3);
+> ```
+>
+> 此时 `finish.cur = finish.last - 1`，将配置一个新的缓冲区，并使得 `finish.node` 的下一个 `node` 指向它：
+>
+>  ![image-20221006174313050](images/image-20221006174313050.png)
+>
+> 注意新增的元素并不是放在新配置的缓冲区中的。
+
+#### `push_front`
+
+```c++
+public:                         // push_* and pop_*
+  void push_front(const value_type& t) {
+    if (start.cur != start.first) {			// 第一个缓冲区前方仍有备用空间
+      construct(start.cur - 1, t);			// 直接在备用空间上构造元素
+      --start.cur;							// 调整第一个缓冲区的使用状态
+    }
+    else									// 第一个缓冲区已无备用空间
+      push_front_aux(t);					
+  }
+```
+
+```c++
+// Called only if start.cur == start.first.
+template <class T, class Alloc, size_t BufSize>
+void deque<T, Alloc, BufSize>::push_front_aux(const value_type& t) {
+  value_type t_copy = t;
+  reserve_map_at_front();				// 判断是否需要扩充 map
+  *(start.node - 1) = allocate_node();	// 配置一个新的缓冲区
+  try {
+    start.set_node(start.node - 1);		// 使 start 迭代器向前跳一个缓冲区，会设定 start 的 node，firs，last
+    start.cur = start.last - 1;			// 设定 start 的 cur
+    construct(start.cur, t_copy);		// 在 cur 所指处构造元素
+  }
+  catch(...) {							// commit or rollback	
+    start.set_node(start.node + 1);
+    start.cur = start.first;
+    deallocate_node(*(start.node - 1));
+    throw;
+  }
+} 
+
+```
+
+> 举例：假设有如下代码
+>
+> ```c++
+> ideq.push_front(99);
+> ```
+>
+> 由于第一个缓冲区已经没有备用空间了，将配置新的缓冲区，并使得 `start.node` 的前一个 node 指向它:
+>
+>  ![image-20221006175357545](images/image-20221006175357545.png)
+>
+> 注意，新增加的元素放到了新配置的缓冲区中。
+>
+> 紧接着，又有如下代码：
+>
+> ```c++
+> ideq.push_front(98);
+> ideq.push_front(97);
+> ```
+>
+> 由于此时第一个缓冲区备用空间充足，直接插入即可：
+>
+>  ![image-20221006175541338](images/image-20221006175541338.png)
+
+#### `reserve_map_at_back` 和 `reserve_map_at_front`
+
+在上述插入操作中，什么时候 `map` 需要重新整治？这个问题的判断由 `reserve_map_at_back` 和 `reserve_map_at_front` 进行，实际操作则由 `reallocate_map` 执行：
+
+```c++
+protected:                    
+
+  void reserve_map_at_back (size_type nodes_to_add = 1) {
+    if (nodes_to_add + 1 > map_size - (finish.node - map))	// map 尾端的节点备用空间不足
+      reallocate_map(nodes_to_add, false);
+  }
+
+  void reserve_map_at_front (size_type nodes_to_add = 1) {
+    if (nodes_to_add > start.node - map)					// map 前端的节点备用空间不足
+      reallocate_map(nodes_to_add, true);
+  }
+```
+
+```c++
+template <class T, class Alloc, size_t BufSize>
+void deque<T, Alloc, BufSize>::reallocate_map(size_type nodes_to_add,
+                                              bool add_at_front) {
+  size_type old_num_nodes = finish.node - start.node + 1;
+  size_type new_num_nodes = old_num_nodes + nodes_to_add;
+
+  map_pointer new_nstart;
+  if (map_size > 2 * new_num_nodes) {
+    new_nstart = map + (map_size - new_num_nodes) / 2 
+                     + (add_at_front ? nodes_to_add : 0);
+    if (new_nstart < start.node)
+      copy(start.node, finish.node + 1, new_nstart);
+    else
+      copy_backward(start.node, finish.node + 1, new_nstart + old_num_nodes);
+  }
+  else {
+    size_type new_map_size = map_size + max(map_size, nodes_to_add) + 2;
+	// 配置一块空间，准备给新 map 使用
+    map_pointer new_map = map_allocator::allocate(new_map_size);
+    new_nstart = new_map + (new_map_size - new_num_nodes) / 2
+                         + (add_at_front ? nodes_to_add : 0);
+    // 把 map 内容拷贝过来
+    copy(start.node, finish.node + 1, new_nstart);
+    // 释放原 map
+    map_allocator::deallocate(map, map_size);
+	// 设定新 map 的起始地址和大小
+    map = new_map;
+    map_size = new_map_size;
+  }
+
+  // 重新设定迭代器 start 和 finish
+  start.set_node(new_nstart);
+  finish.set_node(new_nstart + old_num_nodes - 1);
+}
+```
+
+### 4.4.6 `deque` 的元素操作
+
+#### `pop_back`
+
+```c++
+public:                         // push_* and pop_*
+  void pop_back() {
+    if (finish.cur != finish.first) {	// 最后一个缓冲区有一个或更多元素
+      --finish.cur;						// 调整指针，相当于排除了最后元素
+      destroy(finish.cur);				// 将最后的元素析构
+    }	
+    else								// 最后一个缓冲区没有任何元素，此时 finish.cur = finish.first
+      pop_back_aux();	
+  }
+```
+
+```c++
+void deallocate_node(pointer n) {
+    data_allocator::deallocate(n, buffer_size());
+}
+// Called only if finish.cur == finish.first.
+template <class T, class Alloc, size_t BufSize>
+void deque<T, Alloc, BufSize>:: pop_back_aux() {
+  deallocate_node(finish.first);		// 释放最后一个缓冲区
+  finish.set_node(finish.node - 1);		// 使 finish 迭代器向前跳一个缓冲区，会设定 finish 的 node，firs，last
+  finish.cur = finish.last - 1;			// 调整指针，相当于排除了上一个缓冲区的最后一个元素
+  destroy(finish.cur);					// 析构该元素
+}
+```
+
+#### `pop_front`
+
+```c++
+public:                         // push_* and pop_*
+  void pop_front() {
+    if (start.cur != start.last - 1) {	// 第一个缓冲区有一个或更多元素
+      destroy(start.cur);				// 将第一个元素析构
+      ++start.cur;						// 调整指针，相当于排除了第一个元素
+    }
+    else 								// 第一个缓冲区只有一个元素
+      pop_front_aux();
+  }
+```
+
+```c++
+// Called only if start.cur == start.last - 1.  Note that if the deque
+template <class T, class Alloc, size_t BufSize>
+void deque<T, Alloc, BufSize>::pop_front_aux() {
+  destroy(start.cur);					// 析构第一个缓冲区的最后一个元素
+  deallocate_node(start.first);			// 释放第一个缓冲区
+  start.set_node(start.node + 1);		// 使 start 迭代器向后跳一个缓冲区，会设定 start 的 node，firs，last
+  start.cur = start.first;				// 调整指针，相当于排除了第一个缓冲区的最后一个元素
+}   
+```
+
+#### `clear`：清除整个 `deque`
+
+**<font color='red'>注意， `deque` 的最初状态（无任何元素时）保有一个缓冲区，因此，`clear` 完成之后回复初始状态，也一样要保留一个缓冲区。</font>**
+
+```c++
+template <class T, class Alloc, size_t BufSize>
+void deque<T, Alloc, BufSize>::clear() {
+  // 以下针对头尾以外的每一个缓冲区（它们一定都是饱满的）
+  for (map_pointer node = start.node + 1; node < finish.node; ++node) {
+    // 将缓冲区内的所有元素析构，注意，调用的是 destroy 的第二个版本
+    destroy(*node, *node + buffer_size());
+    // 释放缓冲区
+    data_allocator::deallocate(*node, buffer_size());
+  }
+
+  if (start.node != finish.node) {		// 至少有头尾两个缓冲区
+    destroy(start.cur, start.last);		// 将头缓冲区的目前所有元素析构
+    destroy(finish.first, finish.cur);	// 将尾缓冲区的目前所有元素析构
+    data_allocator::deallocate(finish.first, buffer_size());	// 释放尾缓冲区，注意，保留头缓冲区
+  }
+  else									// 只有一个缓冲区
+    destroy(start.cur, finish.cur);		// 将头缓冲区的目前所有元素析构
+	
+  finish = start;						// 调整状态
+}
+```
+
+#### `erase`：清除某个元素
+
+清除 `pos` 所指的元素
+
+```c++
+public:                         // Erase
+  iterator erase(iterator pos) {
+    iterator next = pos;
+    ++next;
+    difference_type index = pos - start;	// 清除点之前的元素的个数
+    if (index < (size() >> 1)) {			// 如果清除点之前的元素比较少
+      copy_backward(start, pos, next);		// 就将清除点之前的元素往后移一格
+      pop_front();							// 移动完毕后，最前一个元素冗余，去除它
+    }
+    else {									// 清除点之后的元素比较少
+      copy(next, finish, pos);				// 就将清除点之后的元素往前移一格
+      pop_back();							// 移动完毕后，最后一个元素冗余，去除它
+    }
+    return start + index;
+  }
+```
+
+来清除［first, last) 区间内的所有元素：
+
+```c++
+template <class T, class Alloc, size_t BufSize>
+deque<T, Alloc, BufSize>::iterator 
+deque<T, Alloc, BufSize>::erase(iterator first, iterator last) {
+  if (first == start && last == finish) {	// 如果清除区间就是整个 deque
+    clear();								// 就直接调用 clear
+    return finish;
+  }
+  else {
+    difference_type n = last - first;					// 清除区间的长度
+    difference_type elems_before = first - start;		// 清除区间之前的元素的个数
+    if (elems_before < (size() - n) / 2) {				// 如果前方的元素比较少
+      copy_backward(start, first, last);				// 就将前方的元素往后移动
+      iterator new_start = start + n;					// deque 的新起点
+      destroy(start, new_start);						// 移动完毕后，将冗余的元素析构
+      for (map_pointer cur = start.node; cur < new_start.node; ++cur)	// 将冗余的缓冲区释放
+        data_allocator::deallocate(*cur, buffer_size());
+      start = new_start;								// 设定 deque 的新起点
+    }
+    else {												// 如果后方的元素比较少									
+      copy(last, finish, first);						// 就将后方的元素向前移动
+      iterator new_finish = finish - n;					// deque 的新尾点
+      destroy(new_finish, finish);						// 移动完毕后，将冗余的元素析构
+      for (map_pointer cur = new_finish.node + 1; cur <= finish.node; ++cur)	// 将冗余的缓冲区释放
+        data_allocator::deallocate(*cur, buffer_size());
+      finish = new_finish;								// 设定 deque 的新尾点				
+    }
+    return start + elems_before;
+  }
+}
+```
+
+#### `insert`：在某个点之前插入一个元素，并设定其值
+
+```c++
+public:                         // Insert
+
+  iterator insert(iterator position, const value_type& x) {
+    if (position.cur == start.cur) {			// 如果插入点是 deque 最前端
+      push_front(x);							// 交给 push_front 去做
+      return start;
+    }
+    else if (position.cur == finish.cur) {		// 如果插入点是 deque 最尾端
+      push_back(x);								// 交给 push_back 去做
+      iterator tmp = finish;
+      --tmp;
+      return tmp;
+    }
+    else {
+      return insert_aux(position, x);
+    }
+  }
+```
+
+```c++
+template <class T, class Alloc, size_t BufSize>
+typename deque<T, Alloc, BufSize>::iterator
+deque<T, Alloc, BufSize>::insert_aux(iterator pos, const value_type& x) {
+  difference_type index = pos - start;		// 插入点之前的元素的个数
+  value_type x_copy = x;
+  if (index < size() / 2) {					// 如果插入点之前的元素个数较少
+    push_front(front());					// 在最前端加入与第一个元素同值的元素
+    iterator front1 = start;
+    ++front1;
+    iterator front2 = front1;
+    ++front2;
+    pos = start + index;
+    iterator pos1 = pos;
+    ++pos1;
+    copy(front2, pos1, front1);				// 元素移动
+  }
+  else {									// 如果插入点之后的元素个数较少
+    push_back(back());						// 在尾端加入与最后一个元素同值的元素
+    iterator back1 = finish;
+    --back1;
+    iterator back2 = back1;
+    --back2;
+    pos = start + index;
+    copy_backward(pos, back2, back1);		// 移动元素
+  }		
+  *pos = x_copy;							// 在插入点上设定新值
+  return pos;
+}
+```
+
+## 4.5 `stack`
+
