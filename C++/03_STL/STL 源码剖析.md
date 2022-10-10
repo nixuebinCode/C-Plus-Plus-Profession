@@ -1510,7 +1510,7 @@ template <class T> inline void copy(T* source, T* destination, int n, __true_typ
 
 > 究竟一个 class 什么时候该有自己的 non-trivial default constructor, non-trivial copy constructor, non-trivial assignment operator, non-trivial destructor 呢？一个简单的判断准则是：如果 class 内含指针成员，并且对它进行内存动态配置，那么这个 class 就需要实现出自己的 non-trivial-xxx。
 
-# 第四章 序列式容器
+# 第四章 序列式容器 Sequence Containers
 
 ## 4.1 容器的概观与分类
 
@@ -2981,3 +2981,677 @@ deque<T, Alloc, BufSize>::insert_aux(iterator pos, const value_type& x) {
 
 ## 4.5 `stack`
 
+### 4.5.1 `stack` 概述
+
+`stack` 是一种先进后出（First In Last Out，FILO）的数据结构：
+
+ ![image-20221009163307399](images/image-20221009163307399.png)
+
+### 4.5.2 `stack` 定义完整列表
+
+以某种既有容器作为底部结构，将其接口改变，使之符合“ 先进后出＂的特性，形成一个 `stack` ，是很容易做到的。SGI STL 便以 `deque` 作为缺省情况下的 `stack` 底部结构。
+
+由于 stack 系以底部容器完成其所有工作，而具有这种 “修改某物接口，形成另一种风貌之性质者，称为**<font color='blue'>adapter </font>**（配接器），因此， **<font color='red'>STL stack 往往不被归类为container，而被归类为 container adapter。</font>**
+
+```c++
+template <class T, class Sequence = deque<T> >
+class stack {
+  friend bool operator== <> (const stack&, const stack&);
+  friend bool operator< <> (const stack&, const stack&);
+public:
+  typedef typename Sequence::value_type value_type;
+  typedef typename Sequence::size_type size_type;
+  typedef typename Sequence::reference reference;
+  typedef typename Sequence::const_reference const_reference;
+protected:
+  Sequence c;		// 底层容器
+public:
+  // 以下完全利用 Sequence c 的操作，完成 stack 的操作
+  bool empty() const { return c.empty(); }
+  size_type size() const { return c.size(); }
+  reference top() { return c.back(); }
+  const_reference top() const { return c.back(); }
+  void push(const value_type& x) { c.push_back(x); }
+  void pop() { c.pop_back(); }
+};
+
+template <class T, class Sequence>
+bool operator==(const stack<T, Sequence>& x, const stack<T, Sequence>& y) {
+  return x.c == y.c;
+}
+
+template <class T, class Sequence>
+bool operator<(const stack<T, Sequence>& x, const stack<T, Sequence>& y) {
+  return x.c < y.c;
+}
+```
+
+### 4.5.3 `stack` 没有迭代器
+
+`stack` 所有元素的进出都必须符合 “先进后出“ 的条件，只有 `stack` 顶端的元素，才有机会被外界取用。`stack` 不提供走访功能，也不提供迭代器。
+
+### 4.5.4 以 `list` 作为 `stack` 的底层容器
+
+除了 `deque` 之外，`list` 也是双向开口的数据结构。上述 `stack` 源代码中使用的底层容器的函数有 `empty`, `size`, `back`, `push_back`, `pop_back`，这些函数 `list` 都具备。因此，我们可以指定 `list` 做为 `stack` 的底层容器：
+
+```c++
+stack<int, list<int>> istack;
+istack.push(1);
+istack.push(3);
+istack.push(5);
+istack.push(7);
+cout << istack.size() << endl; // 4
+cout << istack.top () << endl; // 7
+...
+```
+
+## 4.6 `queue`
+
+### 4.6.1 `queue` 概述
+
+`queue` 是一种先进先出（First In First Out, FIFO）的数据结构。它有两个出口，形式如图所示：
+
+ ![image-20221009191302711](images/image-20221009191302711.png)
+
+### 4.6.2 `queue` 定义完整列表
+
+同 `stack`，SGI STL 以 `deque` 作为缺省情况下的 `queue` 底部结构。同理，STL `queue` 往往不被归类为container，而被归类为 container adapter。
+
+```c++
+template <class T, class Sequence = deque<T> >
+class queue {
+  friend bool operator== __STL_NULL_TMPL_ARGS (const queue& x, const queue& y);
+  friend bool operator< __STL_NULL_TMPL_ARGS (const queue& x, const queue& y);
+public:
+  typedef typename Sequence::value_type value_type;
+  typedef typename Sequence::size_type size_type;
+  typedef typename Sequence::reference reference;
+  typedef typename Sequence::const_reference const_reference;
+protected:
+  Sequence c;		// 底层容器
+public:
+  // 以下完全利用 Sequence c 的操作，完成 queue 的操作
+  bool empty() const { return c.empty(); }
+  size_type size() const { return c.size(); }
+  reference front() { return c.front(); }
+  const_reference front() const { return c.front(); }
+  reference back() { return c.back(); }
+  const_reference back() const { return c.back(); }
+  // deque 是两头可进出，queue 是末端进、前端出（所以先进者先出）
+  void push(const value_type& x) { c.push_back(x); }
+  void pop() { c.pop_front(); }
+};
+```
+
+### 4.6.3 `queue` 没有迭代器
+
+`queue` 所有元素的进出都必须符合 “先进先出” 的条件，只有 queue 顶端的元素，才有机会被外界取用。`queue` 不提供遍历功能，也不提供迭代器。
+
+### 4.6.4 以 `list` 作为 `queue` 的底层容器
+
+同 `stack`，我们也可以使用 `list` 做为 `queue` 的底层容器：
+
+```c++
+queue<int, list<int>> iqueue;
+iqueue.push(1);
+iqueue.push(3);
+iqueue.push(5);
+iqueue.push(7);
+cout << iqueue.size() << endl; 		// 4
+cout << iqueue.front() << endl;		// 1
+iqueue.pop(); cout << iqueue.front() << endl; 	// 3
+iqueue.pop(); cout << iqueue.front() << endl;	// 5
+iqueue.pop(); cout << iqueue.front() << endl;	// 7
+cout << iqueue.size() << endl; 		// 1
+```
+
+## 4.7 `heap`
+
+### 4.7.1 heap 概述
+
+heap 并不归属于 STL 容器组件，它是个**<font color='blue'>幕后英雄</font>**，扮演 priority queue 的助手。**<font color='red'>priority queue 允许用户以任何次序将任何元素推入容器内，但取出时一定是从优先权最高（也就是数值最高）的元素开始取</font>**。
+
+所谓 binary heap 就是一种完全二叉树，也就是说，整棵二叉树除了最底层的叶节点之外，是填满的，而最底层的叶节点由左至右又不得有空隙：
+
+ ![image-20221009200912716](images/image-20221009200912716.png)
+
+我们可以利用 array 来储存完全二叉树的所有节点，则对任一元素，若其下标为 i，则有如下性质：
+
+* i 的父亲节点下标为 (i - 1) / 2
+* i 的左孩子节点下标为 2i + 1
+* i 的右孩子节点下标为 2i + 2
+
+这么一来，我们需要的工具就很简单了： 一个 array 和一组 heap 算法（用来插入元素、删除元素、取极值，将某一整组数据排列成一个 heap) 。array 的缺点是无法动态改变大小，而 heap 却需要这项功能，因此，以 `vector` 代替 array 是更好的选择。
+
+根据元素排列方式， heap 可分为 max-heap 和 min-heap 两种，前者每个节点的键值都大于或等于其子节点键值，后者的每个节点键值都小于或等于其子节点键值。因此， max-heap 的最大值在根节点，并总是位于底层 array 或 `vector` 的起头处；min-heap 的最小值在根节点，亦总是位于底层 array 或 `vector` 的起头处。
+
+ STL 供应的是 max-heap，因此，以下介绍的 heap 指的是 max-heap。
+
+### 4.7.2 heap 算法
+
+#### `push_heap`
+
+为了满足完全二叉树的条件，新加入的元素一定要放在最下一层作为叶节点，并填补在由左至右的第一个空格，也就是**<font color='red'>把新元素插入在底层 `vector` 的尾端</font>**。
+
+为满足 max-heap 的条件（每个节点的键值都大于或等于其子节点键值），我们执行一个所谓的上溯程序：
+
+将新节点拿来与其父节点比较，如果其键值比父节点大，就父子对换位置。如此一直上溯，直到不需对换或直到根节点为止。
+
+下面便是 `push_heap` 算法的实现细节。该函数接受两个迭代器，用来表现一个 heap 底层容器（`vector`）的头尾，**<font color='red'>并且新元素已经插入到底部容器的最尾端</font>**。如果不符合这两个条件， `push_heap` 的执行结果未可预期。
+
+```c++
+template <class RandomAccessIterator, class Compare>
+inline void push_heap(RandomAccessIterator first, RandomAccessIterator last,
+                      Compare comp) {
+  // 注意，此函数被调用时，新元素应己置于底部容器的最尾端
+  __push_heap_aux(first, last, comp, distance_type(first), value_type(first));
+}
+
+template <class RandomAccessIterator, class Compare, class Distance, class T>
+inline void __push_heap_aux(RandomAccessIterator first,
+                            RandomAccessIterator last, Compare comp,
+                            Distance*, T*) {
+  __push_heap(first, Distance((last - first) - 1), Distance(0), 
+              T(*(last - 1)), comp);
+}
+
+template <class RandomAccessIterator, class Distance, class T, class Compare>
+void __push_heap(RandomAccessIterator first, Distance holeIndex,
+                 Distance topIndex, T value, Compare comp) {
+  Distance parent = (holeIndex - 1) / 2;	// 找出父节点
+  while (holeIndex > topIndex && comp(*(first + parent), value)) {	// 尚未调整至顶端 并且 父节点小于新
+    *(first + holeIndex) = *(first + parent);						// 令洞值为父值
+    holeIndex = parent;												// 令父节点为新的洞值，向上继续调整父节点
+    parent = (holeIndex - 1) / 2;									// 计算新的父节点
+  }
+  *(first + holeIndex) = value;										// 完成插入操作
+}
+```
+
+#### `pop_heap`
+
+pop 操作取走根节点，即最大值（其实是移至底部容器 `vector` 的最后一个元素）之后，为满足 max-heap 的条件（每个节点的键值都大于或等于其子节点键值），我们执行一个所谓的下溯程序：
+
+将根节点（最大值被取走后，形成一个“洞”）填入原本尾端的值，再将它拿来和其两个子节点比较键值(key) ，并与较大子节点对调位置。如此一直下放，直到这个 “洞” 的键值大于左右两个子节点，或直到下放至叶节点为止。
+
+```c++
+template <class RandomAccessIterator>
+inline void pop_heap(RandomAccessIterator first, RandomAccessIterator last) {
+  __pop_heap_aux(first, last, value_type(first));
+}
+
+template <class RandomAccessIterator, class T>
+inline void __pop_heap_aux(RandomAccessIterator first,
+                           RandomAccessIterator last, T*) {
+  // 设定欲调整值为尾值，然后将首值调至尾节点
+  __pop_heap(first, last - 1, last - 1, T(*(last - 1)), distance_type(first));
+}
+
+template <class RandomAccessIterator, class T, class Compare, class Distance>
+inline void __pop_heap(RandomAccessIterator first, RandomAccessIterator last,
+                       RandomAccessIterator result, T value, Compare comp,
+                       Distance*) {
+  // 以上迭代器 result 为 last- 1，然后重整 [first, last - 1) 使之重新成一个合格的 heap
+  *result = *first;		// 设定尾值为首值，可由客户端稍后再以底层容器之 pop_back() 取出尾值
+  // 重新调整 heap, 洞号为0 （亦即树根处），欲调整值为 value （原尾值）
+  __adjust_heap(first, Distance(0), Distance(last - first), value, comp);
+}
+
+// __adjust_heap为核心操作，它的作用是调整以 holeIndex 为根节点的子树，完成一个下溯操作
+template <class RandomAccessIterator, class Distance, class T, class Compare>
+void __adjust_heap(RandomAccessIterator first, Distance holeIndex,
+                   Distance len, T value, Compare comp) {
+  Distance topIndex = holeIndex; 		
+  Distance secondChild = 2 * holeIndex + 2;		// 洞节点之右子节点
+  while (secondChild < len) {
+    // 比较洞节点之左右两个子值，然后以 secondChild 代表较大子节点
+    if (comp(*(first + secondChild), *(first + (secondChild - 1))))
+      secondChild--;
+    // 把较大子节点的值赋给当前的父节点
+    *(first + holeIndex) = *(first + secondChild);
+    // 此时较大子节点应该存放之前父节点的值，继续对其进行下溯操作，直至它没有右子节点
+    holeIndex = secondChild;
+    // 找出新洞节点的右子节点
+    secondChild = 2 * (secondChild + 1);
+  }
+  if (secondChild == len) {		// 没有右子节点，只有左子节点
+    // 令左子值为洞值，再令洞号下移至左子节点处。
+    *(first + holeIndex) = *(first + (secondChild - 1));
+    holeIndex = secondChild - 1;
+  }
+  *(first + holeIndex) = value;
+}
+```
+
+**<font color='red'>注意， `pop_heap` 之后，最大元素只是被置放于底部容器的最尾端，尚未被取走。如果要取其值，可使用底部容器（`vector`）所提供的 `back` 操作函数。如果要移除它，可使用底部容器（`vector`）所提供的 `pop_back` 操作函数。</font>**
+
+#### `sort_heap`
+
+既然每次 `pop_heap` 可获得 `heap` 中键值最大的元素，并把它置于其底层 `vector` 的尾端，如果持续对整个 heap 做 `pop_heap` 操作，每次将操作范围从后向前缩减一个元素（因为 `pop_heap` 会把键值最大的元素放在底部容器的最尾端），当整个程序执行完毕时，我们便有了一个递增序列。
+
+```c++
+template <class RandomAccessIterator>
+void sort_heap(RandomAccessIterator first, RandomAccessIterator last) {
+  // 以下每执行一次 pop_heap，最大值被放在尾端
+  // 扣除尾端再执行一次 pop_heap，次最大值又被放在新尾端，一直下去，最后即得到排序结果
+  while (last - first > 1) pop_heap(first, last--);
+}
+```
+
+#### `make_heap`
+
+这个算法用来将一段现有的数据转化为一个 heap
+
+```c++
+template <class RandomAccessIterator>
+inline void make_heap(RandomAccessIterator first, RandomAccessIterator last) {
+  __make_heap(first, last, value_type(first), distance_type(first));
+}
+
+template <class RandomAccessIterator, class T, class Distance>
+void __make_heap(RandomAccessIterator first, RandomAccessIterator last, T*,
+                 Distance*) {
+  if (last - first < 2) return;		// 如果只有 1 个元素，或没有元素，不必重新排列
+  Distance len = last - first;	
+  Distance parent = (len - 2)/2;	// 树中最后一个节点（下标为len - 1）的父节点，即需要调整的第一课子树的根节点
+    
+  while (true) {
+    // 调整以 parent 为根节点的子树
+    __adjust_heap(first, parent, len, T(*(first + parent)));
+    if (parent == 0) return;	// 走完根节点，就结束
+    parent--;					// 头部向前一个节点
+  }
+}
+```
+
+### 4.7.3 heap 没有迭代器
+
+heap 的所有元素都必须遵循特别的完全二叉树排列规则，所以 heap 不提供遍历功能，也不提供迭代器。
+
+### ⭐4.7.4 heap 测试实例
+
+```c++
+int main() {
+	int ia[9] = { 0,1,2,3,4,8,9,3,5 };
+	vector<int> ivec(ia, ia + 9);
+	
+	// 构造大根堆
+	make_heap(ivec.begin(), ivec.end());
+	for (int i = 0; i < ivec.size(); ++i)
+		cout << ivec[i] << ' ';				// 9 5 8 3 4 0 2 3 1
+	cout << endl;
+
+	// 先把新增元素加入到底层 vector 的尾端
+	ivec.push_back(7);
+	// 调整新加入的元素
+	push_heap(ivec.begin(), ivec.end());
+	for (int i = 0; i < ivec.size(); ++i)
+		cout << ivec[i] << ' ';				// 9 7 8 3 5 0 2 3 1 4
+	cout << endl;
+
+	// 将堆顶的元素移至底层 vector 的尾端
+	pop_heap(ivec.begin(), ivec.end());
+	// 调用底层 vector 的 back 函数，获取堆顶元素
+	cout << ivec.back() << endl;			// 9
+	// 调用底层 vector 的 pop_back 函数，移除堆顶元素
+	ivec.pop_back();
+	for (int i = 0; i < ivec.size(); ++i)
+		cout << ivec[i] << ' ';				//  8 7 4 3 5 0 2 3 1
+	cout << endl;
+
+	// 对已经构造好的大根堆进行排序
+	sort_heap(ivec.begin(), ivec.end());
+	for (int i = 0; i < ivec.size(); ++i)
+		cout << ivec[i] << ' ';				// 0 1 2 3 3 4 5 7 8
+	cout << endl;
+
+	return 0;
+}
+```
+
+## 4.8 `priority_queue`
+
+### 4.8.1 `priority_queue` 概述
+
+`priority_queue` 是一个拥有权值观念的 `queue`，它允许加入新元素、移除旧元素、审视元素值等功能。由于这是一个 `queue`，所以只允许在底端加入元素，并从顶端取出元素，除此之外别无其它存取元素的途径。
+
+**<font color='red'>`priority_queue` 内的元素并非依照被推入的次序排列，而是自动依照元素的权值排列</font>**（通常权值以实值表示）。权值最高者，排在最前面。
+
+缺省情况下 `priority_queue` 系利用一个 max-heap 完成，后者是一个以 `vector` 表现的完全二叉树。
+
+ ![image-20221010112901200](images/image-20221010112901200.png)
+
+### 4.8.2 `priority_queue`定义完整列表
+
+`priority_queue` 完全以底部容器为根据，再加上 heap 处理规则，它具有 “修改某物接口，形成另一种风貌” 的特性，因此是一种 adapter（配接器）。STL `priority_queue` 往往不被归类为 container，而被归类为 container adapter 。
+
+```c++
+template <class T, class Sequence = vector<T>, 
+          class Compare = less<typename Sequence::value_type> >		// 底层容器默认使用 vector，比较默认使用小于，即大根堆
+class  priority_queue {
+public:
+  typedef typename Sequence::value_type value_type;
+  typedef typename Sequence::size_type size_type;
+  typedef typename Sequence::reference reference;
+  typedef typename Sequence::const_reference const_reference;
+protected:
+  Sequence c;		// 底层容器
+  Compare comp;		// 元素大小比较标准
+public:
+  priority_queue() : c() {}
+  explicit priority_queue(const Compare& x) :  c(), comp(x) {}
+
+  // 以下用到的 make_heap, push_heap, pop_heap 都是泛型算法
+  template <class InputIterator>
+  priority_queue(InputIterator first, InputIterator last, const Compare& x)
+    : c(first, last), comp(x) { make_heap(c.begin(), c.end(), comp); }
+  template <class InputIterator>
+  priority_queue(InputIterator first, InputIterator last) 
+    : c(first, last) { make_heap(c.begin(), c.end(), comp); }
+
+
+  bool empty() const { return c.empty(); }
+  size_type size() const { return c.size(); }
+  const_reference top() const { return c.front(); }
+  void push(const value_type& x) {
+      // push_heap 是泛型算法，先利用底层容器的 push_back 将新元素推入末端，再重排 heap
+      c.push_back(x); 
+      push_heap(c.begin(), c.end(), comp);
+  }
+  void pop() {
+      // pop_heap 是泛型算法，从heap 内取出一个元素．它并不是真正将元素弹出，而是重排heap, 将其放入尾端，我们需要再以底层容器的pop_back将其真正弹出
+      pop_heap(c.begin(), c.end(), comp);
+      c.pop_back();
+  }
+};
+```
+
+### 4.8.3 `priority_queue` 没有迭代器
+
+`priority_queue` 的所有元素，进出都有一定的规则，只有 queue 顶端的元素（权值最高者），才有机会被外界取用，`priority_queue` 不提供遍历功能，也不
+提供迭代器。
+
+### 4.8.4 `priority_queue` 测试实例
+
+```c++
+int main() {
+	int ia[9] = { 0,1,2,3,4,8,9,3,5 };
+	priority_queue<int> ipq(ia, ia + 9);								// 创建大根堆
+	// priority_queue<int, vector<int>, greater<int>> ipq(ia, ia + 9);	// 创建小根堆
+
+	cout << ipq.top() << endl;		// 0
+
+	while (!ipq.empty()) {
+		cout << ipq.top() << ' ';
+		ipq.pop();
+	}
+	cout << endl;
+
+	return 0;
+}
+```
+
+**<font color='red'>创建小根堆的时候，需要指定 priority_queue 的底层容器和 compare，令其 compare 为 `greater<T>`</font>**
+
+## 4.9 `slist`
+
+### 4.9.1 `slist` 概述
+
+STL `list` 是个双向链表（double linked list）。SGI STL 另提供了一个单向链表（single linked list），名为 `slist` 。这个容器并不在标准规格之内。
+
+`slist` 和 `list` 的主要差别在于，前者的迭代器属于单向的 Forward Iterator，后者的迭代器属于双向的 Bidirectional Iterator。
+
+**<font color='red'>根据 STL 的习惯，插入操作会将新元素插入于指定位置之前，而非之后</font>**。然而作为一个单向链表， `slist` 没有任何方便的办法可以回头定出前一个位置，因此它必须从头找起。换旬话说，除了 `slist` 起点处附近的区域之外，在其它位置上采用 `insert` 或 `erase` 操作函数，都属不智之举。为此， `slist` 特别提供了`insert_after` 和 `erase_after` 供灵活运用。
+
+**<font color='red'>基于同样的（效率）考虑， `slist` 不提供 push_back，只提供 push_front，因此 slist 的元素次序会和元素插入进来的次序相反。</font>**
+
+### 4.9.2 `slist` 的节点
+
+单向链表的节点基本结构
+
+```c++
+struct __slist_node_base
+{
+  __slist_node_base* next;
+};
+```
+
+单向链表的节点结构
+
+```c++
+template <class T>
+struct __slist_node : public __slist_node_base
+{
+  T data;
+};
+```
+
+全局函数：已知某一节点，插入新节点于其后
+
+```c++
+inline __slist_node_base* __slist_make_link(__slist_node_base* prev_node,
+                                            __slist_node_base* new_node)
+{
+  new_node->next = prev_node->next;
+  prev_node->next = new_node;
+  return new_node;
+}
+```
+
+全局函数：单向链表的大小（元素个数）
+
+```c++
+inline size_t __slist_size(__slist_node_base* node)
+{
+  size_t result = 0;
+  for ( ; node != 0; node = node->next)
+    ++result;
+  return result;
+}
+```
+
+### 4.9.3 `slist` 的迭代器
+
+单向链表的迭代器基本结构
+
+```c++
+struct __slist_iterator_base
+{
+  typedef size_t size_type;
+  typedef ptrdiff_t difference_type;
+  typedef forward_iterator_tag iterator_category;	// 类型为 forward iterator
+
+  __slist_node_base* node;							// 指向节点基本结构
+
+  __slist_iterator_base(__slist_node_base* x) : node(x) {}
+    
+  void incr() { node = node->next; }				// 前进一个节点
+
+  bool operator==(const __slist_iterator_base& x) const {
+    return node == x.node;
+  }
+  bool operator!=(const __slist_iterator_base& x) const {
+    return node != x.node;
+  }
+};
+```
+
+单向链表的迭代器结构
+
+```c++
+template <class T, class Ref, class Ptr>
+struct __slist_iterator : public __slist_iterator_base
+{
+  typedef __slist_iterator<T, T&, T*>             iterator;
+  typedef __slist_iterator<T, const T&, const T*> const_iterator;
+  typedef __slist_iterator<T, Ref, Ptr>           self;
+
+  typedef T value_type;
+  typedef Ptr pointer;
+  typedef Ref reference;
+  typedef __slist_node<T> list_node;
+
+  __slist_iterator(list_node* x) : __slist_iterator_base(x) {}
+  __slist_iterator() : __slist_iterator_base(0) {}
+  __slist_iterator(const iterator& x) : __slist_iterator_base(x.node) {}
+
+  reference operator*() const { return ((list_node*) node)->data; }
+  pointer operator->() const { return &(operator*()); }
+
+  self& operator++()
+  {
+    incr();			// 前进一个节点
+    return *this;
+  }
+  self operator++(int)
+  {
+    self tmp = *this;
+    incr();			// 前进一个节点
+    return tmp;
+  }
+    
+  // 注意，没有实现 operator--，因为这是一个 forward iterator
+};
+```
+
+`slist` 节点和其迭代器的设计，架构上比 `list` 复杂许多，运用了继承关系，如下图所示：
+
+ ![image-20221010153753941](images/image-20221010153753941.png)
+
+### 4.9.4 `slist` 的数据结构
+
+```c++
+template <class T, class Alloc = alloc>
+class slist
+{
+public:
+  typedef T value_type;
+  typedef value_type* pointer;
+  typedef const value_type* const_pointer;
+  typedef value_type& reference;
+  typedef const value_type& const_reference;
+  typedef size_t size_type;
+  typedef ptrdiff_t difference_type;
+
+  typedef __slist_iterator<T, T&, T*>             iterator;
+  typedef __slist_iterator<T, const T&, const T*> const_iterator;
+
+private:
+  typedef __slist_node<T> list_node;
+  typedef __slist_node_base list_node_base;
+  typedef __slist_iterator_base iterator_base;
+  typedef simple_alloc<list_node, Alloc> list_node_allocator;
+
+  static list_node* create_node(const value_type& x) {		// 创建一个 node，其值为 x
+    list_node* node = list_node_allocator::allocate();		// 配置空间
+    __STL_TRY {
+      construct(&node->data, x);							// 构造元素
+      node->next = 0;
+    }
+    __STL_UNWIND(list_node_allocator::deallocate(node));
+    return node;
+  }
+  
+  static void destroy_node(list_node* node) {				// 摧毁一个 node
+    destroy(&node->data);									// 析构 node 中的元素
+    list_node_allocator::deallocate(node);					// 释放 node 所占空间
+  }
+    
+private:
+  list_node_base head;										// 头部。注意，它不是指针，是实物
+    
+public:
+  slist() { head.next = 0; }
+  ~slist() { clear(); }
+    
+public:
+  iterator begin() { return iterator((list_node*)head.next); }
+  iterator end() { return iterator(0); }
+  size_type size() const { return __slist_size(head.next); }	// 调用 4.9.2 节中的全局函数
+  bool empty() const { return head.next == 0; }
+    
+  void swap(slist& L)
+  {
+    list_node_base* tmp = head.next;
+    head.next = L.head.next;
+    L.head.next = tmp;
+  }
+  
+public:		// 注意，没有 push_back
+  // 取头部元素
+  reference front() { return ((list_node*) head.next)->data; }
+  // 从头部插入元素，新元素将成为 slist 的第一个元素
+  void push_front(const value_type& x)   {
+    __slist_make_link(&head, create_node(x));
+  }
+  // 从头部取走元素，修改 head
+  void pop_front() {
+    list_node* node = (list_node*) head.next;
+    head.next = node->next;
+    destroy_node(node);
+  }
+  
+```
+
+**<font color='red'>这里，需要注意的是，`slist` 中含有一个 `__slist_node_base` 的头部，它不是指针，是一个实物，它不包含数据元素，只包含一个 `next` 指针，指向 `slist` 的第一个元素。</font>**
+
+# 第五章 关联式容器 associative containers
+
+标准的 STL 关联式容器分为 `set` 和 `map` 两大类，以及这两大类的衍生体 `multiset` 和 `multimap`。**<font color='red'>这些容器的底层机制均以红黑树完成。红黑树也是一个独立容器，但并不开放给外界使用。</font>**
+
+此外， SGI STL 还提供了一个不在标准规格之列的关联式容器： hash table， 以及以此 hash table 为底层机制而完成的 hash_set、hash_map、hash_multiset、hash_multimap。
+
+ ![image-20221010155915077](images/image-20221010155915077.png)
+
+**<font color='red'>所谓关联式容器</font>**，观念上类似关联式数据库（ 实际上则简单许多）：**<font color='red'>每个元素都有一个键值和一个实值</font>**。当元素被插入到关联式容器中时，容器内部结构（可能是红黑树，也可能是 hash_table）便依照其键值大小，以某种特定规则将这个元素放置于适当位置。
+
+**<font color='red'>关联式容器没有所谓头尾，所以不会有所谓 `push_back`、`push_front`、`pop_back`、`pop_front`、`begin`、`end`  这样的操作行为。</font>**
+
+## 5.1 树的导览
+
+### 5.1.1 二叉搜索树（binary search tree）
+
+所谓二叉搜索树，可提供对数时间的元素插入和访问。二叉搜索树的节点放置规则是：任何节点的键值一定大于其左子树中的每一个节点的键值，并小于其右子树中的每一个节点的键值：
+
+ ![image-20221010162508043](images/image-20221010162508043.png)
+
+要在一棵二叉搜索树中找出最大元素或最小元素，是一件极简单的事：一直往左走或一直往右走即是。
+
+插入新元素时，可从根节点开始，遇键值较大者就向左，遇键值较小者就向右，一直到尾端，即为插入点。
+
+欲删除旧节点 A，情况可分三种：
+
+* 如果 A 是叶子节点，直接删除即可
+
+* 如果 A 只有一个子节点，我们就直接将 A 的子节点连至 A 的父节点，并将 A 删除
+
+   ![image-20221010162744854](images/image-20221010162744854.png)
+
+* 如果 A 有两个子节点，我们就以右子树内的最小节点取代 A，右子树的最小节点极易获得：从右子节点开始（视为右子树的根节点），一直向左走至底即是
+
+   ![image-20221010162841666](images/image-20221010162841666.png)
+
+### 5.1.2 平衡二叉搜索树（balanced binary search tree）
+
+所谓树形平衡与否，并没有一个绝对的测量标准。“平衡”的大致意义是：没有任何一个节点过深（深度过大）。不同的平衡条件，造就出不同的效率表现，以及不同的实现复杂度。有数种特殊结构如 AVL-tree 、RB-tree 、AA-tree 均可实现出平衡二叉搜索树。
+
+### 5.1.3 A VL tree (Adelson-Velskii-Landis tree)
+
+AVL tree 要求任何节点的左右子树高度相差最多为 1。
+
+AVL 树中插入一个节点之后，如果破坏了 AVL 树的平衡，则从插入节点开始向上找到第一个不符合平衡条件的节点，调整以该节点为根节点的子树即可，例如图中在插入了 11 之后，我们只需要调整值为 18 的节点即可：
+
+ ![image-20221010163612446](images/image-20221010163612446.png)
+
+假设需要调整的子树的根节点为 X，由于节点最多拥有两个子节点，而所谓 “平衡被破坏” 意味着 X 的左右两棵子树的高度相差为 2，因此我们可以轻易将情况分为四种：
+
+1. 插入点位于 X 的左子节点的左子树——左左。
+2. 插入点位千X 的左子节点的右子树——左右。
+3. 插入点位于X 的右子节点的左子树——右左。
+4. 插入点位于X 的右子节点的右子树——右右。
+
+情况 1，4 彼此对称，称为外侧 插入，可以采用**<font color='blue'>单旋转操作</font>**调整解决。情况 2，3 彼此对称，称为内侧插入，可以采用**<font color='blue'>双旋转操作</font>**调整解决:
+
+ ![image-20221010164009435](images/image-20221010164009435.png)
+
+ ![image-20221010164041261](images/image-20221010164041261.png)
