@@ -2180,7 +2180,7 @@ find相关的时间参数的意义：
 * 扇区（Sector）为最小的物理存储单位，且依据磁盘设计的不同，目前主要有 512Bytes与 4KB 两种格式
 * 将扇区组成一个圆，那就是柱面（Cylinder）
 * 早期的分区主要以柱面为最小分区单位，现在的分区通常使用扇区为最小分区单位（每个扇区都有其号码，就好像座位一样）
-* 磁盘分区表主要有两种格式，一种是限制较多的 MBR 分区表，一种是较新且限制较少的GPT 分区表
+* 磁盘分区表主要有两种格式，一种是限制较多的 MBR 分区表，一种是较新且限制较少的 GPT 分区表
 * MBR 分区表中，第一个扇区最重要，里面有：主引导记录（Master boot record, MBR）及分区表（partition table）， 其中 MBR 占有 446 Bytes，而 partition table 则占有 64 Bytes
 * GPT 分区表除了分区数量扩充较多之外，支持的磁盘容量也可以超过 2TB
 
@@ -2191,27 +2191,35 @@ find相关的时间参数的意义：
 
 ### 7.1.2 文件系统特性
 
-传统的磁盘与文件系统应用中，一个分区就只能够被格式化成为一个文件系统，所以我们可以说一个文件分区。但是LVM与软件磁盘阵列等新技术可以将一个分区格式化为多个文件系统，因此我们可以称呼**一个可被挂载的数据为一个文件系统**。
+传统的磁盘与文件系统应用中，一个分区就只能够被格式化成为一个文件系统，所以我们可以说一个文件分区。但是 LVM 与软件磁盘阵列等新技术可以将一个分区格式化为多个文件系统，也能够将多个分区合成一个文件系统。所以说，目前我们在格式化时已经不再说成针对硬盘分区来格式化了，通常我们可以称呼**<font color='red'>一个可被挂载的数据为一个文件系统而不是一个分区</font>**。
 
-Linux操作系统的文件内容和文件权限(rwx)，文件属性（拥有者，用户组，时间参数等）会被分别存放在不同的区块，**权限与属性放到inode中，实际数据则放置到数据区块中**。另外还有一个超级区块(superblock)会记录整个文件系统的整体信息，包括inode与数据区块的总量、使用量、剩余量等。
+Linux 操作系统的文件内容和文件权限（rwx），文件属性（拥有者，用户组，时间参数等）会被分别存放在不同的区块，**<font color='red'>权限与属性放到 inode 中，实际数据则放置到数据区块中</font>**。另外还有一个超级区块（superblock）会记录整个文件系统的整体信息，包括 inode 与数据区块的总量、使用量、剩余量等。
 
 * 超级区块
 
-  记录此文件系统的整体信息，包括inode与数据区块的总量、使用量、剩余量，以及文件系统的格式与相关信息等
+  记录此文件系统的整体信息，包括 inode 与数据区块的总量、使用量、剩余量，以及文件系统的格式与相关信息等
 
 * inode
 
-  记录文件的属性，一个文件占用一个inode，同时记录此文件的数据所在的区块号码
+  记录文件的属性，一个文件占用一个 inode，同时记录此文件的数据所在的区块号码
 
 * 数据区块
 
   实际记录文件的内容，若文件太大时，会占用多个区块
 
-这种利用inode记录实际数据存放的区块的方式，称为**索引式文件系统**。
+由于 inode 内有文件数据放置的区块号码，如果能够找到文件的 inode 的话，那么自然就会知道这个文件所放置数据的区块号码，当然也就能够读出该文件的实际数据了。这种利用 inode 记录实际数据存放的区块的方式，称为**<font color='blue'>索引式文件系统</font>**。例如图中一个文件的属性与权限数据是放置到 inode 4号中，而这个 inode 记录了文件数据的实际放置点为 2、7、13、15 这 4 个区块号码：
+
+ ![image-20221010194434188](images/image-20221010194434188.png)
+
+
 
 ### 7.1.3 Linux的ext2文件系统（inode）
 
-ext2 文件系统在格式化的时候基本上是区分为多个区块群组 （block group） ，每个区块群组都有独立的 inode、数据区块、超级区块系统。
+标准的 ext2 就是使用这种前文提到的 inode 为基础的 Linux 文件系统。
+
+文件系统一开始就将 inode 与数据区块规划好了，除非重新格式化（或利用 resize2fs 等命令修改其大小），否则 inode 与数据区块固定后就不再变动。但是，如果我的文件系统高达数百 GB 时，那么将所有的 inode 与数据区块通通放置在一起将是很不明智的决定，因为 inode 与数据区块的数量太庞大，不容易管理。
+
+因此ext2 文件系统在格式化的时候基本上是区分为多个**<font color='blue'>区块群组 </font>**（block group） ，每个区块群组都有独立的 inode、数据区块、超级区块系统。
 
  ![image-20220327210222826](images\image-20220327210222826.png)
 
@@ -2219,70 +2227,81 @@ ext2 文件系统在格式化的时候基本上是区分为多个区块群组 �
 
 每一个区块群组有以下六个主要内容：
 
-* **数据区块（data block）**
+#### 数据区块（data block）
 
-  数据区块是用来放置文件数据的地方，在 ext2 文件系统中所支持的区块大小有 1K, 2K及 4K 三种。在格式化时区块的大小就固定了，且每个区块都有编号，以方便 inode的记录。ext2文件系统的区块还有以下基本限制：
+数据区块是用来放置文件数据的地方，在 ext2 文件系统中所支持的区块大小有 1K, 2K及 4K 三种。在格式化时区块的大小就固定了，且每个区块都有编号，以方便 inode 的记录。ext2 文件系统的区块还有以下基本限制：
 
-  * 原则上，区块的大小与数量在格式化完就不能够再修改（除非重新格式化）
-  * 每个区块内最多只能够放置一个文件的数据
-  * 承上，如果文件大于区块的大小，则一个文件会占用多个区块数量
-  * 承上，若文件小于区块，则该区块的剩余容量就不能够再被使用了（磁盘空间会浪费）
+* 原则上，区块的大小与数量在格式化完就不能够再修改（除非重新格式化）
+* **<font color='red'>每个区块内最多只能够放置一个文件的数据</font>**
+* 承上，如果文件大于区块的大小，则一个文件会占用多个区块数量
+* 承上，若文件小于区块，则该区块的剩余容量就不能够再被使用了（磁盘空间会浪费）
 
-* **inode table（inode表）**
+#### inode表（inode table）
 
-  inode记录的数据至少有：
+inode记录的数据至少有：
 
-  * 该文件的读写属性（read/write/excute）
-  * 该文件的拥有者与用户组（owner/group）
-  * 该文件的大小
-  * 该文件建立或状态改变的时间（ctime）
-  * 最近一次的读取时间（atime）
-  * 最近修改的时间（mtime）
-  * 定义文件特性的标识（flag），如 SetUID
-  * 该文件真正内容的指向 （pointer）
+* 该文件的读写属性（read/write/excute）
+* 该文件的拥有者与用户组（owner/group）
+* 该文件的大小
+* 该文件建立或状态改变的时间（ctime）
+* 最近一次的读取时间（atime）
+* 最近修改的时间（mtime）
+* 定义文件特性的标识（flag），如 SetUID
+* 该文件真正内容的指向 （pointer）
 
-  inode的数量与大小也是在格式化时就已经固定了，除此之外，还有以下特色：
+inode的数量与大小也是在格式化时就已经固定了，除此之外，还有以下特色：
 
-  * 每个 inode 大小均固定为 128 B （新的 ext4 与 xfs 可设置到 256 B）
-  * 每个文件都仅会占用一个 inode 而已
-  * 承上，因此文件系统能够建立的文件数量与 inode 的数量有关
-  * 系统读取文件时需要先找到 inode，并分析 inode 所记录的权限与用户是否符合，若符合才能够读取区块的内容
+* 每个 inode 大小均固定为 128 B （新的 ext4 与 xfs 可设置到 256 B）
+* 每个文件都仅会占用一个 inode 而已
+* 承上，因此**<font color='red'>文件系统能够建立的文件数量与 inode 的数量有关</font>**
+* 系统读取文件时需要先找到 inode，并分析 inode 所记录的权限与用户是否符合，若符合才能够读取区块的内容
 
-  文件系统将inode记录区块号码的区域定义为12个直接、一个间接、一个双间接与一个三间接记录区：
+文件系统将 inode 记录区块号码的区域定义为 12 个直接、一个间接、一个双间接与一个三间接记录区：
 
-   ![image-20220327211933490](images\image-20220327211933490.png)
+ ![image-20220327211933490](images\image-20220327211933490.png)
 
-* **Superblock （超级区块）**
+上图最左边为 inode 本身（128B），里面有 12 个直接指向区块号码的对照，这12 条记录就能够直接取得区块号码。至于所谓的间接就是再拿一个区块来当作记录区块号码的记录区，如果文件太大，就会使用间接的区块来记录编号。
 
-  记录的主要信息有：
+#### 超级区块 （Superblock）
 
-  * 数据区块与inode 的总量
-  * 未使用与已使用的 inode 与数据区块的数量
-  * 数据区块与 inode 的大小 （block 为 1, 2, 4K，inode 为 128Bytes 或 256Bytes）
-  * 文件系统的挂载时间、最近一次写入数据的时间、最近一次检验磁盘 （fsck） 的时间等文件系统的相关信息
-  * 一个有效位数值，若此文件系统已被挂载，则有效位为 0 ，若未被挂载，则有效位为 1
+记录的主要信息有：
 
-* **Filesystem Description （文件系统描述说明）**
+* 数据区块与 inode 的总量
+* 未使用与已使用的 inode 与数据区块的数量
+* 数据区块与 inode 的大小 （block 为 1, 2, 4K，inode 为 128Bytes 或 256Bytes）
+* 文件系统的挂载时间、最近一次写入数据的时间、最近一次检验磁盘 （fsck） 的时间等文件系统的相关信息
+* 一个有效位数值，若此文件系统已被挂载，则有效位为 0 ，若未被挂载，则有效位为 1
 
-  这个区段可以描述每个区块群组的开始与结束的区块号码，以及说明每个区段（超级区块, 对照表, inode对照表, 数据区块） 分别介于哪一个区块号码之间
+上述信息我们可以通过 dumpe2fs 来观察。
 
-* **block bitmap （区块对照表）**
+超级区块非常的重要，因为我们这个文件系统的基本信息都存储在这里。此外，每个区块群组（block group）都可能含有超级区块。但是我们也说—个文件系统应该仅有—个超级区块而已，那是怎么回事？事实上除了第一个区块群组内会含有超级区块之外，**<font color='red'>后续的区块群组不—定含有超级区块</font>**，而若含有超级区块则该超级区块主要是做为第—个区块群组内超级区块的备份，这样可以进行超级区块的恢复。
 
-  新增文件时，从区块对照表当中可以知道哪些区块是空的，因此我们的系统就能够很快速的找到可使用的空间来处理文件。
+#### 文件系统描述说明 （Filesystem Description）
 
-  删除某些文件时，那么那些文件原本占用的区块号码就得要释放出来， 此时在区块对照表当中相对应到该区块号码的标志就要修改成“未使用中”
+这个区段可以描述每个区块群组的开始与结束的区块号码，以及说明每个区段（超级区块, 对照表, inode对照表, 数据区块） 分别介于哪一个区块号码之间。这部分也能够用 dumpe2fs 来观察。
 
-* **inode bitmap （inode 对照表）**
+#### 区块对照表 （block bitmap）
 
-  与区块对照表类似，记录使用与未使用的inode号码
+新增文件时，从区块对照表当中可以知道哪些区块是空的，因此我们的系统就能够很快速的找到可使用的空间来处理文件。
+
+删除某些文件时，那么那些文件原本占用的区块号码就得要释放出来， 此时在区块对照表当中相对应到该区块号码的标志就要修改成 “未使用中”。
+
+#### inode 对照表 （inode bitmap）
+
+与区块对照表类似，记录使用与未使用的 inode 号码。
 
 #### dumpe2fs： 查询超级块信息的命令
+
+需要注意，我们的 CentOS 7 现在是以 xfs 为默认文件系统，所以目前你的系统应该无法使用 dumpe2fs 去查询任何文件系统。不过后续可以自己划分一个 ext4 的文件系统进行查询。
+
+下面的这个文件系统是 1GB 的容量，使用默认方式来进行格式化，观察的内容如下：
 
 ```shell
 [root@study ~]# dumpe2fs [-bh] 设备文件名
 选项与参数：
 -b ：列出保留为坏道的部分（一般用不到）
 -h ：仅列出 superblock 的数据，不会列出其他的区段内容
+
 范例：一块 1GB ext4 文件系统内容
 [root@study ~]# blkid <==这个指令可以显示目前系统被格式化的设备
 /dev/vda1: LABEL="myboot" UUID="ce4dbf1b-2b3d-4973-8234-73768e8fd659" TYPE="xfs"
@@ -2291,79 +2310,116 @@ ext2 文件系统在格式化的时候基本上是区分为多个区块群组 �
 /dev/vda5: UUID="e20d65d9-20d4-472f-9f91-cdcfb30219d6" TYPE="ext4" <==看到 ext4 了！
 [root@study ~]# dumpe2fs /dev/vda5
 dumpe2fs 1.42.9 （28-Dec-2013）
-Filesystem volume name: <none> # 文件系统的名称（不一定会有）
-Last mounted on: <not available> # 上一次挂载的目录位置
-Filesystem UUID: e20d65d9-20d4-472f-9f91-cdcfb30219d6
-Filesystem magic number: 0xEF53 # 上方的 UUID 为 Linux 对设备的定义码
-Filesystem revision #: 1 （dynamic） # 下方的 features 为文件系统的特征数据
-Filesystem features: has_journal ext_attr resize_inode dir_index filetype extent 64bit
+Filesystem volume name: <none> 							# 文件系统的名称（不一定会有）
+Last mounted on: <not available> 						# 上一次挂载的目录位置
+Filesystem UUID: e20d65d9-20d4-472f-9f91-cdcfb30219d6	# UUID 为 Linux 对设备的定义码
+Filesystem magic number: 0xEF53 						
+Filesystem revision #: 1 （dynamic） 
+Filesystem features: has_journal ext_attr resize_inode dir_index filetype extent 64bit	# 文件系统的特征数据
 flex_bg sparse_super large_file huge_file uninit_bg dir_nlink extra_isize
 Filesystem flags: signed_directory_hash
-Default mount options: user_xattr acl # 默认在挂载时会主动加上的挂载参数
-Filesystem state: clean # 这块文件系统的状态是什么，clean 是没问题
+Default mount options: user_xattr acl 					# 默认在挂载时会主动加上的挂载参数
+Filesystem state: clean 								# 这块文件系统的状态是什么，clean 是没问题
 Errors behavior: Continue
 Filesystem OS type: Linux
-Inode count: 65536 # inode 的总数
-Block count: 262144 # block 的总数
-Reserved block count: 13107 # 保留的 block 总数
-Free blocks: 249189 # 还有多少的 block 可用数量
-Free inodes: 65525 # 还有多少的 inode 可用数量
+Inode count: 65536 										# inode 的总数
+Block count: 262144 									# block 的总数
+Reserved block count: 13107 							# 保留的 block 总数
+Free blocks: 249189 									# 还有多少的 block 可用数量
+Free inodes: 65525 										# 还有多少的 inode 可用数量
 First block: 0
-Block size: 4096 # 单个 block 的大小
+Block size: 4096 										# 单个 block 的大小
 Fragment size: 4096
 Group descriptor size: 64
 ....（中间省略）....
-Inode size: 256 # inode 的容量大小，已经是 256 了
+Inode size: 256 										# inode 的容量大小，已经是 256B 了
 ....（中间省略）....
 Journal inode: 8
 Default directory hash: half_md4
 Directory Hash Seed: 3c2568b4-1a7e-44cf-95a2-c8867fb19fbc
 Journal backup: inode blocks
 Journal features: （none）
-Journal size: 32M # Journal 日志的可供存储大小
+Journal size: 32M 										# Journal 日志的可供存储大小
 Journal length: 8192
 Journal sequence: 0x00000001
 Journal start: 0
-Group 0: （Blocks 0-32767） # 第一块 block group 位置
+Group 0: （Blocks 0-32767） 							   # 第一块区块群组位置
 Checksum 0x13be, unused inodes 8181
-Primary superblock at 0, Group descriptors at 1-1 # 主要 superblock 的所在
+Primary superblock at 0, Group descriptors at 1-1 		# 主要超级区块的所在
 Reserved GDT blocks at 2-128
 Block bitmap at 129 （+129）, Inode bitmap at 145 （+145）
-Inode table at 161-672 （+161） # inode table 的所在
+Inode table at 161-672 （+161） 						   # inode 表的所在
 28521 free blocks, 8181 free inodes, 2 directories, 8181 unused inodes
-Free blocks: 142-144, 153-160, 4258-32767 # 下面两行说明剩余的容量有多少
+Free blocks: 142-144, 153-160, 4258-32767 				# 下面两行说明剩余的容量有多少
 Free inodes: 12-8192
-Group 1: （Blocks 32768-65535） [INODE_UNINIT] # 后续为更多其他的 block group
+Group 1: （Blocks 32768-65535） [INODE_UNINIT] 		   # 后续为更多其他的区块群组
 ....（下面省略）....
 # 上半部分显示超级区块的内容，下半部分则是每个区块群组的信息
 ```
 
+如上所示，利用 dumpe2fs 可以查询到非常多的信息，不过依内容主要可以划分为上半部分的超级区块内容，下半部分则是每个区块群组的信息。
+
 ### 7.1.4 文件系统与实际的目录树的关系
 
-目录与文件在文件系统中是如何记录数据的
+#### 目录
 
-* **目录**
+当我们在 Linux 下的文件系统建立一个目录时，**<font color='red'>文件系统会分配一个 inode 与至少一块区块给该目录</font>**。其中，inode 记录该目录的相关权限与属性，并可记录分配到的那块区块号码。**<font color='red'>区块则是记录在这个目录下的文件名与该文件名占用的 inode 号码数据。</font>**
 
-  当我们在Linux下的文件系统建立一个目录时，文件系统会分配一个inode与至少一块区块给该目录。其中，inode记录该目录的相关权限与属性，并可记录分配到的那块区块号码。区块则是记录在这个目录下的**文件名**与**该文件名占用的inode号码**数据。
+另外在目录下面的文件数如果太多而导致一个区块无法记录得下所有的文件名与其占用的 inode 号码时， Linux 会多给该目录一个区块来继续记录相关的数据。
 
-  如果想要实际观察文件所占用的inode号码数据，可以使用ls -i这个选项来处理：
+可以使用【ls -i】来观察文件所占用的 inode 号码：
 
-  ```shell
-  [root@study ~]# ls -li
-  total 8
-  53735697 -rw-------. 1 root root 1816 May 4 17:57 anaconda-ks.cfg
-  53745858 -rw-r--r--. 1 root root 1864 May 4 18:01 initial-setup-ks.cfg
-  ```
+```shell
+[root@study ~]# ls -li
+total 8
+53735697 -rw-------. 1 root root 1816 May 4 17:57 anaconda-ks.cfg
+53745858 -rw-r--r--. 1 root root 1864 May 4 18:01 initial-setup-ks.cfg
+```
 
-* **文件**
+#### 文件
 
-  当我们在 Linux 下的 ext2 创建一个一般文件时， ext2 会分配一个 inode 与相对于该文件大小的区块数量给该文件
+当我们在 Linux 下的 ext2 创建一个一般文件时， ext2 会分配一个 inode 与相对于该文件大小的区块数量给该文件。
 
-* **目录树读取**
+#### 目录树读取
 
-  inode本身并不记录文件名，文件名的记录是在目录的区块中。因此新增、删除、修改文件名与目录的w权限有关。
+**<font color='red'>inode 本身并不记录文件名，文件名的记录是在目录的区块中。</font>**因此新增、删除、修改文件名与目录的 w 权限有关。
 
-  由于目录树是由根目录开始读起，因此系统通过挂载的信息可以找到**挂载点**的 inode 号码，此时就能够得到根目录的 inode 内容，并依据该 inode 读取根目录的区块内的文件名数据，再一层一层的往下读到正确的文件名。
+由于目录树是由根目录开始读起，因此系统通过挂载的信息可以找到**挂载点**的 inode 号码，此时就能够得到根目录的 inode 内容，并依据该 inode 读取根目录的区块内的文件名数据，再一层一层的往下读到正确的文件名。
+
+举例来说，如果我想要读取 /etc/passwd 这个文件时
+
+1. / 的 inode
+
+   系统通过挂载点的信息找到根目录的 inode 号码，且 inode 记录的权限让我们可以读取该区块的内容（有 r 与 x）
+
+2. / 的区块
+
+   通过 / 的 inode 记录的 / 的区块号码，可以读取 / 的区块内容，其中有 etc 目录的 inode 号码
+
+3. etc 的 inode
+
+   通过 etc 的 inode 得知 dmtsai 具有 r 与 x 的权限，因此可以读取 etc 的区块内容
+
+4. etc 的区块
+
+   通过 etc 的 inode 记录的 etc 的区块号码，可以读取 etc 的区块内容，其中有 passwd 的 inode 号码
+
+5. passwd 的 inode
+
+   通过 passwd 的 inode 得知 dmtsai 具有 r 权限，因此可以读取 passwd  的区块内容
+
+6. passwd 的区块
+
+   通过 passwd 的 inode 记录的 passwd 的区块号码，可以读取 passwd 的区块内容，其中记录的就是该文件的数据
+
+#### 文件系统大小与磁盘读取性能
+
+当—个文件系统规划得很大时，例如 100GB 这么大时，由于磁盘上面的数据总是来来去去的，所以，整个文件系统上面的文件通常无法连续写在一起（区块
+号码不会连续的意思），而是填入式地将数据写入没有被使用的区块当中。
+
+如果文件写入的区块真的很分散，此时就会有所谓的文件数据离散的问题发生了，因为磁头得要在整个文件系统中来来去去地频繁读取。果真如此，那么可以将整个文件系统内的数据全部复制出来，将该文件系统重新格式化，再将数据给它复制回去即可解决这个间题。
+
+此外，如果文件系统真的太大，那么当一个文件分别记录在这个文件系统的最前面与最后面的区块号码中，此时会造成磁盘的机械手臂移动幅度过大，也会造成数据读取性能的下降。而且磁头在查找整个文件系统时，也会花费比较多的时间去查找。因此，磁盘分区的规划并不是越大越好，而是要针对您的主机用途来进行规划才行。
 
 ### 7.1.5  ext2/ext3/ext4 文件的存取与日志式文件系统的功能
 
@@ -2374,37 +2430,39 @@ Group 1: （Blocks 32768-65535） [INODE_UNINIT] # 后续为更多其他的 bloc
 * 根据区块对照表找到没有使用中的区块号码，并将实际的数据写入区块中，且更新 inode 的区块指向数据
 * 将刚刚写入的 inode 与区块数据同步更新 inode 对照表与区块对照表，并更新超级区块的内容
 
-一般来说，我们将 inode表与数据区块称为**数据存放区域**，至于其他例如超级区块、区块对照表与inode对照表等区段就被称为**元数据**（ metadata ），因为它们的数据是经常变动的，每次新增、移除、编辑时都可能会影响到这三个部分的数据，因此才被称为元数据。
+一般来说，我们将 inode 表与数据区块称为**<font color='blue'>数据存放区域</font>**，至于其他例如超级区块、区块对照表与 inode 对照表等区段就被称为**<font color='blue'>元数据</font>**（ metadata ），因为它们的数据是经常变动的，每次新增、移除、编辑时都可能会影响到这三个部分的数据，因此才被称为元数据。
 
 #### 数据的不一致状态
 
-如果在写入文件系统时，因为某些原因导致系统中断，写入的数据仅有inode表和数据区块，最后一个同步更新元数据的步骤并没有完成，此时就会发生元数据的内容与实际数据存放区产生不一致的情况。
+如果在写入文件系统时，因为某些原因导致系统中断，写入的数据仅有 inode 表和数据区块，最后一个同步更新元数据的步骤并没有完成，此时就会发生元数据的内容与实际数据存放区产生不一致的情况。
 
 #### 日志式文件系统
 
-在我们的文件系统当中规划出一个区块，该区块专门记录写入或修改文件时的步骤：
+为了避免上述提到的文件系统不一致的情况发生，我们在文件系统当中规划出—个区块，该区块专门记录写入或修改文件时的步骤:
 
 * 预备：当系统要写入一个文件时，会先在日志记录区块中记录某个文件准备要写入的信息
 * 实际写入：开始写入文件的权限与数据；开始更新 metadata 的数据
 * 结束：完成数据与 metadata 的更新后，在日志记录区块当中完成该文件的记录
 
-这样，万一数据的记录过程当中发生了问题，那么系统只要去检查日志记录区块，就可以直到哪个文件发生了问题，而不必针对整个文件系统进行检查。
+这样，万一数据的记录过程当中发生了问题，那么系统只要去检查日志记录区块，就可以知道哪个文件发生了问题，而不必针对整个文件系统进行检查。
 
 ### 7.1.6 Linux文件系统的运行
 
-Linux的异步处理方式：当系统加载一个文件到内存后，如果该文件没有被修改过，则在内存区段的文件数据会被设置为**干净（clean）**的。 但如果内存中的文件数据被更改过了（例如你用 nano 去编辑过这个文件），此时该内存中的数据会被设置为**脏的 （Dirty）**。此时所有的动作都还在内存中执行，并没有写入到磁盘中！ 系统会不定时的将内存中设置为“Dirty”的数据写回磁盘，以保持磁盘与内存数据的一致性。 你也可以利用sync命令来手动强制写入磁盘。
+Linux的异步处理方式：当系统加载一个文件到内存后，如果该文件没有被修改过，则在内存区段的文件数据会被设置为**干净（clean）**的。 但如果内存中的文件数据被更改过了（例如你用 nano 去编辑过这个文件），此时该内存中的数据会被设置为**脏的 （Dirty）**。**此时所有的动作都还在内存中执行，并没有写入到磁盘中**。 系统会不定时的将内存中设置为 “Dirty” 的数据写回磁盘，以保持磁盘与内存数据的一致性。 你也可以利用 sync 命令来手动强制写入磁盘。
 
 ### 7.1.7 挂载点（mount point）的意义
 
-将文件系统与目录树结合的操作我们称为**挂载**。挂载点一定是目录，该目录为进入该文件系统的入口。因此任何文件系统必须要挂载到目录树的某个目录后，才能够使用。
+每个文件系统都有独立的 inode 、区块、超级区块等信息，这个文件系统要能够链接到目录树才能被我们使用。将文件系统与目录树结合的操作我们称为**<font color='blue'>挂载</font>**。**<font color='red'>挂载点一定是目录，该目录为进入该文件系统的入口。</font>**因此并不是你有任何文件系统都能使用，必须要挂载到目录树的某个目录后，才能够使用该文件系统。
 
-### 7.1.8 其他Linux支持的文件系统与VFS
+### 7.1.8 其他 Linux 支持的文件系统与 VFS
 
-常见的文件系统：ext2 / minix / FAT （用 vfat 模块） / iso9660 （光盘）等
+Linux 支持的常见的文件系统有：
 
-日志式文件系统： ext3 /ext4 / ReiserFS / Windows' NTFS / IBM's JFS / SGI's XFS / ZFS
+* 传统文件系统：ext2 / minix / FAT （用 vfat 模块） / iso9660 （光盘）等
 
-网络文件系统： NFS / SMBFS
+* 日志式文件系统： ext3 /ext4 / ReiserFS / Windows' NTFS / IBM's JFS / SGI's XFS / ZFS
+
+* 网络文件系统： NFS / SMBFS
 
 想要知道你的Linux支持的文件系统有哪些，可以查看下面这个目录：
 
@@ -2414,77 +2472,85 @@ Linux的异步处理方式：当系统加载一个文件到内存后，如果该
 
 #### Linux VFS(Virtual File System)
 
-所有的Linux系统都是通过一个名为Virtual Filesystem Switch的内核功能去读取文件系统。用户并不需要知道哪个硬盘分区上面的文件系统是什么，VFS会主动帮我们做好读取的操作。
+所有的Linux系统都是通过一个名为 Virtual Filesystem Switch 的内核功能去读取文件系统。也就是说，整个 Linux 识别的文件系统其实都是 VFS 在进行管理，用户并不需要知道哪个硬盘分区上面的文件系统是什么，VFS 会主动帮我们做好读取的操作。
 
-举例来说假设你的 / 使用的是 /dev/hda1 ，用 ext3 ，而 /home 使用 /dev/hda2 ，用 reiserfs ， 那么你取用 /home/dmtsai/.bashrc 时，有特别指定要用的什么文件系统的模块来读取吗？ 应该是没有吧！这个就是 VFS 的功能：
+举例来说假设你的 / 使用的是 /dev/hda1 ，用 ext3 ，而 /home 使用 /dev/hda2 ，用 reiserfs ， 那么你取用 /home/dmtsai/.bashrc 时，有特别指定要用的什么文件系统的模块来读取吗？ 应该是没有吧！这个就是 VFS 的功能。
 
  ![image-20220328112204260](images\image-20220328112204260.png)
 
 ### 7.1.9 XFS文件系统简介
 
-#### ext文件系统存在的问题：支持度最广，但格式化超慢
+CentOS 7 开始，默认的文件系统巳经由原本的 ext4 变成了 xfs 文件系统。
 
-ext文件系统对于文件格式化的处理方面，采用的是预先规划出所有的inode，区块，元数据，未来系统可以直接使用，不需要再进行动态配置的做法。当TB以上等级的传统ext系列文件系统在格式化的时候，光是预先分配inode与区块就要消耗好多时间。
+#### ext 文件系统存在的问题：支持度最广，但格式化超慢
+
+ext 文件系统对于文件格式化的处理方面，采用的是预先规划出所有的 inode，区块，元数据，未来系统可以直接使用，不需要再进行动态配置的做法。当 TB 以上等级的传统 ext 系列文件系统在格式化的时候，光是预先分配inode与区块就要消耗好多时间。
 
 #### XFS 文件系统的配置
 
-基本数xfs就是一个日志式文件系统。
+基本上 xfs 就是一个日志式文件系统。
 
 xfs文件系统在数据分布上，主要规划为三个部分：
 
 * 数据区（data section）
 
-  包括inode、数据区块、超级区块等数据。与ext系列的区块群组类似，也是分为多个存储区群组，每个存储区群组都包含了：
+  基本上，数据区就跟我们之前谈到的 ext 系列—样，包括 inode 、数据区块、超级区块等数据，都放置在这个区块。这个数据区与 ext 系列的区块群组类似，也是分为多个**<font color='blue'>存储区群组</font>**，每个存储区群组都包含了：
 
   * 整个文件系统的超级区块
   * 剩余空间的管理机制
-  * inode的分配与追踪
+  * inode 的分配与追踪
 
-  另外与ext系列不同的是,inode与区块都是系统需要用到时才动态配置产生，且区块与inode有多种不同的容量可供设置。
+  另外与 ext 系列不同的是，inode与区块都是系统需要用到时才动态配置产生，所以格式化操作超级快。
 
 * 文件系统活动登录区（log section）
 
-  记录文件系统的变化，有点像日志区。文件的变化会在这里记录下来，直到该变化完整地写入到数据区后，该条记录才会被结束。
+  在登录区这个区域主要被用来**记录文件系统的变化，其实有点像是日志区**。文件的变化会在这里记录下来，直到该变化完整地写入到数据区后，该条记录才会被结束。如果文件系统因为某些缘故（例如最常见的停电）而损坏时，系统会拿这个登录区块来进行检验，看看系统挂掉之前，文件系统正在运行些啥操作，借以快速地修复文件系统。
+
+  因为系统所有的操作都会在这个区块做个记录，因此这个区块的磁盘活动相当频繁。**<font color='red'>在这个区域中， 你可以指定外部的磁盘来作为 xfs 文件系统的日志区块。例如，你可以将 SSD 磁盘作为 xfs 的登录区，这样当系统需要进行任何活动时， 就可以更快速的进行工作。</font>**
 
 * 实时运行区（realtime section）
 
-  当有文件要被建立时，xfs会在这个区段里面找一个到数个地extent区块，将文件放置在这个区块内，等到分配完毕后，再写入到数据区的inode与区块中。
+  当有文件要被建立时，xfs会在这个区段里面找一个到数个的 extent 区块，将文件放置在这个区块内，等到分配完毕后，再写入到数据区的 inode 与区块中。
 
-#### XFS文件系统的描述数据观察
+#### XFS 文件系统的描述数据观察
 
-可以用xfs_info观察超级区块内容
+可以用 xfs_info 观察 xfs 文件系统超级区块的内容
 
 ```shell
 [root@study ~]# xfs_info 挂载点 | 设备文件名
+
 范例一：找出系统 /boot 这个挂载点下面的文件系统的超级区块纪录
-[root@study ~]# df -T /boot
-Filesystem Type 1K-blocks Used Available Use% Mounted on
-/dev/vda2 xfs 1038336 133704 904632 13% /boot
-# 没错！可以看得出来是 xfs 文件系统的，来观察一下内容吧
-[root@study ~]# xfs_info /dev/vda2
-1 meta-data=/dev/vda2 isize=256 agcount=4, agsize=65536 blks 
-# isize指的是inode的容量，agcount指的是存储区群组的个数，agsize指的是每个存储区群组具有多少个区块
-2 = sectsz=512 attr=2, projid32bit=1
-# sectsz指的是逻辑扇区的容量
-3 = crc=0 finobt=0
-4 data = bsize=4096 blocks=262144, imaxpct=25
-# bsize指的是区块的容量，blocks指的是共有多少个区块
-5 = sunit=0 swidth=0 blks
-6 naming =version 2 bsize=4096 ascii-ci=0 ftype=0
-7 log =internal bsize=4096 blocks=2560, version=2
-# internal 指的是这个登录区的位置在文件系统内，而不是外部设备的意思
-8 = sectsz=512 sunit=0 blks, lazy-count=1
-9 realtime =none extsz=4096 blocks=0, rtextents=0
-# realtime section里面的extent容量为4K
+[centos.nxb@centos tmp]$ df -T /boot
+Filesystem     Type 1K-blocks   Used Available Use% Mounted on
+/dev/sda2      xfs    1038336 175492    862844  17% /boot
+[centos.nxb@centos tmp]$ xfs_info /boot
+meta-data=/dev/sda2              isize=512    agcount=4, agsize=65536 blks
+         =                       sectsz=512   attr=2, projid32bit=1
+         =                       crc=1        finobt=0 spinodes=0
+data     =                       bsize=4096   blocks=262144, imaxpct=25
+         =                       sunit=0      swidth=0 blks
+naming   =version 2              bsize=4096   ascii-ci=0 ftype=1
+log      =internal               bsize=4096   blocks=2560, version=2
+         =                       sectsz=512   sunit=0 blks, lazy-count=1
+realtime =none                   extsz=4096   blocks=0, rtextents=0
 ```
+
+* 第 1 行里面的 isize 指的是 inode 的容量，每个有 512B 这么大。至于 agcount 则是前面谈到的存储区群组（allocation group）的个数，共有 4 个， agsize 则是指每个存储区群组具有 65536 个区块。
+* 第 2 行里面 sectsz 指的是逻辑扇区（sector）的容量设置为 512B 这么大的意思。
+* 第 4 行里面的 bsize 指的是区块的容量，每个区块为 4K 的意思，共有 262144 个区块在这个文件系统内。
+* 第 5 行里面的 sunit 与 swidth 与磁盘阵列的 stripe 相关性较高，这部分我们下面格式化的时候会举一个例子来说明。
+* 第 7 行里面的 internal 指的是这个登录区的位置在文件系统内，而不是外部设备的意思，且占用了 4K * 2560 个区块，总共约10M 的容量。
+* 第 9 行里面的 realtime 区域，里面的 extent 容量为4K，不过目前没有使用。
 
 ## 7.2 文件系统的简单操作
 
 ### 7.2.1 磁盘与目录的容量
 
-#### df：列出文件系统的整体磁盘使用量以及挂载点
+#### df（disk-free）：列出文件系统的整体磁盘使用量
 
-由于df主要读取的数据几乎都是针对一整个文件系统，因此读取的范围主要是在超级区块内的信息，所以这个命令显示结果的速度非常快。
+由于 df 主要读取的数据几乎都是针对一整个文件系统，因此读取的范围主要是在超级区块内的信息，所以这个命令显示结果的速度非常快。
+
+在 Linux 下面如果 df 没有加任何选项，那么默认会将系统内所有的（不含特殊的内存内的文件系统与 swap） 文件系统都以 1 KBytes 的容量来列出来:
 
 ```shell
 [root@study ~]# df [-ahikHTm] [目录或文件名]
@@ -2492,176 +2558,207 @@ Filesystem Type 1K-blocks Used Available Use% Mounted on
 -a ：列出所有的文件系统，包括系统特有的 /proc 等文件系统；
 -k ：以 KBytes 的容量显示各文件系统；
 -m ：以 MBytes 的容量显示各文件系统；
-'-h ：以人们较易阅读的 GBytes, MBytes, KBytes 等格式自行显示；
+-h ：以人们较易阅读的 GBytes, MBytes, KBytes 等格式自行显示；	⭐
 -H ：以 M=1000K 取代 M=1024K 的进位方式；
 -T ：连同该硬盘分区的文件系统名称 （例如 xfs） 也列出；
-'-i ：不用磁盘容量，而以 inode 的数量来显示
+-i ：不用磁盘容量，而以 inode 的数量来显示						⭐
 
 范例一：将系统内所有文件系统全列出来
-[root@study ~]# df
-Filesystem 1K-blocks Used Available Use% Mounted on
-/dev/mapper/centos-root 10475520 3409408 7066112 33% /
-devtmpfs 627700 0 627700 0% /dev
-tmpfs 637568 80 637488 1% /dev/shm
-tmpfs 637568 24684 612884 4% /run
-tmpfs 637568 0 637568 0% /sys/fs/cgroup
-/dev/mapper/centos-home 5232640 67720 5164920 2% /home
-/dev/vda2 1038336 133704 904632 13% /boot
-# 在 Linux 下面如果 df 没有加任何选项，那么默认会将系统内所有的
-# （不含特殊的内存内的文件系统与 swap） 都以 1 KBytes 的容量来列出来！
-# 至于那个 /dev/shm 是与内存有关的挂载，先不要理他！
+[centos.nxb@centos tmp]$ df
+Filesystem              1K-blocks    Used Available Use% Mounted on
+devtmpfs                   480812       0    480812   0% /dev
+tmpfs                      497836       0    497836   0% /dev/shm
+tmpfs                      497836   14928    482908   3% /run
+tmpfs                      497836       0    497836   0% /sys/fs/cgroup
+/dev/mapper/centos-root  10475520 4540256   5935264  44% /
+/dev/mapper/centos-home   5232640  119700   5112940   3% /home
+/dev/sda2                 1038336  175492    862844  17% /boot
+tmpfs                       99568      32     99536   1% /run/user/1000
 ```
 
-Filesystem：代表该文件系统是哪个硬盘分区，所以列出设备名称
-1k-blocks：说明下面的数字单位是1KB
-Mounted on：磁盘的挂载目录（挂载点）
+所输出的结果信息为：
+
+* Filesystem：代表该文件系统是哪个硬盘分区，所以列出设备名称
+* 1k-blocks：说明下面的数字单位是1KB
+* Mounted on：磁盘的挂载目录（挂载点）
 
 ```shell
 范例二：将容量结果以易读的容量格式显示出来
-[root@study ~]# df -h
-Filesystem Size Used Avail Use% Mounted on
-/dev/mapper/centos-root 10G 3.3G 6.8G 33% /
-devtmpfs 613M 0 613M 0% /dev
-tmpfs 623M 80K 623M 1% /dev/shm
-tmpfs 623M 25M 599M 4% /run
-tmpfs 623M 0 623M 0% /sys/fs/cgroup
-/dev/mapper/centos-home 5.0G 67M 5.0G 2% /home
-/dev/vda2 1014M 131M 884M 13% /boot
+[centos.nxb@centos tmp]$ df -h
+Filesystem               Size  Used Avail Use% Mounted on
+devtmpfs                 470M     0  470M   0% /dev
+tmpfs                    487M     0  487M   0% /dev/shm
+tmpfs                    487M   15M  472M   3% /run
+tmpfs                    487M     0  487M   0% /sys/fs/cgroup
+/dev/mapper/centos-root   10G  4.4G  5.7G  44% /
+/dev/mapper/centos-home  5.0G  117M  4.9G   3% /home
+/dev/sda2               1014M  172M  843M  17% /boot
+tmpfs                     98M   32K   98M   1% /run/user/1000
 # 不同于范例一，这里会以 G/M 等容量格式显示出来，比较容易看
 
-范例三：将系统内的所有特殊文件格式及名称都列出来
-[root@study ~]# df -aT
-Filesystem Type 1K-blocks Used Available Use% Mounted on
-rootfs rootfs 10475520 3409368 7066152 33% /
-proc proc 0 0 0 - /proc
-sysfs sysfs 0 0 0 - /sys
-devtmpfs devtmpfs 627700 0 627700 0% /dev
-securityfs securityfs 0 0 0 - /sys/kernel/security
-tmpfs tmpfs 637568 80 637488 1% /dev/shm
-devpts devpts 0 0 0 - /dev/pts
-tmpfs tmpfs 637568 24684 612884 4% /run
-tmpfs tmpfs 637568 0 637568 0% /sys/fs/cgroup
-.....（中间省略）.....
-/dev/mapper/centos-root xfs 10475520 3409368 7066152 33% /
-selinuxfs selinuxfs 0 0 0 - /sys/fs/selinux
-.....（中间省略）.....
-/dev/mapper/centos-home xfs 5232640 67720 5164920 2% /home
-/dev/vda2 xfs 1038336 133704 904632 13% /boot
-binfmt_misc binfmt_misc 0 0 0 - /proc/sys/fs/binfmt_misc
-# 系统里面其实还有很多特殊的文件系统存在的。那些比较特殊的文件系统几乎
-# 都是在内存当中，例如 /proc 这个挂载点。因此，这些特殊的文件系统
-# 都不会占据磁盘空间
-
-范例四：将 /etc 下面的可用的磁盘容量以易读的容量格式显示
-[root@study ~]# df -h /etc
-Filesystem Size Used Avail Use% Mounted on
-/dev/mapper/centos-root 10G 3.3G 6.8G 33% /
-# 这个范例比较有趣一点，在 df 后面加上目录或者是文件时， df
-# 会自动的分析该目录或文件所在的硬盘分区 ，并将该硬盘分区的容量显示出来，
-# 所以，您就可以知道某个目录下面还有多少容量可以使用了
-
-范例五：将目前各个硬盘分区可用的 inode 数量列出
-[root@study ~]# df -ih
-Filesystem Inodes IUsed IFree IUse% Mounted on
-/dev/mapper/centos-root 10M 108K 9.9M 2% /
-devtmpfs 154K 397 153K 1% /dev
-tmpfs 156K 5 156K 1% /dev/shm
-tmpfs 156K 497 156K 1% /run
-tmpfs 156K 13 156K 1% /sys/fs/cgroup
-# 这个范例则主要列出可用的 inode 剩余量与总容量。分析一下与范例一的关系，
-# 你可以清楚的发现到，通常 inode 的数量剩余都比区块还要多
+范例三：将文件系统名称一并列出来
+[centos.nxb@centos tmp]$ df -T
+Filesystem              Type     1K-blocks    Used Available Use% Mounted on
+devtmpfs                devtmpfs    480812       0    480812   0% /dev
+tmpfs                   tmpfs       497836       0    497836   0% /dev/shm
+tmpfs                   tmpfs       497836   14928    482908   3% /run
+tmpfs                   tmpfs       497836       0    497836   0% /sys/fs/cgroup
+/dev/mapper/centos-root xfs       10475520 4536220   5939300  44% /
+/dev/mapper/centos-home xfs        5232640  119700   5112940   3% /home
+/dev/sda2               xfs        1038336  175492    862844  17% /boot
+tmpfs                   tmpfs        99568      32     99536   1% /run/user/1000
 ```
 
-#### du：查看目录所占磁盘空间
+**<font color='red'>在 df 后面加上目录或者是文件时， df 会自动的分析该目录或文件所在的硬盘分区 ，并将该硬盘分区的容量显示出来，所以，您就可以知道某个目录下面还有多少容量可以使用了：</font>**
+
+```shell
+范例四：将 /etc 下面的可用的磁盘容量以易读的容量格式显示
+[centos.nxb@centos tmp]$ df -h /etc
+Filesystem               Size  Used Avail Use% Mounted on
+/dev/mapper/centos-root   10G  4.4G  5.7G  44% /
+```
+
+-i 选项主要列出可用的 inode 剩余量与总容量。分析一下与范例一的关系，你可以清楚的发现到，通常 inode 的数量剩余都比区块还要多
+
+```shell
+范例五：将目前各个硬盘分区可用的 inode 数量列出
+[centos.nxb@centos tmp]$ df -ih
+Filesystem              Inodes IUsed IFree IUse% Mounted on
+devtmpfs                  118K   406  117K    1% /dev
+tmpfs                     122K     1  122K    1% /dev/shm
+tmpfs                     122K   976  121K    1% /run
+tmpfs                     122K    16  122K    1% /sys/fs/cgroup
+/dev/mapper/centos-root   5.0M  128K  4.9M    3% /
+/dev/mapper/centos-home   2.5M   429  2.5M    1% /home
+/dev/sda2                 512K   340  512K    1% /boot
+tmpfs                     122K    20  122K    1% /run/user/1000
+```
+
+#### du（ disk usage）：查看目录所占磁盘空间
 
 ```shell
 [root@study ~]# du [-ahskm] 文件或目录名称
 选项与参数：
 -a ：列出所有的文件与目录容量，因为默认仅统计目录下面的文件量
 -h ：以人们较易读的容量格式 （G/M） 显示；
-'-s ：仅列出总量，而不列出每个各别的目录占用容量；
+-s ：仅列出总量，而不列出每个各别的目录占用容量；			⭐
 -S ：不包括子目录下的总计，与 -s 有点差别。
 -k ：以 KBytes 列出容量显示；
 -m ：以 MBytes 列出容量显示；
-
-范例一：列出目前目录下的所有文件容量
-[root@study ~]# du
-4 ./.cache/dconf <==每个目录都会列出来
-4 ./.cache/abrt
-8 ./.cache
-....（中间省略）....
-0 ./test4
-4 ./.ssh <==包括隐藏文件的目录
-76 . <==这个目录（.）所占用的总量
-# 直接输入 du 没有加任何选项时，则 du 会分析“目前所在目录”的文件与目录所占用的磁盘空间。
-# 但是，实际显示时，仅会显示目录容量（不含文件），因此 . 目录有很多文件没有被列出来,
-# 所以全部的目录相加不会等于 . 的容量,此外，输出的数值数据为 1K 大小的容量单位。
-
-范例二：同范例一，但是将文件的容量也列出来
-[root@study ~]# du -a
-4 ./.bash_logout <==有文件的列表了
-4 ./.bash_profile
-4 ./.bashrc
-....（中间省略）....
-4 ./.ssh/known_hosts
-4 ./.ssh
-76 .
-
-范例三：检查根目录下面每个目录所占用的容量
-[root@study ~]# du -sm /*
-0 /bin
-99 /boot
-....（中间省略）....
-du: cannot access ‘/proc/17772/task/17772/fd/4’: No such file or directory
-du: cannot access ‘/proc/17772/fdinfo/4’: No such file or directory
-0 /proc <==不会占用硬盘空间
-1 /root
-25 /run
-....（中间省略）....
-3126 /usr <==系统初期最大就是他了啦！
-117 /var
-# 这是个很常被使用的功能，利用通配符 * 来代表每个目录，如果想要检查某个目录下，
-# 哪个子目录占用最大的容量，可以用这个方法找出来。值得注意的是，如果刚刚安装好 Linux 时，
-# 那么整个系统容量最大的应该是 /usr 。而 /proc 虽然有列出容量，但是那个容量是在内存中，
-# 不占磁盘空间。至于 /proc 里头会列出一堆“No such file or directory” 的错误，
-# 别担心！因为是内存内的程序，程序执行结束就会消失，因此会有些目录找不到，是正确的！
 ```
 
-与 df 不一样的是，du 这个命令其实会直接到文件系统内去查找所有的文件数据。另外dh后面接目录，查看的是该目录所在硬盘分区的容量，不是该目录的容量！
+直接输入 du 没有加任何选项时，则 du 会分析 “目前所在目录” 的文件与目录所占用的磁盘空间。但是，实际显示时，**<font color='red'>仅会显示目录容量（不含文件）</font>**，输出的数值数据为 1K 大小的容量单位：
+
+```shell
+范例一：列出目前目录下的所有文件容量
+[root@centos ~]# du
+4	./.cache/dconf
+4	./.cache/abrt
+8	./.cache
+4	./.dbus/session-bus
+4	./.dbus
+0	./.config/abrt
+0	./.config
+72	.
+```
+
+将文件的容量也列出来：
+
+```shell
+范例二：同范例一，但是将文件的容量也列出来
+[root@centos ~]# du -a
+4	./.bash_logout			<==有文件的列表了
+4	./.bash_profile
+4	./.bashrc
+4	./.cshrc
+4	./.tcshrc
+4	./anaconda-ks.cfg
+4	./.cache/dconf/user
+4	./.cache/dconf
+4	./.cache/abrt/lastnotification
+4	./.cache/abrt
+8	./.cache
+4	./.dbus/session-bus/0aa18f4088fa46dba63e92ae3c067ef9-9
+4	./.dbus/session-bus
+4	./.dbus
+4	./initial-setup-ks.cfg
+0	./.config/abrt
+0	./.config
+4	./.bash_history
+20	./q
+4	./.bashrc_test
+4	./.xauthMKQi1z
+72	.
+```
+
+du 最常用的是**<font color='red'>检查某个目录下，哪个子目录占用最大的容量</font>**:
+
+```shell
+范例三：检查根目录下面每个目录所占用的容量
+[root@centos ~]# du -sm /*
+0	/bin
+139	/boot
+0	/dev
+42	/etc
+85	/home
+0	/lib
+0	/lib64
+0	/media
+0	/mnt
+0	/opt
+du: cannot access ‘/proc/47353/task/47353/fd/3’: No such file or directory
+du: cannot access ‘/proc/47353/task/47353/fdinfo/3’: No such file or directory
+du: cannot access ‘/proc/47353/fd/3’: No such file or directory
+du: cannot access ‘/proc/47353/fdinfo/3’: No such file or directory
+0	/proc
+1	/root
+du: cannot access ‘/run/user/1000/gvfs’: Permission denied
+15	/run
+0	/sbin
+512	/srv
+0	/sys
+1	/tmp
+3636	/usr		<== 系统初期最大的就是它了．
+147	/var
+```
+
+> 与 df 不一样的是，du 这个命令其实会直接到文件系统内去查找所有的文件数据。
+>
+> 另外 dh 后面接目录，查看的是该目录所在硬盘分区的容量，不是该目录的容量。
 
 ### 7.2.2 硬链接与符号链接
 
 #### 硬链接（Hard Link）
 
-文件名只与目录有关，文件内容则与inode有关。硬链接只是在某个目录下新增一条文件名链接到某inode号码的关联记录。
+文件名只与目录有关，文件内容则与 inode 有关。硬链接只是在某个目录下新增一条文件名链接到某 inode 号码的关联记录。
+
+举个例子来说，假设我系统有个 /root/crontab 它是 /etc/crontab 的硬链接，也就是说这两个文件名链接到同—个 inode，自然这两个文件名的所有相关信息都会一模一样（除了文件名之外）：
 
 ```shell
 [root@study ~]# ll -i /etc/crontab
 34474855 -rw-r--r--. 1 root root 451 Jun 10 2014 /etc/crontab
-[root@study ~]# ln /etc/crontab . <==创建硬链接的指令
+[root@study ~]# ln /etc/crontab . 				<==创建硬链接的指令
 [root@study ~]# ll -i /etc/crontab crontab
 34474855 -rw-r--r--. 2 root root 451 Jun 10 2014 crontab
 34474855 -rw-r--r--. 2 root root 451 Jun 10 2014 /etc/crontab
 # 注意，第三个字段由1变成了2，表示有多少个文件名链接到这个inode号码
 ```
 
-如果你将任何一个“文件名”删除，其实 inode 与区块都还是存在的。
+硬链接最大的好处就是安全，如果你将任何一个 “文件名 ”删除，其实 inode 与区块都还是存在的。此时你可以通过另一个文件名来读取到正确的文件数据。此外，不论你使用哪个 “文件名” 来编辑， 最终的结果都会写入到相同的 inode 与区块中，因此均能进行数据的修改。
 
-此外，不论你使用哪个“文件名”来编辑， 最终的结果都会写入到相同的 inode 与区块中，因此均能进行数据的修改。
+**<font color='red'>一般来说，使用硬链接设置链接文件时，磁盘的空间与 inode 的数目都不会改变。我们只是在某个目录下的区块多写入一个关联数据而已，既不会增加 inode 也不会消耗区块数量。</font>**
 
-一般来说，使用硬链接设置链接文件时，磁盘的空间与 inode 的数目都不会改变。
-
-硬链接具有以下限制：
+但是硬链接也具有以下限制：
 
 * 不能跨文件系统
 
 * 不能链接目录
 
-  如果使用硬链接链接到目录时， 链接的数据需要连同被链接目录下面的所有数据都建立链接，会造成相当大的环境复杂度。
+  如果使用硬链接链接到目录时， 链接的数据需要连同被链接目录下面的所有数据都建立链接，会造成相当大的环境复杂度。举例来说，如果你要将 /etc 使用硬链接建立一个 /etc_hd 的目录时，那么在 /etc_hd 下面的所有文件名同时都与 /etc 下面的文件名要建立硬链接。
 
 #### 符号链接（Symbolic Link，亦即快捷方式）
 
-符号链接就是建立一个独立的文件，而这个文件会让数据的读取指向它链接的那个文件的文件名。
+符号链接就是建立一个独立的文件，而这个文件会让数据的读取指向它链接的那个文件的文件名。所以，当源文件被删除之后，符号链接的文件会打不开了。
 
 ```shell
 [root@study ~]# ln -s /etc/crontab crontab2
@@ -2670,51 +2767,52 @@ du: cannot access ‘/proc/17772/fdinfo/4’: No such file or directory
 53745909 lrwxrwxrwx. 1 root root 12 Jun 23 22:31 /root/crontab2 -> /etc/crontab
 ```
 
-可以看到两个文件指向不同的inode号码，是两个独立的文件存在。你可以发现上表中链接文件的大小为 12 B。因为箭头（-->）右边的文件名“/etc/crontab”总共有 12 个字母，每个zimu占用 1 个 Bytes ，所以文件大小就是 12Bytes了。
+可以看到两个文件指向不同的 inode 号码，是两个独立的文件存在。你可以发现上表中链接文件的大小为 12B。因为箭头（-->）右边的文件名 “/etc/crontab” 总共有 12 个字母，每个字母占用 1 个 Bytes ，所以文件大小就是 12Bytes了。
 
-符号链接由链接文件读取到文件名，根据文件名链接到正确的目录去取得目标文件的inode，最终就能够读取到正确的数据了。
+符号链接由链接文件读取到文件名，根据文件名链接到正确的目录去取得目标文件的 inode，最终就能够读取到正确的数据了。
 
-#### ln：制作链接文件的命令
+#### ln（link）：制作链接文件的命令
 
 ```shell
 [root@study ~]# ln [-sf] 来源文件 目标文件
 选项与参数：
--s ：如果不加任何参数就进行链接，那就是hard link，至于 -s 就是symbolic link
+-s ：如果不加任何参数就进行链接，那就是 hard link，至于 -s 就是symbolic link
 -f ：如果目标文件存在时，就主动的将目标文件直接删除后再建立
 
 范例一：将 /etc/passwd 复制到 /tmp 下面，并且观察 inode 与 block
-[root@study ~]# cd /tmp
-[root@study tmp]# cp -a /etc/passwd .
-[root@study tmp]# du -sb ; df -i .
-6602 . <==先注意一下这里的容量是多少！
-Filesystem Inodes IUsed IFree IUse% Mounted on
-/dev/mapper/centos-root 10485760 109748 10376012 2% /
+[root@centos ~]# cd /tmp
+[root@centos tmp]# cp -a /etc/passwd .
+[root@centos tmp]# du -sb; df -i .
+6619	.
+Filesystem               Inodes  IUsed   IFree IUse% Mounted on
+/dev/mapper/centos-root 5242880 130336 5112544    3% /
 # 利用 du 与 df 来检查一下目前的参数,那个 du -sb 是计算整个 /tmp 下面有多少 Bytes 容量的命令
 
 范例二：将 /tmp/passwd 制作 hard link 成为 passwd-hd 文件，并观察文件与容量
-[root@study tmp]# ln passwd passwd-hd
-[root@study tmp]# du -sb ; df -i .
-6602 .
-Filesystem Inodes IUsed IFree IUse% Mounted on
-/dev/mapper/centos-root 10485760 109748 10376012 2% /
+[root@centos tmp]# ln passwd passwd-hd
+[root@centos tmp]# du -sb; df -i .
+6619	.
+Filesystem               Inodes  IUsed   IFree IUse% Mounted on
+/dev/mapper/centos-root 5242880 130336 5112544    3% /
 # 仔细看，即使多了一个文件在 /tmp 下面，整个 inode 与 block 的容量并没有改变
-[root@study tmp]# ls -il passwd*
-2668897 -rw-r--r--. 2 root root 2092 Jun 17 00:20 passwd
-2668897 -rw-r--r--. 2 root root 2092 Jun 17 00:20 passwd-hd
+
+[root@centos tmp]# ll -i passwd*
+18413378 -rw-r--r--. 2 root root 2277 Mar 12  2022 passwd
+18413378 -rw-r--r--. 2 root root 2277 Mar 12  2022 passwd-hd
 # 原来是指向同一个 inode ，另外，那个第二栏的链接数也会增加
 
 范例三：将 /tmp/passwd 创建一个符号链接
-[root@study tmp]# ln -s passwd passwd-so
-[root@study tmp]# ls -li passwd*
-2668897 -rw-r--r--. 2 root root 2092 Jun 17 00:20 passwd
-2668897 -rw-r--r--. 2 root root 2092 Jun 17 00:20 passwd-hd
-2668898 lrwxrwxrwx. 1 root root 6 Jun 23 22:40 passwd-so --> passwd
-# passwd-so 指向的 inode number 不同了，这是一个新的文件，这个文件的内容是指向
-# passwd 的。passwd-so 的大小是 6Bytes ，因为 “passwd” 这个单字共有六个字符之故
-[root@study tmp]# du -sb ; df -i .
-6608 .
-Filesystem Inodes IUsed IFree IUse% Mounted on
-/dev/mapper/centos-root 10485760 109749 10376011 2% /
+[root@centos tmp]# ln -s passwd passwd-so
+[root@centos tmp]# ls -il passwd*
+18413378 -rw-r--r--. 2 root root 2277 Mar 12  2022 passwd
+18413378 -rw-r--r--. 2 root root 2277 Mar 12  2022 passwd-hd
+18413376 lrwxrwxrwx. 1 root root    6 Oct 11 11:46 passwd-so -> passwd
+# passwd-so 指向的 inode number 不同了，这是一个新的文件，这个文件的内容是指向 passwd 的。
+# passwd-so 的大小是 6Bytes ，因为 “passwd” 这个单字共有六个字符
+[root@centos tmp]# du -sb .;df -i .
+6625	.
+Filesystem               Inodes  IUsed   IFree IUse% Mounted on
+/dev/mapper/centos-root 5242880 130337 5112543    3% /
 # 整个容量与 inode 使用数都改变了
 
 范例四：删除原始文件 passwd ，其他两个文件是否能够打开？
@@ -2732,267 +2830,419 @@ lrwxrwxrwx. 1 root root 6 Jun 23 22:40 passwd-so --> passwd
 
 #### 目录的链接数量
 
-当我们建立一个新的空的目录后，它里面存在.与..这两个目录，例如我们建立一个新目录名称为 /tmp/testing，将包含以下三个：
+当我们建立一个新的空的目录后，它里面存在 . 与 .. 这两个目录，例如我们建立一个新目录名称为 /tmp/testing，将包含以下三个：
 
 * /tmp/testing
 * /tmp/testing/.
 * /tmp/testing/..
 
-其中前两个都代表该目录，第三个代表上层目录，即/tmp。
+其中前两个都代表该目录，第三个代表上层目录，即 /tmp。
 
-所以，当我们建立一个新的目录时，新的目录链接数为2，而上层目录的链接数则会增加1。
+所以，**<font color='red'>当我们建立一个新的目录时，新的目录链接数为 2，而上层目录的链接数则会增加 1。</font>**
 
 ## 7.3 磁盘的分区、格式化、检验与挂载
 
+当我们想要在系统里面新增—块磁盘时，应该有以下操作需要做：
+
+1. 对磁盘进行**划分**，以建立可用的硬盘分区
+2. 对该硬盘分区进行**格式化**，以建立系统可用的文件系统
+3. 若想要仔细一点，则可对刚刚建立好的文件系统进行**检验**
+4. 在 Linux 系统上，需要建立挂载点（亦即目录），并将它**挂载**上来
+
 ### 7.3.1 观察磁盘分区状态
 
-* **lsblk：列出系统上的所有磁盘列表**
+在进行分区之前，我们自然要去确定—下目前系统都有哪些磁盘，这些磁盘是 MBR 还是GPT 等信息，这样才能处理。
 
-  ```shell
-  [root@study ~]# lsblk [-dfimpt] [device]
-  选项与参数：
-  -d ：仅列出磁盘本身，并不会列出该磁盘的分区数据
-  -f ：同时列出该磁盘内的文件系统名称
-  -i ：使用 ASCII 的字符输出，不要使用复杂的编码 （在某些环境下很有用）
-  -m ：同时输出该设备在 /dev 下面的权限信息 （rwx 的数据）
-  -p ：列出该设备的完整文件名，而不是仅列出最后的名字而已。
-  -t ：列出该磁盘设备的详细数据，包括磁盘阵列机制、预读写的数据量大小等
-  范例一：列出本系统下的所有磁盘与磁盘内的分区信息
-  [root@study ~]# lsblk
-  NAME 	MAJ:MIN 	RM 	SIZE 	RO 	TYPE 	MOUNTPOINT
-  sr0 	11:0 		1 	1024M 	0 	rom
-  vda 	252:0 		0 	40G 	0 	disk 				# 一整颗磁盘
-  |-vda1 	252:1 		0 	2M 		0 	part
-  |-vda2 	252:2 		0 	1G 		0 	part 	/boot
-  `-vda3 	252:3 		0 	30G 	0 	part
-   |-centos-root 253:0 0 	10G 	0 	lvm 	/ 			# 在 vda3 内的其他文件系统
-   |-centos-swap 253:1 0 	1G 		0 	lvm 	[SWAP]
-   `-centos-home 253:2 0 	5G 		0 	lvm 	/home
-  ```
+#### lsblk（list block，block 指块设备）：列出系统上的所有磁盘列表
 
-  可以看到目前的系统主要有sr0和vda设备，vda的设备下面又有三个分区，输出的默认信息有：
+```shell
+[root@study ~]# lsblk [-dfimpt] [device]
+选项与参数：
+-d ：仅列出磁盘本身，并不会列出该磁盘的分区数据
+-f ：同时列出该磁盘内的文件系统名称
+-i ：使用 ASCII 的字符输出，不要使用复杂的编码 （在某些环境下很有用）
+-m ：同时输出该设备在 /dev 下面的权限信息 （rwx 的数据）
+-p ：列出该设备的完整文件名，而不是仅列出最后的名字而已。
+-t ：列出该磁盘设备的详细数据，包括磁盘阵列机制、预读写的数据量大小等
 
-  NAME：就是设备的文件名
+范例一：列出本系统下的所有磁盘与磁盘内的分区信息
+[root@centos tmp]# lsblk
+NAME            MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+sda               8:0    0   40G  0 disk 				# 一整块磁盘
+├─sda1            8:1    0    2M  0 part 
+├─sda2            8:2    0    1G  0 part /boot
+└─sda3            8:3    0   28G  0 part 
+  ├─centos-root 253:0    0   10G  0 lvm  /				# 在 sda3 内的其它文件系统
+  ├─centos-swap 253:1    0    1G  0 lvm  [SWAP]
+  └─centos-home 253:2    0    5G  0 lvm  /home
+sr0              11:0    1 1024M  0 rom  
+```
 
-  MAJ:MIN：其实内核识别的设备都是通过这两个代码来实现的，分别是主要与次要设备代码
+从上面的输出我们可以很清楚地看到，目前的系统主要有个 sr0 以及—个 sda 的设备，而 sda 的设备下面又有三个分区，其中 sda 甚至还有因为 LVM 而产生的文件系统。以下是默认输出的信息：
 
-  RM：是否为可卸载设备 （removable device），如光盘、USB 磁盘等等
+* NAME：就是设备的文件名
 
-  SIZE：当然就是容量
+* MAJ:MIN：其实内核识别的设备都是通过这两个代码来实现的，分别是主要与次要设备代码
 
-  RO：是否为只读设备的意思
+* RM：是否为可卸载设备 （removable device），如光盘、USB 磁盘等等
 
-  TYPE：是磁盘 （disk）、分区 （partition） 还是只读存储器 （rom） 
+* SIZE：当然就是容量
 
-  MOUTPOINT：挂载点
+* RO：是否为只读设备的意思
 
-* **blkid：列出设备的 UUID 等参数**
+* TYPE：是磁盘 （disk）、分区 （partition） 还是只读存储器 （rom） 
 
-  UUID 是全局唯一标识符（universally unique identifier），Linux 会将系统内所有的设备都给予一个独一无二的标识符， 这个标识符就可以拿来作为挂载或者是使用这个设备或文件系统
+* MOUTPOINT：挂载点
 
-  ```shell
-  [root@study ~]# blkid
-  /dev/vda2: UUID="94ac5f77-cb8a-495e-a65b-2ef7442b837c" TYPE="xfs"
-  /dev/vda3: UUID="WStYq1-P93d-oShM-JNe3-KeDl-bBf6-RSmfae" TYPE="LVM2_member"
-  /dev/sda1: UUID="35BC-6D6B" TYPE="vfat"
-  /dev/mapper/centos-root: UUID="299bdc5b-de6d-486a-a0d2-375402aaab27" TYPE="xfs"
-  /dev/mapper/centos-swap: UUID="905dc471-6c10-4108-b376-a802edbd862d" TYPE="swap"
-  /dev/mapper/centos-home: UUID="29979bf1-4a28-48e0-be4a-66329bf727d9" TYPE="xfs"
-  ```
+```c++
+范例二：仅列出 /dev/sda 设备内的所有数据的完整文件名
+[root@centos tmp]# lsblk -ip /dev/sda
+NAME                        MAJ:MIN RM SIZE RO TYPE MOUNTPOINT
+/dev/sda                      8:0    0  40G  0 disk 
+|-/dev/sda1                   8:1    0   2M  0 part 
+|-/dev/sda2                   8:2    0   1G  0 part /boot
+`-/dev/sda3                   8:3    0  28G  0 part 
+  |-/dev/mapper/centos-root 253:0    0  10G  0 lvm  /
+  |-/dev/mapper/centos-swap 253:1    0   1G  0 lvm  [SWAP]
+  `-/dev/mapper/centos-home 253:2    0   5G  0 lvm  /home	# 完整的文件名，由 / 开始写
+```
 
-  如上所示，每一行代表一个文件系统
+#### blkid（block id）：列出设备的 UUID 亦即文件系统的类型
 
-* **parted：列出磁盘的分区表类型与分区信息**
+**<font color='blue'>UUID </font>**是全局唯一标识符（universally unique identifier），Linux 会将系统内所有的设备都给予一个独一无二的标识符， 这个标识符就可以拿来作为挂载或者是使用这个设备或文件系统
 
-  ```shell
-  [root@study ~]# parted device_name print
-  范例一：列出 /dev/vda 磁盘的相关数据
-  [root@study ~]# parted /dev/vda print
-  Model: Virtio Block Device （virtblk） # 磁盘的模块名称（厂商）
-  Disk /dev/vda: 42.9GB # 磁盘的总容量
-  Sector size （logical/physical）: 512B/512B # 磁盘的每个逻辑/物理扇区容量
-  Partition Table: gpt # 分区表的格式 （MBR/GPT）
-  Disk Flags: pmbr_boot
-  Number Start End Size File system Name Flags # 下面才是分区数据
-  1 1049kB 3146kB 2097kB bios_grub
-  2 3146kB 1077MB 1074MB xfs
-  3 1077MB 33.3GB 32.2GB lvm
-  ```
+```shell
+[root@centos tmp]# blkid
+/dev/sda1: PARTUUID="5fcecf7d-57b0-477d-b248-244ff1c298c9" 
+/dev/sda2: UUID="222a6355-76d2-4d0e-a2b4-5321da8276c5" TYPE="xfs" PARTUUID="17a97970-f824-48db-a37f-7abcbe24ee4f" 
+/dev/sda3: UUID="1N5HvR-0pyJ-a3hs-ffyW-DodL-ZvUD-VxQYgN" TYPE="LVM2_member" PARTUUID="e1c756ed-2af6-46f0-a2cc-b1cc08059bfc" 
+/dev/mapper/centos-root: UUID="3796e52d-c74f-432e-8fc6-6306c8ee7992" TYPE="xfs" 
+/dev/mapper/centos-swap: UUID="bccccc87-f302-4d78-8ba1-2fe38ea84f7e" TYPE="swap" 
+/dev/mapper/centos-home: UUID="64ff27cb-d107-4a95-8c56-a93b7b7a7317" TYPE="xfs" 
+```
 
-### 7.3.2 磁盘分区： gdisk/fdisk
+如上所示，每一行代表—个文件系统，主要列出设备名称、UUID 名称以及文件系统的类型。
 
-MBR分区表使用fdisk分区，GPT分区表使用gdisk分区。
+#### parted：列出磁盘的分区表类型与分区信息
+
+```shell
+[root@study ~]# parted device_name print
+
+范例一：列出 /dev/sda 磁盘的相关数据
+[root@centos tmp]# parted /dev/sda print
+Model: VMware, VMware Virtual S (scsi)			
+Disk /dev/sda: 42.9GB							# 磁盘的总容量
+Sector size (logical/physical): 512B/512B		# 磁盘的每个逻辑/物理扇区容量
+Partition Table: gpt							# 分区表的格式（MBR/GPT)
+Disk Flags: pmbr_boot
+
+Number  Start   End     Size    File system  Name  Flags		# 下面是分区数据
+ 1      1049kB  3146kB  2097kB                     bios_grub
+ 2      3146kB  1077MB  1074MB  xfs
+ 3      1077MB  31.1GB  30.0GB                     lvm
+```
+
+### 7.3.2 磁盘分区： gdisk / fdisk
+
+接下来我们进行磁盘分区。要注意的是： MBR 分区表请使用 fdisk 分区， GPT 分区表请使用 gdisk 分区。从上面 parted 的输出结果，我们知道这个磁盘使用的是 GPT 分区表，因此可用通过 gdisk 来进行分区。
 
 #### **gdisk**
 
 ```shell
 [root@study ~]# gdisk 设备名称
-范例：由前一小节的 lsblk 输出，我们知道系统有个 /dev/vda，请观察该磁盘的分区与相关数据
-[root@study ~]# gdisk /dev/vda <==仔细看，不要加上数字
-GPT fdisk （gdisk） version 0.8.6
+范例：由前一小节的 lsblk 输出，我们知道系统有个 /dev/sda，请观察该磁盘的分区与相关数据
+
+[root@centos tmp]# gdisk /dev/sda
+GPT fdisk (gdisk) version 0.8.10
+
 Partition table scan:
-MBR: protective
-BSD: not present
-APM: not present
-GPT: present
-Found valid GPT with protective MBR; using GPT. <==找到了 GPT 的分区表
-Command （? for help）: <==这里可以让你输入指令动作，可以按问号 （?） 来查看可用命令
-Command （? for help）: ?
-b 	back up GPT data to a file
-c 	change a partition's name
-'d 	delete a partition # 删除一个分区
-i show detailed information on a partition
-l list known partition types
-'n add a new partition # 增加一个分区
-o create a new empty GUID partition table （GPT）
-'p print the partition table # 打印出分区表 （常用）
-'q quit without saving changes # 不保存分区就直接离开 gdisk
-r recovery and transformation options （experts only）
-s sort partitions
-t change a partition's type code
-v verify disk
-'w write table to disk and exit # 保存分区操作后离开 gdisk
-x extra functionality （experts only）
-? print this menu
-Command （? for help）:
+  MBR: protective
+  BSD: not present
+  APM: not present
+  GPT: present
+
+Found valid GPT with protective MBR; using GPT.					<== 找到了GPT 的分区表
+
+Command (? for help): ?											<== 这里可以让你输入命令操作，可以按问号（？）来查看可用命令
+b	back up GPT data to a file
+c	change a partition's name
+d	delete a partition											⭐ # 删除一个分区
+i	show detailed information on a partition
+l	list known partition types
+n	add a new partition											⭐ # 增加一个分区
+o	create a new empty GUID partition table (GPT)
+p	print the partition table									⭐ # 打印出分区表
+q	quit without saving changes									⭐ # 不保存分区就直接离开gdisk
+r	recovery and transformation options (experts only)
+s	sort partitions
+t	change a partition's type code
+v	verify disk
+w	write table to disk and exit								⭐ # 保存分区操作后离开gdisk
+x	extra functionality (experts only)
+?	print this menu
+
+Command (? for help): 
+
 ```
 
-* **用gdisk查看分区表信息**
+**<font color='red'>你应该要先通过【lsblk】或【blkid】先找到磁盘，再用 【parted/dev/xxx print】来找出内部的分区表类型，之后才用【gdisk】或【fdisk】来操作系统。</font>**
 
-  ```shell
-  Command （? for help）: p <== 这里可以输出目前磁盘的状态
-  Disk /dev/vda: 83886080 sectors, 40.0 GiB # 磁盘文件名/扇区数与总容量
-  Logical sector size: 512 Bytes # 单一扇区大小为 512 Bytes
-  Disk identifier （GUID）: A4C3C813-62AF-4BFE-BAC9-112EBD87A483 # 磁盘的 GPT 标识码
-  Partition table holds up to 128 entries
-  First usable sector is 34, last usable sector is 83886046
-  Partitions will be aligned on 2048-sector boundaries
-  Total free space is 18862013 sectors （9.0 GiB）
-  Number Start （sector） End （sector） Size Code Name # 下面为完整的分区信息了！
-  1 		2048			 6143 		2.0 MiB EF02 	# 第一个分区数据
-  2 		6144 			2103295 	1024.0 MiB 0700
-  3 		2103296 		65026047 	30.0 GiB 8E00
-  # 分区编号 开始扇区号码 结束扇区号码 容量大小
-  Command （? for help）: q
-  # 想要不储存离开吗？按下 q 就对了,不要随便按 w 
-  ```
+不管你进行了什么操作，只要离开 gdisk 时按下【q】，那么所有的操作都不会生效，相反，按下【w】就是写入、操作生效的意思。
 
-  分区的设计中，新分区通常选用上一个分区的结束扇区号码数加1作为起始扇区号码。
+接下来我们利用 gdisk 查看分区表信息：
 
-  请注意，使用的设备文件名请不要加上数字，因为磁盘分区针对整个磁盘设备而不是某个分区。
+```shell
+Command （? for help）: p 
+Disk /dev/vda: 83886080 sectors, 40.0 GiB # 磁盘文件名/扇区数与总容量
+Logical sector size: 512 Bytes # 单一扇区大小为 512 Bytes
+Disk identifier （GUID）: A4C3C813-62AF-4BFE-BAC9-112EBD87A483 # 磁盘的 GPT 标识码
+Partition table holds up to 128 entries
+First usable sector is 34, last usable sector is 83886046
+Partitions will be aligned on 2048-sector boundaries
+Total free space is 18862013 sectors （9.0 GiB）
+Number Start （sector） End （sector） Size Code Name # 下面为完整的分区信息了！
+1 		2048			 6143 		2.0 MiB EF02 	# 第一个分区数据
+2 		6144 			2103295 	1024.0 MiB 0700
+3 		2103296 		65026047 	30.0 GiB 8E00
+# 分区编号 开始扇区号码 结束扇区号码 容量大小
+Command （? for help）: q
+# 想要不储存离开吗？按下 q 就对了,不要随便按 w 
 
-* **用gdisk新增分区**
 
-  假设我们现在要新增以下分区：
+Command (? for help): p											<== 这里可以输出目前磁盘的状态
+Disk /dev/sda: 83886080 sectors, 40.0 GiB						# 磁盘文件名、扇区数、总容量
+Logical sector size: 512 bytes									# 单一扇区大小为 512 Bytes
+Disk identifier (GUID): 5C427BD7-5D88-4633-A994-0782F6DCED14	# 磁盘的 GPT 标识码
+Partition table holds up to 128 entries
+First usable sector is 34, last usable sector is 83886046
+Partitions will be aligned on 2048-sector boundaries
+Total free space is 23179197 sectors (11.1 GiB)
 
-  1GB 的 xfs 文件系统 （Linux）
+Number  Start (sector)    End (sector)  Size       Code  Name	# 下面为完整的分区信息
+   1            2048            6143   2.0 MiB     EF02  
+   2            6144         2103295   1024.0 MiB  0700  
+   3         2103296        60708863   27.9 GiB    8E00  
 
-  1GB 的 vfat 文件系统 （Windows）
+Command (? for help): 
+```
 
-  0.5GB 的 swap （Linux swap）
+使用【p】可以列出目前这块磁盘的分区表信息，这个信息的上半部分在显示整体磁盘的状态。下半部分的分区表信息主要在列出每个分区的信息，每个项目的意义为：
 
-  ```shell
-  [root@study ~]# gdisk /dev/vda
-  Command （? for help）: p
-  Number Start （sector） End （sector） Size Code Name
-  1 2048 6143 2.0 MiB EF02
-  2 6144 2103295 1024.0 MiB 0700
-  3 2103296 65026047 30.0 GiB 8E00
-  # 找出最后一个 sector 的号码是很重要的
-  Command （? for help）: n # 开始新增的操作
-  Partition number （4-128, default 4）: 4 # 默认就是 4 号，所以也能 enter 即可
-  First sector （34-83886046, default = 65026048） or {+-}size{KMGTP}: 65026048 # 也能 enter
-  Last sector （65026048-83886046, default = 83886046） or {+-}size{KMGTP}: +1G # 决不要 enter
-  # 这个地方可有趣了，我们不需要自己去计算扇区号码，通过 +容量 的这个方式，
-  # 就可以让 gdisk 主动去帮你算出最接近你需要的容量的扇区号码
-  Current type is 'Linux filesystem'
-  Hex code or GUID （L to show codes, Enter = 8300）: # 使用默认值即可，直接 enter 下去
-  # 这里在让你选择未来这个分区预计使用的文件系统，默认都是 Linux 文件系统的 8300 
-  Command （? for help）: p
-  Number Start （sector） End （sector） Size Code Name
-  1 2048 6143 2.0 MiB EF02
-  2 6144 2103295 1024.0 MiB 0700
-  3 2103296 65026047 30.0 GiB 8E00
-  4 65026048 67123199 1024.0 MiB 8300 Linux filesystem
-  ```
+* Number：分区编号，1 号指的是 /dev/sda1 这样计算；
+* Start (sector ) ：每—个分区的开始扇区号码位置；
+* End (sector) ：每—个分区的结束扇区号码位置；
+* Size: 分区的容量；
+* Code：在分区内的可能的文件系统类型，Linux 为 8300, swap 为 8200, 不过这个项目只是—个提示而已，不见得真的代表此分区内的文件系统；
+* Name: 文件系统的名称等；
 
-  重点在【last sector】那一行，绝对不要使用默认值，因为默认值会将所有的容量用光，会选择最大的扇区号码。
+**<font color='red'>由此我们可用知道整个磁盘还可以进行额外的划分，因为最大扇区为 83886080,，但只使用到 60708863 号而已；分区的设计中，新分区通常选用上—个分区的结束扇区号码数加 1 作为起始扇区号码。</font>**
 
-  另外在设置文件系统处，若忘了文件系统的ID，可以在gdisk中按下【L】来显示。
+#### 用gdisk新增分区
 
-  继续新增剩余的两个分区，最后直接写入磁盘分区表：
+假设我们现在要新增以下分区：
 
-  ```shell
-  Command （? for help）: w
-  Final checks complete. About to write GPT data. THIS WILL OVERWRITE EXISTING
-  PARTITIONS!!
-  Do you want to proceed? （Y/N）: y
-  OK; writing new GUID partition table （GPT） to /dev/vda.
-  Warning: The kernel is still using the old partition table.
-  The new table will be used at the next reboot.
-  The operation has completed successfully.
-  # gdisk 会先警告你可能的问题，我们确定分区是对的，这时才按下 y ,不过怎么还有警告？
-  # 这是因为这颗磁盘目前正在使用当中，因此系统无法立即载入新的分区表
-  [root@study ~]# cat /proc/partitions
-  major minor #blocks name
-  252 0 41943040 vda
-  252 1 2048 vda1
-  252 2 1048576 vda2
-  252 3 31461376 vda3
-  253 0 10485760 dm-0
-  253 1 1048576 dm-1
-  253 2 5242880 dm-2
-  # 你可以发现，并没有 vda4, vda5, vda6 ，因为内核还没有更新。可以重新启动或者执行partprobe这个命令
-  ```
+* 1GB 的 xfs 文件系统 （Linux）
+* 1GB 的 vfat 文件系统 （Windows）
+* 0.5GB 的 swap （Linux swap）
 
-* **partprobe 更新 Linux 内核的分区表信息**
+```shell
+Command (? for help): p
+Disk /dev/sda: 83886080 sectors, 40.0 GiB
+Logical sector size: 512 bytes
+Disk identifier (GUID): 5C427BD7-5D88-4633-A994-0782F6DCED14
+Partition table holds up to 128 entries
+First usable sector is 34, last usable sector is 83886046
+Partitions will be aligned on 2048-sector boundaries
+Total free space is 23179197 sectors (11.1 GiB)
 
-  ```shell
-  [root@study ~]# partprobe [-s] # 你可以不要加 -s 那么屏幕不会出现信息。
-  [root@study ~]# partprobe -s # 不过还是建议加上 -s 比较清晰。
-  /dev/vda: gpt partitions 1 2 3 4 5 6
-  [root@study ~]# cat /proc/partitions # 内核的分区纪录
-  major minor #blocks name
-  252 0 41943040 vda
-  252 1 2048 vda1
-  252 2 1048576 vda2
-  252 3 31461376 vda3
-  252 4 1048576 vda4
-  252 5 1048576 vda5
-  252 6 512000 vda6
-  # 现在核心也正确的抓到了分区参数了！
-  ```
+Number  Start (sector)    End (sector)  Size       Code  Name
+   1            2048            6143   2.0 MiB     EF02  
+   2            6144         2103295   1024.0 MiB  0700  
+   3         2103296        60708863   27.9 GiB    8E00  						# 找出最后一个 sector 的号码是很重要的
 
-* **用 gdisk 删除一个分区**
+Command (? for help): n															# 开始新增的操作
+Partition number (4-128, default 4): 4											# 默认就是 4 号，所以也能 enter 即可
+First sector (34-83886046, default = 60708864) or {+-}size{KMGTP}: 				# 直接 enter 即可，默认使用上一个分区结束扇区的下一个扇区
+Last sector (60708864-83886046, default = 83886046) or {+-}size{KMGTP}: +1G		# 决不要 enter
+																				# 我们不需要自己去计算扇区号码，通过 +容量 的这个方式，
+																				# 就可以让 gdisk 主动去帮你算出扇区号码 
+Current type is 'Linux filesystem'
+Hex code or GUID (L to show codes, Enter = 8300): 								# 使用默认值即可，直接 enter 下去
+																				# 这里在让你选择未来这个分区预计使用的文件系统,
+																				# 默认都是 Linux 文件系统的 8300 
+Command (? for help): p
+Disk /dev/sda: 83886080 sectors, 40.0 GiB
+Logical sector size: 512 bytes
+Disk identifier (GUID): 5C427BD7-5D88-4633-A994-0782F6DCED14
+Partition table holds up to 128 entries
+First usable sector is 34, last usable sector is 83886046
+Partitions will be aligned on 2048-sector boundaries
+Total free space is 21082045 sectors (10.1 GiB)
 
-  ```shell
-  [root@study ~]# gdisk /dev/vda
-  Command （? for help）: p
-  Number Start （sector） End （sector） Size Code Name
-  1 2048 6143 2.0 MiB EF02
-  2 6144 2103295 1024.0 MiB 0700
-  3 2103296 65026047 30.0 GiB 8E00
-  4 65026048 67123199 1024.0 MiB 8300 Linux filesystem
-  5 67123200 69220351 1024.0 MiB 0700 Microsoft basic data
-  6 69220352 70244351 500.0 MiB 8200 Linux swap
-  Command （? for help）: d
-  Partition number （1-6）: 6
-  Command （? for help）: p
-  # 你会发现 /dev/vda6 不见了,非常棒,没问题就写入吧！
-  Command （? for help）: w
-  # 同样会有一堆讯息, 自己选择 y 来处理吧！
-  [root@study ~]# lsblk
-  # 你会发现,怪了,怎么还是有 /dev/vda6 呢？没办法,还没有更新核心的分区表,所以当然有错。
-  [root@study ~]# partprobe -s
-  [root@study ~]# lsblk
-  # 这个时候，那个 /dev/vda6 才真的消失不见了
-  ```
+Number  Start (sector)    End (sector)  Size       Code  Name
+   1            2048            6143   2.0 MiB     EF02  
+   2            6144         2103295   1024.0 MiB  0700  
+   3         2103296        60708863   27.9 GiB    8E00  
+   4        60708864        62806015   1024.0 MiB  8300  Linux filesystem
+
+Command (? for help): 
+```
+
+重点在【last sector】那一行，绝对不要使用默认值，因为默认值会将所有的容量用光，会选择最大的扇区号码。因为我们仅要 1GB 而已，所以你得要加上 +1G 或者 +500M 这样即可。不需要计算扇区的数量，gdisk 会根据你填写的数值，直接计算最接近该容量的扇区数。
+
+继续新增剩余的两个分区，最后直接写入磁盘分区表：
+
+```shell
+Command (? for help): w
+
+Final checks complete. About to write GPT data. THIS WILL OVERWRITE EXISTING
+PARTITIONS!!
+
+Do you want to proceed? (Y/N): y
+OK; writing new GUID partition table (GPT) to /dev/sda.
+Warning: The kernel is still using the old partition table.
+The new table will be used at the next reboot.
+The operation has completed successfully.
+# gdisk 会先警告你可能的问题，我们确定分区是对的，这时才按下 y ,不过怎么还有警告？
+# 这是因为这颗磁盘目前正在使用当中，因此系统无法立即载入新的分区表
+
+[root@centos tmp]# cat /proc/partitions 
+major minor  #blocks  name
+
+   8        0   41943040 sda
+   8        1       2048 sda1
+   8        2    1048576 sda2
+   8        3   29302784 sda3
+  11        0    1048575 sr0
+ 253        0   10485760 dm-0
+ 253        1    1048576 dm-1
+ 253        2    5242880 dm-2
+# 你可以发现，并没有 sda4, sda5, sda6 ，因为内核还没有更新。可以重新启动或者执行partprobe这个命令
+```
+
+#### partprobe 更新 Linux 内核的分区表信息
+
+```shell
+[root@centos tmp]# partprobe [-s] 		# 你可以不要加 -s 那么屏幕不会出现信息。	
+[root@centos tmp]# partprobe -s			# 不过还是建议加上 -s 比较清晰。
+/dev/sda: gpt partitions 1 2 3 4 5 6
+
+[root@centos tmp]# cat /proc/partitions # 内核的分区记录。
+major minor  #blocks  name
+
+   8        0   41943040 sda
+   8        1       2048 sda1
+   8        2    1048576 sda2
+   8        3   29302784 sda3
+   8        4    1048576 sda4
+   8        5    1048576 sda5
+   8        6     512000 sda6
+  11        0    1048575 sr0
+ 253        0   10485760 dm-0
+ 253        1    1048576 dm-1
+ 253        2    5242880 dm-2
+ 
+[root@centos tmp]# lsblk /dev/sda		# 实际的磁盘分区状态
+NAME            MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+sda               8:0    0   40G  0 disk 
+├─sda1            8:1    0    2M  0 part 
+├─sda2            8:2    0    1G  0 part /boot
+├─sda3            8:3    0   28G  0 part 
+│ ├─centos-root 253:0    0   10G  0 lvm  /
+│ ├─centos-swap 253:1    0    1G  0 lvm  [SWAP]
+│ └─centos-home 253:2    0    5G  0 lvm  /home
+├─sda4            8:4    0    1G  0 part 
+├─sda5            8:5    0    1G  0 part 
+└─sda6            8:6    0  500M  0 part 
+[root@centos tmp]# 
+
+```
+
+#### 用 gdisk 删除一个分区
+
+```shell
+# 进入 gdisk
+[root@centos tmp]# gdisk /dev/sda
+GPT fdisk (gdisk) version 0.8.10
+
+Partition table scan:
+  MBR: protective
+  BSD: not present
+  APM: not present
+  GPT: present
+
+Found valid GPT with protective MBR; using GPT.
+
+Command (? for help): p
+Disk /dev/sda: 83886080 sectors, 40.0 GiB
+Logical sector size: 512 bytes
+Disk identifier (GUID): 5C427BD7-5D88-4633-A994-0782F6DCED14
+Partition table holds up to 128 entries
+First usable sector is 34, last usable sector is 83886046
+Partitions will be aligned on 2048-sector boundaries
+Total free space is 17960893 sectors (8.6 GiB)
+
+Number  Start (sector)    End (sector)  Size       Code  Name
+   1            2048            6143   2.0 MiB     EF02  
+   2            6144         2103295   1024.0 MiB  0700  
+   3         2103296        60708863   27.9 GiB    8E00  
+   4        60708864        62806015   1024.0 MiB  8300  Linux filesystem
+   5        62806016        64903167   1024.0 MiB  8300  Linux filesystem
+   6        64903168        65927167   500.0 MiB   8300  Linux filesystem
+
+Command (? for help): d
+Partition number (1-6): 6
+
+Command (? for help): w
+
+Final checks complete. About to write GPT data. THIS WILL OVERWRITE EXISTING
+PARTITIONS!!
+
+Do you want to proceed? (Y/N): y
+OK; writing new GUID partition table (GPT) to /dev/sda.
+Warning: The kernel is still using the old partition table.
+The new table will be used at the next reboot.
+The operation has completed successfully.
+
+# 你会发现，还是有 /dev/sda6，没办法，还没有更新内核的分区表
+[root@centos tmp]# lsblk /dev/sda
+NAME            MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+sda               8:0    0   40G  0 disk 
+├─sda1            8:1    0    2M  0 part 
+├─sda2            8:2    0    1G  0 part /boot
+├─sda3            8:3    0   28G  0 part 
+│ ├─centos-root 253:0    0   10G  0 lvm  /
+│ ├─centos-swap 253:1    0    1G  0 lvm  [SWAP]
+│ └─centos-home 253:2    0    5G  0 lvm  /home
+├─sda4            8:4    0    1G  0 part 
+├─sda5            8:5    0    1G  0 part 
+└─sda6            8:6    0  500M  0 part 
+
+# 这个时候，那个 /dev/vda6 才真的消失不见了
+[root@centos tmp]# partprobe -s
+/dev/sda: gpt partitions 1 2 3 4 5
+[root@centos tmp]# lsblk /dev/sda
+NAME            MAJ:MIN RM SIZE RO TYPE MOUNTPOINT
+sda               8:0    0  40G  0 disk 
+├─sda1            8:1    0   2M  0 part 
+├─sda2            8:2    0   1G  0 part /boot
+├─sda3            8:3    0  28G  0 part 
+│ ├─centos-root 253:0    0  10G  0 lvm  /
+│ ├─centos-swap 253:1    0   1G  0 lvm  [SWAP]
+│ └─centos-home 253:2    0   5G  0 lvm  /home
+├─sda4            8:4    0   1G  0 part 
+└─sda5            8:5    0   1G  0 part 
+```
 
 #### fdisk
 
-fdisk用来处理MBR分区表，fdisk有时会用柱面作为分区的最小单位，与gdisk默认使用扇区不太一样，此外用法与gdisk几乎一样。
+fdisk 用来处理 MBR 分区表，fdisk 有时会用柱面作为分区的最小单位，与 gdisk 默认使用扇区不太一样，此外用法与gdisk几乎一样。
 
 ### 7.3.3 磁盘格式化（创建文件系统）
+
+分区完毕后自然就是要进行文件系统的格式化。格式化的命令非常简单，那就是【make filesystem, mkfs】这个命令。
+
+这个命令其实是个综合命令，它会去调用正确的文件系统格式化工具软件。因为 CentOS 7 使用 xfs 作为默认文件系统，下面我们会先介绍 mkfs.xfs，之后介绍新一代的 ext 系列成员 mkfs.ext4，最后再聊—聊 mkfs 这个综合命令。
 
 #### XFS 文件系统 mkfs.xfs
 
@@ -3000,12 +3250,12 @@ fdisk用来处理MBR分区表，fdisk有时会用柱面作为分区的最小单�
 [root@study ~]# mkfs.xfs [-b bsize] [-d parms] [-i parms] [-l parms] [-L label] [-f] [-r parms] 设备名称
 选项与参数：
 关于单位：下面只要谈到“数值”时，没有加单位则为 Bytes 值，可以用 k,m,g,t,p （小写）等来解释
-比较特殊的是 s 这个单位，它指的是 sector 的“个数”
--b ：后面接的是 block 容量，可由 512 到 64k，不过最大容量限制为 Linux 的 4k
+		比较特殊的是 s 这个单位，它指的是 sector 的“个数”
+-b ：后面接的是区块容量，可由 512 到 64k，不过最大容量限制为 Linux 的 4k
 -d ：后面接的是重要的 data section 的相关参数值，主要的值有：
-	agcount=数值 ：设置需要几个储存群组的意思（AG），通常与 CPU 有关
+	agcount=数值 ：设置需要几个存储群组的意思（AG），通常与 CPU 有关
 	agsize=数值 ：每个 AG 设置为多少容量的意思，通常 agcount/agsize 只选一个设置即可
-	file ：指的是“格式化的设备是个文件而不是个设备”的意思！（例如虚拟磁盘）
+	file ：指的是 “格式化的设备是个文件而不是个设备 ”的意思！（例如虚拟磁盘）
 	size=数值 ：data section 的容量，亦即你可以不将全部的设备容量用完的意思
 	su=数值 ：当有 RAID 时，那个 stripe 数值的意思，与下面的 sw 搭配使用
 	sw=数值 ：当有 RAID 时，用于保存数据的磁盘数量（须扣除备份盘与备用盘）
@@ -3023,23 +3273,24 @@ fdisk用来处理MBR分区表，fdisk有时会用柱面作为分区的最小单�
 				最好设置与 swidth 的数值相同较佳，最小为 4K 最大为 1G 。
 				
 范例：将前一小节分区出来的 /dev/vda4 格式化为 xfs 文件系统
-[root@study ~]# mkfs.xfs /dev/vda4
-meta-data=/dev/vda4 isize=256 agcount=4, agsize=65536 blks
-= sectsz=512 attr=2, projid32bit=1
-= crc=0 finobt=0
-data = bsize=4096 blocks=262144, imaxpct=25
-= sunit=0 swidth=0 blks
-naming =version 2 bsize=4096 ascii-ci=0 ftype=0
-log =internal log bsize=4096 blocks=2560, version=2
-= sectsz=512 sunit=0 blks, lazy-count=1
-realtime =none extsz=4096 blocks=0, rtextents=0
-# 很快格是化完毕，都用默认值，较重要的是 inode 与 block 的数值
-[root@study ~]# blkid /dev/vda4
-/dev/vda4: UUID="39293f4f-627b-4dfd-a015-08340537709c" TYPE="xfs"
+[root@centos tmp]# mkfs.xfs /dev/sda4
+meta-data=/dev/sda4              isize=512    agcount=4, agsize=65536 blks
+         =                       sectsz=512   attr=2, projid32bit=1
+         =                       crc=1        finobt=0, sparse=0
+data     =                       bsize=4096   blocks=262144, imaxpct=25
+         =                       sunit=0      swidth=0 blks
+naming   =version 2              bsize=4096   ascii-ci=0 ftype=1
+log      =internal log           bsize=4096   blocks=2560, version=2
+         =                       sectsz=512   sunit=0 blks, lazy-count=1
+realtime =none                   extsz=4096   blocks=0, rtextents=0
+# 很快格式化完毕，都用默认值，较重要的是 inode 与 block 的数值
+[root@centos tmp]# blkid /dev/sda4
+/dev/sda4: UUID="36109173-175f-470f-860d-c839230d012b" TYPE="xfs" PARTLABEL="Linux filesystem" PARTUUID="581701c3-d7dc-49c2-a300-891df123ea1b" 
 # 确定创建好 xfs 文件系统了。
 ```
 
-因为xfs可以使用多个数据流来读写系统，以增加速度，因此agcount可以跟CPU的内核数来搭配，比如你的系统有8个CPU，agcount就可以设置为8.
+因为 xfs 可以使用多个数据流来读写系统，以增加速度，因此那个 agcount 可以跟 CPU 的内核数来做搭配。举例来说，如果我的服务器仅有 4 个物理内核，但
+是使用 Intel 超线程技术，则系统会模拟出 8 个CPU 时，那个 agcount 就可以设置为 8：
 
 ```shell
 范例：找出你系统的 CPU 数，并据以设置你的 agcount 数值
@@ -3058,6 +3309,8 @@ meta-data=/dev/vda4 isize=256 agcount=2, agsize=131072 blks
 
 #### ext4 文件系统 mkfs.ext4
 
+如果想要格式化为 ext4 的传统 Linux 文件系统的话，可以使用 mkfs.ext4 这个命令：
+
 ```shell
 [root@study ~]# mkfs.ext4 [-b size] [-L label] 设备名称
 选项与参数：
@@ -3065,43 +3318,34 @@ meta-data=/dev/vda4 isize=256 agcount=2, agsize=131072 blks
 -L ：后面接这个设备的标头名称。
 
 范例：将 /dev/vda5 格式化为 ext4 文件系统
-[root@study ~]# mkfs.ext4 /dev/vda5
-mke2fs 1.42.9 （28-Dec-2013）
-Filesystem label= # 显示 Label name
+[root@centos tmp]# mkfs.ext4 /dev/sda5
+mke2fs 1.42.9 (28-Dec-2013)
+Filesystem label=
 OS type: Linux
-Block size=4096 （log=2） # 每一个 block 的大小
-Fragment size=4096 （log=2）
-Stride=0 blocks, Stripe width=0 blocks # 跟 RAID 相关性较高
-65536 inodes, 262144 blocks # 总计 inode/block 的数量
-13107 blocks （5.00%） reserved for the super user
+Block size=4096 (log=2)								# 每一个 block 的大小
+Fragment size=4096 (log=2)
+Stride=0 blocks, Stripe width=0 blocks				# 跟 RAID 相关性较高
+65536 inodes, 262144 blocks							# 总计 inode/block 的数量
+13107 blocks (5.00%) reserved for the super user
 First data block=0
 Maximum filesystem blocks=268435456
-8 block groups # 共有 8 个 block groups
+8 block groups										# 共有 8 个 block groups
 32768 blocks per group, 32768 fragments per group
 8192 inodes per group
-Superblock backups stored on blocks:
-32768, 98304, 163840, 229376
-Allocating group tables: done
-Writing inode tables: done
-Creating journal （8192 blocks）: done
+Superblock backups stored on blocks: 
+	32768, 98304, 163840, 229376
+
+Allocating group tables: done                            
+Writing inode tables: done                            
+Creating journal (8192 blocks): done
 Writing superblocks and filesystem accounting information: done
-[root@study ~]# dumpe2fs -h /dev/vda5
-dumpe2fs 1.42.9 （28-Dec-2013）
-Filesystem volume name: <none>;
-Last mounted on: <not available>;
-Filesystem UUID: 3fd5cc6f-a47d-46c0-98c0-d43b072e0e12
-....（中间省略）....
-Inode count: 65536
-Block count: 262144
-Block size: 4096
-Blocks per group: 32768
-Inode size: 256
-Journal size: 32M
 ```
 
 ### 7.3.4 文件系统校验
 
-文件系统运行时会有磁盘与内存数据异步的状况发生，因此莫名其妙的宕机可能导致文件系统的错乱。使用以下命令可以检验文件系统
+由于系统在运行时谁也说不准啥时硬件或是电源会有问题，所以宕机可能是难免的情况，我们知道文件系统运行时会有磁盘与内存数据异步的状况发生，因此莫名其妙的宕机非常可能导致文件系统的错乱。
+
+如果文件系统真的发生错乱的话，不同的文件系统恢复的命令不太—样，我们主要针对 xfs 及 ext4 这两个主流文件系统来说明。
 
 #### xfs_repair 处理 XFS 文件系统
 
@@ -3111,27 +3355,44 @@ Journal size: 32M
 -f ：后面的设备其实是个文件而不是实体设备
 -n ：单纯检查并不修改文件系统的任何数据 （检查而已）
 -d ：通常用在单人维护模式下面，针对根目录 （/） 进行检查与修复的动作,很危险,不要随便使用
-范例：检查一下刚刚创建的 /dev/vda4 文件系统
-[root@study ~]# xfs_repair /dev/vda4
+
+范例：检查一下刚刚创建的 /dev/sda4 文件系统
+[root@centos tmp]# xfs_repair /dev/sda4
 Phase 1 - find and verify superblock...
 Phase 2 - using internal log
+        - zero log...
+        - scan filesystem freespace and inode maps...
+        - found root inode chunk
 Phase 3 - for each AG...
+        - scan and clear agi unlinked lists...
+        - process known inodes and perform inode discovery...
+        - agno = 0
+        - agno = 1
+        - agno = 2
+        - agno = 3
+        - process newly discovered inodes...
 Phase 4 - check for duplicate blocks...
+        - setting up duplicate extent list...
+        - check for inodes claiming duplicate blocks...
+        - agno = 0
+        - agno = 1
+        - agno = 2
+        - agno = 3
 Phase 5 - rebuild AG headers and trees...
+        - reset superblock...
 Phase 6 - check inode connectivity...
+        - resetting contents of realtime bitmap and summary inodes
+        - traversing filesystem ...
+        - traversal finished ...
+        - moving disconnected inodes to lost+found ...
 Phase 7 - verify and correct link counts...
 done
 # 共有 7 个重要的检查流程,详细的流程介绍可以 man xfs_repair 即可。
-范例：检查一下系统原本就有的 /dev/centos/home 文件系统
-[root@study ~]# xfs_repair /dev/centos/home
-xfs_repair: /dev/centos/home contains a mounted filesystem
-xfs_repair: /dev/centos/home contains a mounted and writable filesystem
-fatal error -- couldn't initialize XFS library
 ```
 
-xfs_repair修复时该文件系统不能被挂载。所有修复/dev/centos/home这个已挂载的文件系统时，就会出现上述问题，可以先卸载再处理即可。
+**<font color='red'>xfs_repair</font>** 可以检查／修复文件系统，不过，因为修复文件系统是个很庞大的任务，**<font color='red'>修复时该文件系统不能被挂载。</font>**可以卸载后再处理即可。
 
-Linux有个设备无法被卸载，那就是根目录，如果根目录有问题，就要进入单人维护或恢复模式，然后通过-d这个选项来处理。
+Linux 有个设备无法被卸载，那就是根目录，如果根目录有问题，就要进入单人维护或恢复模式，然后通过 -d 这个选项来处理。加入－d 这个选项后，系统会强制检验该设备，检验完毕后就会自动重新启动。
 
 #### fsck.ext4 处理 ext4 文件系统
 
@@ -3147,34 +3408,37 @@ Linux有个设备无法被卸载，那就是根目录，如果根目录有问题
 	1K block 放在 8193, 2K block 放在 16384, 4K block 放在 32768
 	
 范例：找出刚刚创建的 /dev/vda5 的另一块 superblock，并据以检测系统
-[root@study ~]# dumpe2fs -h /dev/vda5 | grep 'Blocks per group'
-Blocks per group: 32768
+[root@centos tmp]# dumpe2fs -h /dev/sda5 | grep 'Blocks per group'
+dumpe2fs 1.42.9 (28-Dec-2013)
+Blocks per group:         32768
 # 看起来每个 区块群组会有 32768 个 block，因此第二个 superblock 应该就在 32768 上。
 # 因为 block 号码为 0 号开始编的。
-[root@study ~]# fsck.ext4 -b 32768 /dev/vda5
-e2fsck 1.42.9 （28-Dec-2013）
-/dev/vda5 was not cleanly unmounted, check forced.
+
+[root@centos tmp]# fsck.ext4 -b 32768 /dev/sda5
+e2fsck 1.42.9 (28-Dec-2013)
+/dev/sda5 was not cleanly unmounted, check forced.
 Pass 1: Checking inodes, blocks, and sizes
-Deleted inode 1577 has zero dtime. Fix<y>? yes
 Pass 2: Checking directory structure
 Pass 3: Checking directory connectivity
 Pass 4: Checking reference counts
 Pass 5: Checking group summary information
-/dev/vda5: ***** FILE SYSTEM WAS MODIFIED ***** # 文件系统被改过，所以这里会有警告！
-/dev/vda5: 11/65536 files （0.0% non-contiguous）, 12955/262144 blocks
-# 好巧，使用这个方式来检验系统，恰好遇到文件系统出问题，于是可以有比较多的解释方向。
-# 当文件系统出问题，它就会要你选择是否修复，如果修复如上所示，按下 y 即可！
-# 最终系统会告诉你，文件系统已经被更改过，要注意该项目的意思
+
+/dev/sda5: ***** FILE SYSTEM WAS MODIFIED *****				# 文件系统被改过，所以这里会有警告！
+/dev/sda5: 11/65536 files (0.0% non-contiguous), 12955/262144 blocks
 
 范例：以默认设置强制检查一次 /dev/vda5
-[root@study ~]# fsck.ext4 /dev/vda5
-e2fsck 1.42.9 （28-Dec-2013）
-/dev/vda5: clean, 11/65536 files, 12955/262144 blocks
+[root@centos tmp]# fsck.ext4 /dev/sda5
+e2fsck 1.42.9 (28-Dec-2013)
+/dev/sda5: clean, 11/65536 files, 12955/262144 blocks
 # 文件系统状态正常，它并不会进入强制检查！会告诉你文件系统没问题 （clean）
-[root@study ~]# fsck.ext4 -f /dev/vda5
-e2fsck 1.42.9 （28-Dec-2013）
+[root@centos tmp]# fsck.ext4 -f  /dev/sda5
+e2fsck 1.42.9 (28-Dec-2013)
 Pass 1: Checking inodes, blocks, and sizes
-....（下面省略）....
+Pass 2: Checking directory structure
+Pass 3: Checking directory connectivity
+Pass 4: Checking reference counts
+Pass 5: Checking group summary information
+/dev/sda5: 11/65536 files (0.0% non-contiguous), 12955/262144 blocks
 ```
 
 ### 7.3.5 文件系统挂载与卸载
@@ -3182,8 +3446,12 @@ Pass 1: Checking inodes, blocks, and sizes
 挂载点是目录，而这个目录是进入磁盘分区（其实是文件系统）的入口。在进行挂载之前，先确定几件事：
 
 * 单一文件系统不应该被重复挂载在不同的挂载点（目录）中
+
 * 单一目录不应该重复挂载多个文件系统
+
 * 要作为挂载点的目录，理论上应该都是空目录才行
+
+  如果你要用来挂载的目录里面并不是空的，那么挂载了文件系统之后，原目录下的东西就会暂时地消失
 
 #### 使用mount将文件系统挂载到Linux系统上
 
@@ -3191,7 +3459,7 @@ Pass 1: Checking inodes, blocks, and sizes
 [root@study ~]# mount -a
 [root@study ~]# mount [-l]
 [root@study ~]# mount [-t 文件系统] LABEL='' 挂载点
-[root@study ~]# mount [-t 文件系统] UUID='' 挂载点 # 鸟哥近期建议用这种方式。
+[root@study ~]# mount [-t 文件系统] UUID=''  挂载点 			# 建议用这种方式。
 [root@study ~]# mount [-t 文件系统] 设备文件名 挂载点
 选项与参数：
 -a ：依照配置文件 [/etc/fstab]的数据将所有未挂载的磁盘都挂载上来
@@ -3218,26 +3486,24 @@ Pass 1: Checking inodes, blocks, and sizes
 #### 挂载 xfs/ext4/vfat 等文件系统
 
 ```shell
-范例：找出 /dev/vda4 的 UUID 后，用该 UUID 来挂载文件系统到 /data/xfs 内
-[root@study ~]# blkid /dev/vda4
-/dev/vda4: UUID="e0a6af55-26e7-4cb7-a515-826a8bd29e90" TYPE="xfs"
-[root@study ~]# mount UUID="e0a6af55-26e7-4cb7-a515-826a8bd29e90" /data/xfs
-mount: mount point /data/xfs does not exist # 非正规目录！所以手动建立它！
-[root@study ~]# mkdir -p /data/xfs
-[root@study ~]# mount UUID="e0a6af55-26e7-4cb7-a515-826a8bd29e90" /data/xfs
-[root@study ~]# df /data/xfs
-Filesystem 1K-blocks Used Available Use% Mounted on
-/dev/vda4 1038336 32864 1005472 4% /data/xfs
+范例：找出 /dev/Sda4 的 UUID 后，用该 UUID 来挂载文件系统到 /data/xfs 内
+[root@centos tmp]# blkid /dev/sda4
+/dev/sda4: UUID="36109173-175f-470f-860d-c839230d012b" TYPE="xfs" PARTLABEL="Linux filesystem" PARTUUID="581701c3-d7dc-49c2-a300-891df123ea1b" 
+[root@centos tmp]# mkdir -p /data/xfs
+[root@centos tmp]# mount UUID="36109173-175f-470f-860d-c839230d012b" /data/xfs
+[root@centos tmp]# df /data/xfs
+Filesystem     1K-blocks  Used Available Use% Mounted on
+/dev/sda4        1038336 32992   1005344   4% /data/xfs
 # 顺利挂载，且容量约为 1G 左右没问题
 
-范例：使用相同的方式，将 /dev/vda5 挂载于 /data/ext4
-[root@study ~]# blkid /dev/vda5
-/dev/vda5: UUID="899b755b-1da4-4d1d-9b1c-f762adb798e1" TYPE="ext4"
-[root@study ~]# mkdir /data/ext4
-[root@study ~]# mount UUID="899b755b-1da4-4d1d-9b1c-f762adb798e1" /data/ext4
-[root@study ~]# df /data/ext4
-Filesystem 1K-blocks Used Available Use% Mounted on
-/dev/vda5 999320 2564 927944 1% /data/ext4
+范例：使用相同的方式，将 /dev/Sda5 挂载于 /data/ext4
+[root@centos tmp]# blkid /dev/sda5
+/dev/sda5: UUID="f65a2755-f213-4209-975f-326e22fc1d78" TYPE="ext4" PARTLABEL="Linux filesystem" PARTUUID="0767394a-34d6-49bd-91bf-c8b03fff116d" 
+[root@centos tmp]# mkdir /data/ext4
+[root@centos tmp]# mount UUID="f65a2755-f213-4209-975f-326e22fc1d78" /data/ext4
+[root@centos tmp]# df /data/ext4
+Filesystem     1K-blocks  Used Available Use% Mounted on
+/dev/sda5         999320  2564    927944   1% /data/ext4
 ```
 
 #### 挂载 CD 或 DVD 光盘
@@ -3256,14 +3522,30 @@ Filesystem 1K-blocks Used Available Use% Mounted on
 # 怎么会使用掉 100% 呢？是啊！因为是 DVD 啊！所以无法再写入了。
 ```
 
-光驱一挂载之后就无法退出光盘了，除非你将它卸载才能够退出。
+光驱一挂载之后就无法退出光盘了，除非你将它卸载才能够退出。如果你使用的是图形界面，那么系统会自动帮你挂载这个光盘到 /media 目录。也可以不卸载就直接退出，但是命令行界面没有这个福利。
+
+#### 挂载 vfat 中文移动磁盘（USB 磁盘）
+
+```shell
+范例：找出你的 USB 移动磁盘设备的 UUID, 并挂载到 /data/usb 目录中
+[ root@study ~] # blkid
+/dev/sdal : UUID="35BC-6D6B" TYPE="vfat"
+[root@study ~]# mkdir /data/usb
+[ root@study ~] # mount -o codepage=950, iocharset=utf8 UUID= " 35BC-6D6B" /data/usb
+[root@s 七udy ~]##mount -o codepage=950,iocharset=big5 UUID=" 35BC-6D6B" /data/usb
+[root@study ~]# df /data/usb
+Filesystem	lK-blocks 	Used 	Available 	Use% 	Mounted on
+/dev/sda1	2092344 	4 		2092340 	1%		/data/usb
+```
 
 #### 重新挂载根目录与挂载不特定目录
 
 ```shell
 范例：将 / 重新挂载，并加入参数为 rw 与 auto
-[root@study ~]# mount -o remount,rw,auto /
+[root@centos tmp]# mount -o remount,rw,auto /
 ```
+
+重新挂载是个非常重要的机制。尤其是当你进入单人维护模式时，你的根目录常会被系统挂载为只读，这个时候这个命令就太重要了。
 
 另外，我们也可以利用 mount --bind 来将某个目录挂载到另外一个目录。这并不是挂载文件系统，而是额外挂载某个目录的方法。（也可以使用符号链接来做链接）
 
@@ -3275,8 +3557,6 @@ Filesystem 1K-blocks Used Available Use% Mounted on
 16777346 drwxr-xr-x. 22 root root 4096 Jun 15 23:43 /data/var
 16777346 drwxr-xr-x. 22 root root 4096 Jun 15 23:43 /var
 # 内容完全一模一样,因为挂载目录的缘故
-[root@study ~]# mount | grep var
-/dev/mapper/centos-root on /data/var type xfs （rw,relatime,seclabel,attr2,inode64,noquota）
 ```
 
 #### umount （将设备文件卸载）
@@ -3291,53 +3571,14 @@ Filesystem 1K-blocks Used Available Use% Mounted on
 
 ```shell
 范例：将本章之前自行挂载的文件系统全部卸载：
-[root@study ~]# mount
-.....（前面省略）.....
-/dev/vda4 on /data/xfs type xfs （rw,relatime,seclabel,attr2,inode64,logbsize=256k,sunit=512,..）
-/dev/vda5 on /data/ext4 type ext4 （rw,relatime,seclabel,data=ordered）
-/dev/sr0 on /data/cdrom type iso9660 （ro,relatime）
-/dev/sda1 on /data/usb type vfat （rw,relatime,fmask=0022,dmask=0022,codepage=950,iocharset=...）
-/dev/mapper/centos-root on /data/var type xfs （rw,relatime,seclabel,attr2,inode64,noquota）
-# 先找一下已经挂载的文件系统，如上所示，特殊字体即为刚刚挂载的设备啰！
-# 基本上，卸载后面接设备或挂载点都可以,不过最后一个 centos-root 由于有其他挂载，
-# 因此，该项目一定要使用挂载点来卸载才行
-[root@study ~]# umount /dev/vda4 <==用设备文件名来卸载
-[root@study ~]# umount /data/ext4 <==用挂载点来卸载
-[root@study ~]# umount /data/cdrom <==因为挂载点比较好记忆
-[root@study ~]# umount /data/usb
-[root@study ~]# umount /data/var <==一定要用挂载点！因为设备有被其他方式挂载
+[root@study ~]# umount /dev/sda4 		<==用设备文件名来卸载
+[root@study ~]# umount /data/ext4 		<==用挂载点来卸载
+# 基本上，卸载后面接设备或挂载点都可以
 ```
 
-### 7.3.6 磁盘/文件系统参数自定义
+### 7.3.6 修改文件系统的 UUID 与 Label name
 
-#### mknod
-
-Linux下面的所有设备都以文件来表示，通过文件的major与minor数值来替代设备。常见的磁盘文件名 /dev/sda 等的设备代码如下所示：
-
-| 磁盘文件名 | Major | Minor |
-| ---------- | ----- | ----- |
-| /dev/sda   | 8     | 0-15  |
-| /dev/sdb   | 8     | 16-31 |
-| /dev/loop0 | 7     | 0     |
-| /dev/loop1 | 7     | 1     |
-
-基本上，硬件文件名已经都可以被系统自动实时产生了，我们根本不需要手动建立设备文件。
-
-```shell
-[root@study ~]# mknod 设备文件名 [bcp] [Major] [Minor]
-选项与参数：
-设备种类：
-b ：设置设备名称成为一个周边储存设备文件，例如磁盘等；
-c ：设置设备名称成为一个周边输入设备文件，例如鼠标/键盘等；
-p ：设置设备名称成为一个 FIFO 文件；
-Major ：主要设备代码；
-Minor ：次要设备代码；
-范例：由上述的介绍我们知道 /dev/vda10 设备代码 252, 10，请创建并查阅此设备
-[root@study ~]# mknod /dev/vda10 b 252 10
-[root@study ~]# ll /dev/vda10
-brw-r--r--. 1 root root 252, 10 Jun 24 23:40 /dev/vda10
-# 上面那个 252 与 10 是有意义的，不要随意设置啊！
-```
+某些时刻，你可能会希望修改—下目前文件系统的—些相关信息，举例来说，你可能要修改 Label name 或是 journal 的参数，或是其他磁盘/文件系统运行时的相关参数（例如 DMA 启动与否），这个时候，就需要下面这些相关的命令功能。
 
 #### xfs_admin 修改 XFS 文件系统的 UUID 与 Label name
 
@@ -3351,21 +3592,21 @@ brw-r--r--. 1 root root 252, 10 Jun 24 23:40 /dev/vda10
 -L ：设置这个设备的 Label name
 -U ：设置这个设备的 UUID
 
-范例：设置 /dev/vda4 的 label name 为 vbird_xfs，并测试挂载
-[root@study ~]# xfs_admin -L vbird_xfs /dev/vda4
+范例：设置 /dev/sda4 的 label name 为 nxb_xfs
+[root@study ~]# xfs_admin -L nxb_xfs /dev/sda4
 writing all SBs
-new label = "vbird_xfs" # 产生新的 LABEL 名称
-[root@study ~]# xfs_admin -l /dev/vda4
-label = "vbird_xfs"
-[root@study ~]# mount LABEL=vbird_xfs /data/xfs/
+new label = "nxb_xfs" 						# 产生新的 LABEL 名称
+[root@study ~]# xfs_admin -l /dev/sda4
+label = "nxb_xfs"
 
-范例：利用 uuidgen 产生新 UUID 来设置 /dev/vda4，并测试挂载
-[root@study ~]# umount /dev/vda4 # 使用前，请先卸载
+
+范例：利用 uuidgen 产生新 UUID 来设置 /dev/sda4，并测试挂载
+[root@study ~]# umount /dev/sda4 						# 使用前，请先卸载
 [root@study ~]# uuidgen
-e0fa7252-b374-4a06-987a-3cb14f415488 # 很有趣的指令！可以产生新的 UUID 
-[root@study ~]# xfs_admin -u /dev/vda4
+e0fa7252-b374-4a06-987a-3cb14f415488 					# 很有趣的指令！可以产生新的 UUID 
+[root@study ~]# xfs_admin -u /dev/sda4
 UUID = e0a6af55-26e7-4cb7-a515-826a8bd29e90
-[root@study ~]# xfs_admin -U e0fa7252-b374-4a06-987a-3cb14f415488 /dev/vda4
+[root@study ~]# xfs_admin -U e0fa7252-b374-4a06-987a-3cb14f415488 /dev/sda4
 Clearing log and setting UUID
 writing all SBs
 new UUID = e0fa7252-b374-4a06-987a-3cb14f415488
@@ -3393,24 +3634,34 @@ Filesystem volume name: vbird_ext4
 
 ## 7.4 设置启动挂载
 
-### 7.4.1 启动挂载 /etc/fstab 及 /etc/mtab
+### 7.4.1 启动挂载 /etc/fstab （ fstab，filesystem table）及 /etc/mtab
 
-可不可以在启动的时候就将我要的文件系统都挂载好呢？这样我就不需要每次进入 Linux 系统都还要再挂载一次，直接到 /etc/fstab 里面去修改就行。
+如果能够在启动的时候就将我要的文件系统都挂载好，就不需要每次进入 Linux 系统都再挂载—次。只要直接到 /etc/fstab 里面去修改就行。不过，有以下系统挂载的限制：
 
-/etc/fstab这个文件的内容：
+1. 根目录 / 是必须挂载的，而且一定要先于其他挂载点被挂载进来
+2. 其他挂载点必须为已建立的目录，可任意指定，但一定要遵守必需的系统目录架构原则
+3. 所有挂载点（亦即目录）在同一时间之内，只能挂载一次
+4. 所有硬盘分区在同一时间之内，只能挂载一次
+5. 如若进行卸载，必须先将工作目录移到挂载点（及其子目录）之外
+
+先来查看一下 /etc/fstab 这个文件的内容：
 
 ```shell
-[root@study ~]# cat /etc/fstab
-# Device 					Mount point filesystem parameters dump fsck
-/dev/mapper/centos-root 	/ xfs defaults 0 0
-UUID=94ac5f77-cb8a-495e-a65b-2ef7442b837c /boot xfs defaults 0 0
-/dev/mapper/centos-home /home xfs defaults 0 0
-/dev/mapper/centos-swap swap swap defaults 0 0
+[root@centos tmp]# cat /etc/fstab
+
+# Device				Mount point				filesystem parameters	dump fsck							
+/dev/mapper/centos-root /                       xfs     defaults        0 0
+UUID=222a6355-76d2-4d0e-a2b4-5321da8276c5 /boot                   xfs     defaults        0 0
+/dev/mapper/centos-home /home                   xfs     defaults        0 0
+/dev/mapper/centos-swap swap                    swap    defaults        0 0
+
 ```
 
-其实这个文件就是在我们利用mount命令进行挂载时，将所有的选项与参数写入的文件。一共有6个字段：
+其实 /etc/fstab 就是在我们利用 mount  命令进行挂载时，将所有的选项与参数写入的文件。这个文件的内容共有六个字段，这六个字段非常重要，各字段的概述与详细信息如下：
 
+```she
 [设备/UUID等] [挂载点] [文件系统] [文件系统参数] [dump] [fsck]
+```
 
 * 第一栏：磁盘设备文件名/UUID/LABEL name
 
@@ -3420,17 +3671,11 @@ UUID=94ac5f77-cb8a-495e-a65b-2ef7442b837c /boot xfs defaults 0 0
 
 * 第四栏：文件系统参数
 
-  即我们在mount命令中提到的很多特殊的文件系统参数。具体如下：
-
-| 参数                                 | 内容                                                         |
-| ------------------------------------ | ------------------------------------------------------------ |
-| async/sync<br />异步/同步            | 设置磁盘是否以异步方式运行，默认为 async（性能较佳）         |
-| auto/noauto<br/>自动/非自动          | 当执行 mount -a 时，此文件系统是否会被主动测试挂载，默认为 auto |
-| rw/ro 可读<br/>可擦写/只读           | 让该分区以可读写或只读的状态挂载上来，如果你想要分享的数据是不给使用者随意变更的， 这里也能够设置为只读。则不论在此文件系统的文件是否设置 w 权限，都无法写入 |
-| exec/noexec<br/>可执行/不可执行      | 限制在此文件系统内是否可以进行“执行”的工作？如果是纯粹用来储存数据的目录， 那么可以设置为 noexec 会比较安全。不过，这个参数也不能随便使用，因为你不知道该目录下是否默认会有可执行文件。 因此，建议这个 noexec 最多仅设置于你自定义或分享的一般数据目录。 |
-| user/nouser<br/>允许/不允许用户挂载  | 是否允许用户使用 mount 命令来挂载呢？一般而言，我们当然不希望一般身份的 user 能使用 mount 啰，因为太不安全了，因此这里应该要设置为 nouser |
-| suid/nosuid<br/>具有/不具有suid 权限 | 该文件系统是否允许 SUID 的存在？如果不是可执行文件放置目录，也可以设置为 nosuid 来取消这个功能 |
-| defaults                             | 同时具有 rw, suid, dev, exec, auto, nouser, async 等参数。 基本上，默认情况使用 defaults 设置即可 |
+  即我们在 mount 命令中提到的很多特殊的文件系统参数。具体如下：
+  
+   ![image-20221011192212070](images/image-20221011192212070.png)
+  
+   ![image-20221011192226008](images/image-20221011192226008.png)
 
 * 第五栏：能否被 dump 备份命令作用
 
@@ -3440,23 +3685,58 @@ UUID=94ac5f77-cb8a-495e-a65b-2ef7442b837c /boot xfs defaults 0 0
 
   早期启动的流程中，会有一段时间去检验本机的文件系统，看看文件系统是否完整（clean）。 不过这个方式使用的主要是通过 fsck 去做的，我们现在用的 xfs 文件系统就没有办法适用，因为 xfs 会自己进行检验，不需要额外进行这个动作，所以直接填 0 就好了。
 
+/etc/fstab 是启动时的配置文件，不过，**<font color='red'>实际文件系统的挂载是记录到 /etc/mtab 与 /proc/mounts 这两个文件中的</font>**。每次我们在修改文件系统的挂载时，也会同时修改这两个文件。
+
+#### 每次启动都将 /dev/sda4 自动挂载到 /data/xfs
+
+1. 用 nano 将下面这—行写入 /etc/fstab 最后面中
+
+   ```shell
+   [root@centos tmp]# nano /etc/fstab
+   /dev/sda4               /data/xfs               xfs     defaults	0 0
+   ```
+
+2. 测试—下刚刚我们写入 /etc/fstab 的语法有没有错误
+
+   ```shell
+   [root@centos tmp]# df
+   Filesystem              1K-blocks    Used Available Use% Mounted on
+   devtmpfs                   480812       0    480812   0% /dev
+   tmpfs                      497836       0    497836   0% /dev/shm
+   tmpfs                      497836   14948    482888   4% /run
+   tmpfs                      497836       0    497836   0% /sys/fs/cgroup
+   /dev/mapper/centos-root  10475520 4541160   5934360  44% /
+   /dev/mapper/centos-home   5232640  119676   5112964   3% /home
+   /dev/sda2                 1038336  175492    862844  17% /boot
+   tmpfs                       99568      24     99544   1% /run/user/1000
+   [root@centos tmp]# mount -a
+   [root@centos tmp]# df /data/xfs
+   Filesystem     1K-blocks  Used Available Use% Mounted on
+   /dev/sda4        1038336 32992   1005344   4% /data/xfs
+   # 可以看到 /dev/sda4 已经成功被挂载起来了，而且以后每次启动都会顺利地将此文件系统挂载起来
+   ```
+
 ### 7.4.2 特殊设备 loop 挂载 （镜像文件不刻录就挂载使用）
 
 ####  挂载 CD/DVD 镜像文件
 
+想象—下如果我们下载了Linux 或是其他所需的 CD/DVD 的镜像文件后，难道一定需要刻录成为光盘才能够使用该文件里面的数据吗？当然不是，**<font color='red'>我们可以通过loop 设备来挂载。</font>**
+
+下面我们将整 个CentOS 7.x 的 DVD 镜像文件上传到测试机上面，然后利用这个文件来进行挂载：
+
 ```shell
 [root@study ~]# ll -h /tmp/CentOS-7.0-1406-x86_64-DVD.iso
 -rw-r--r--. 1 root root 3.9G Jul 7 2014 /tmp/CentOS-7.0-1406-x86_64-DVD.iso
-# 看到上面的结果吧！这个文件就是镜像文件，文件非常的大吧！
+# 看到上面的结果吧，这个文件就是镜像文件，文件非常的大
 [root@study ~]# mkdir /data/centos_dvd
 [root@study ~]# mount -o loop /tmp/CentOS-7.0-1406-x86_64-DVD.iso /data/centos_dvd
 [root@study ~]# df /data/centos_dvd
-Filesystem 1K-blocks Used Available Use% Mounted on
-/dev/loop0 4050860 4050860 0 100% /data/centos_dvd
-# 就是这个项目！ .iso 镜像文件内的所有数据可以在 /data/centos_dvd 看到.
+Filesystem		1K-blocks			Used		Available		Use%		Mounted on
+/dev/loop0 		4050860 			4050860 	0 				100% 		/data/centos_dvd
+# .iso 镜像文件内的所有数据可以在 /data/centos_dvd 看到
 [root@study ~]# ll /data/centos_dvd
 total 60
--rw-r--r--. 1 500 502 14 Jul 5 2014 CentOS_BuildTag <==看，这就是 DVD 的内容
+-rw-r--r--. 1 500 502 14 Jul 5 2014 CentOS_BuildTag 		<== 看，这就是 DVD 的内容
 drwxr-xr-x. 3 500 502 2048 Jul 4 2014 EFI
 -rw-r--r--. 1 500 502 611 Jul 5 2014 EULA
 -rw-r--r--. 1 500 502 18009 Jul 5 2014 GPL
@@ -3466,179 +3746,234 @@ drwxr-xr-x. 3 500 502 2048 Jul 4 2014 images
 # 测试完成，记得将数据给他卸载
 ```
 
-如此一来，我们不需要将这个文件刻录成为光盘或是DVD就能够读取内部的数据了。
+如此—来我们不需要将这个文件刻录成为光盘或是 DVD 就能够读取内部的数据了。换句话说，你也可以在这个文件内动手脚去修改文件。
 
-#### 建立大文件以制作 loop 设备文件
+#### ⭐ 建立大文件以制作 loop 设备文件
 
-制作一个大文件，然后将这个文件格式化后挂载。可以帮助我们解决很多系统的分区不合理的情况。举例来说，如果当初在分区时， 你只有划分出一个根目录，假设你已经没有多余的容量可以进行额外的分区，偏偏根目录的容量还很大，此时你就能够制作出一个大文件，然后将这个文件挂载，如此一来感觉上你就多了一个分区。
+想—想，既然能够挂载 DVD 的镜像文件，那么我能不能制作出一个大文件，然后将这个文件格式化后挂载？
+
+这是个有趣的操作，而且还能够帮助我们解决很多系统的分区不合理的清况。举例来说，如果当初在分区时，你只有划分出—个根目录，假设你已经没有多余的容量可以进行额外的分区，偏偏根目录的容量还很大。此时你就能够制作出—个大文件，然后将这个文件挂载，如此一来感觉上你就多了—个分区，用途非常广泛。
 
 * **使用 dd 命令建立大型文件**
 
+  现在在 /srv/loopdev 建立—个空的文件
+
   ```shell
-  [root@study ~]# dd if=/dev/zero of=/srv/loopdev bs=1M count=512
-  512+0 records in <==读入 512 条数据
-  512+0 records out <==输出 512 条数据
-  536870912 Bytes （537 MB） copied, 12.3484 seconds, 43.5 MB/s
+  [root@centos ~]# dd if=/dev/zero of=/srv/loopdev bs=1M count=512
+  512+0 records in			<==读入 512 条数据
+  512+0 records out			<==输出 512 条数据
+  536870912 bytes (537 MB) copied, 0.325843 s, 1.6 GB/s
   # 这个指令的简单意义如下：
   # if 是 input file ，输入文件。那个 /dev/zero 是会一直输出 0 的设备。
   # of 是 output file ，将一堆零写入到后面接的文件中。
   # bs 是每个 block 大小，就像文件系统那样的 block 意义；
   # count 则是总共几个 bs 的意思。所以 bs*count 就是这个文件的容量了
-  [root@study ~]# ll -h /srv/loopdev
-  -rw-r--r--. 1 root root 512M Jun 25 19:46 /srv/loopdev
+  [root@centos ~]# ll -h /srv/loopdev
+  -rw-r--r--. 1 root root 512M Oct 11 19:45 /srv/loopdev
   ```
 
 * **大型文件的格式化**
 
-  默认 xfs 不能够格式化文件的，所以要格式化文件得要加入特别的参数才行
+  默认 xfs 不能够格式化文件的，所以要格式化文件得要加入 -f 的参数才行
 
   ```shell
-  [root@study ~]# mkfs.xfs -f /srv/loopdev
-  [root@study ~]# blkid /srv/loopdev
-  /srv/loopdev: UUID="7dd97bd2-4446-48fd-9d23-a8b03ffdd5ee" TYPE="xfs"
+  [root@centos ~]# mkfs.xfs -f /srv/loopdev
+  meta-data=/srv/loopdev           isize=512    agcount=4, agsize=32768 blks
+           =                       sectsz=512   attr=2, projid32bit=1
+           =                       crc=1        finobt=0, sparse=0
+  data     =                       bsize=4096   blocks=131072, imaxpct=25
+           =                       sunit=0      swidth=0 blks
+  naming   =version 2              bsize=4096   ascii-ci=0 ftype=1
+  log      =internal log           bsize=4096   blocks=855, version=2
+           =                       sectsz=512   sunit=0 blks, lazy-count=1
+  realtime =none                   extsz=4096   blocks=0, rtextents=0
+  [root@centos ~]# blkid /srv/loopdev
+  /srv/loopdev: UUID="f65387b4-7052-44d4-bf44-049ea522b962" TYPE="xfs" 
   ```
 
 * **挂载**
 
-  利用mount的特殊参数，-0 loop来处理
+  和挂载镜像文件类似，利用 mount 的特殊参数，-o loop 来处理
 
   ```shell
-  [root@study ~]# mount -o loop UUID="7dd97bd2-4446-48fd-9d23-a8b03ffdd5ee" /mnt
-  [root@study ~]# df /mnt
-  Filesystem 1K-blocks Used Available Use% Mounted on
-  /dev/loop0 520876 26372 494504 6% /mnt
+  [root@centos ~]# mount -o loop UUID="f65387b4-7052-44d4-bf44-049ea522b962" /mnt
+  [root@centos ~]# df /mnt
+  Filesystem     1K-blocks  Used Available Use% Mounted on
+  /dev/loop0        520868 26436    494432   6% /mnt
   ```
 
-通过这种方法，感觉上你就可以在不修改原有环境的情况下，在原分区中制作出你想要的分区。
-
-最后将这个文件系统自动地挂载起来。
+通过这种方法，感觉上你就可以在不修改原有环境的情况下，在原分区中制作出你想要的分区。最后通过修改 /etc/fstab 将这个文件系统自动地挂载起来：
 
 ```shell
-[root@study ~]# nano /etc/fstab
-/srv/loopdev /data/file xfs defaults**,loop** 0 0
-# 毕竟系统大多仅查询 block device 去找出 UUID 而已，因此使用文件创建的 filesystem，
-# 最好还是使用原本的文件名来处理，应该比较不容易出现错误信息。
-[root@study ~]# umount /mnt
-[root@study ~]# mkdir /data/file
-[root@study ~]# mount -a
-[root@study ~]# df /data/file
-Filesystem 1K-blocks Used Available Use% Mounted on
-/dev/loop0 520876 26372 494504 6% /data/file
+[root@centos ~]# nano /etc/fstab
+/srv/loopdev            /data/file              xfs     defaults,loop   0 0
+[root@centos ~]# umount /mnt
+[root@centos ~]# mkdir /data/file
+[root@centos ~]# mount -a
+[root@centos ~]# df /data/file
+Filesystem     1K-blocks  Used Available Use% Mounted on
+/dev/loop0        520868 26436    494432   6% /data/file
 ```
 
 ## 7.5 内存交换分区（swap）之创建
 
-内存交换分区是用磁盘来暂时放置内存中的信息。
+CPU 所读取的数据都来自于内存，那么内存不足的时候，为了让后续的程序可以顺利运行，需要将暂不使用的程序与数据挪到**<font color='blue'>内存交换分区</font>**中，此时内存就会空出来给需要执行的程序加载。**<font color='red'>内存交换分区是用磁盘来暂时放置内存中的信息</font>**。
+
+说实话，内存交换分区对目前的桌面计算机来讲，存在的意义已经不大了。这是因为目前的 x86 主机所含的内存实在都太大了(—般入门级至少也都有4GB) ，所以，我们的 Linux 系统大概都用不到内存交换分区这个玩意儿。不过，如果是针对**<font color='red'>服务器或是工作站</font>**这些常年运行的系统来说的话，那么，无论如何内存交换分区还是需要建立的。
+
+另外，如果你的主机支持电源管理模式，也就是说你的 Linux 主机系统可以进入【**<font color='red'>休眠</font>**】模式的话，那么，运行当中的程序状态则会被记录到内存交换分区中，以作为【唤醒】主机的状态依据。另外，某些程序在运行时，本来就会利用内存交换分区的特性来存放一些数据，所以，内存交换分区还是需要建立的，只是不需要太大。
 
 ### 7.5.1 使用物理分区创建内存交换分区
 
 #### 1. 在磁盘中划分一个分区给系统作为内存交换分区
 
 ```shell
-[root@study ~]# gdisk /dev/vda
-Command （? for help）: n
-Partition number （6-128, default 6）:
-First sector （34-83886046, default = 69220352） or {+-}size{KMGTP}:
-Last sector （69220352-83886046, default = 83886046） or {+-}size{KMGTP}: +512M
+[root@centos ~]# gdisk /dev/sda
+Command (? for help): n
+Partition number (6-128, default 6): 
+First sector (34-83886046, default = 64903168) or {+-}size{KMGTP}: 
+Last sector (64903168-83886046, default = 83886046) or {+-}size{KMGTP}: +512M 
 Current type is 'Linux filesystem'
-Hex code or GUID （L to show codes, Enter = 8300）: 8200
+Hex code or GUID (L to show codes, Enter = 8300): 8200
 Changed type of partition to 'Linux swap'
-Command （? for help）: p
-Number Start （sector） End （sector） Size Code Name
-6 69220352 70268927 512.0 MiB 8200 Linux swap # 重点就是产生这东西
-Command （? for help）: w
-Do you want to proceed? （Y/N）: y
-[root@study ~]# partprobe
-[root@study ~]# lsblk
-NAME MAJ:MIN RM SIZE RO TYPE MOUNTPOINT
-vda 252:0 0 40G 0 disk
-.....（中间省略）.....
-`-vda6 252:6 0 512M 0 part # 确定这里是存在的才行
+
+Command (? for help): p
+Disk /dev/sda: 83886080 sectors, 40.0 GiB
+Logical sector size: 512 bytes
+Disk identifier (GUID): 5C427BD7-5D88-4633-A994-0782F6DCED14
+Partition table holds up to 128 entries
+First usable sector is 34, last usable sector is 83886046
+Partitions will be aligned on 2048-sector boundaries
+Total free space is 17936317 sectors (8.6 GiB)
+
+Number  Start (sector)    End (sector)  Size       Code  Name
+   1            2048            6143   2.0 MiB     EF02  
+   2            6144         2103295   1024.0 MiB  0700  
+   3         2103296        60708863   27.9 GiB    8E00  
+   4        60708864        62806015   1024.0 MiB  8300  Linux filesystem
+   5        62806016        64903167   1024.0 MiB  8300  Linux filesystem
+   6        64903168        65951743   512.0 MiB   8200  Linux swap				# 重点是产生这个分区
+
+Command (? for help): w
+
+Final checks complete. About to write GPT data. THIS WILL OVERWRITE EXISTING
+PARTITIONS!!
+
+Do you want to proceed? (Y/N): y
+OK; writing new GUID partition table (GPT) to /dev/sda.
+Warning: The kernel is still using the old partition table.
+The new table will be used at the next reboot.
+The operation has completed successfully.
+
+[root@centos ~]# partprobe
+[root@centos ~]# lsblk
+NAME            MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+sda               8:0    0   40G  0 disk 
+├─sda1            8:1    0    2M  0 part 
+├─sda2            8:2    0    1G  0 part /boot
+├─sda3            8:3    0   28G  0 part 
+│ ├─centos-root 253:0    0   10G  0 lvm  /
+│ ├─centos-swap 253:1    0    1G  0 lvm  [SWAP]
+│ └─centos-home 253:2    0    5G  0 lvm  /home
+├─sda4            8:4    0    1G  0 part /data/xfs
+├─sda5            8:5    0    1G  0 part 
+└─sda6            8:6    0  512M  0 part 
+sr0              11:0    1 1024M  0 rom  
+loop0             7:0    0  512M  0 loop /data/file
 ```
 
 #### 2. 格式化：利用【mkswap】命令就能够格式化该分区成为内存交换分区格式
 
 ```shell
-[root@study ~]# mkswap /dev/vda6
+[root@centos ~]# mkswap /dev/sda6
 Setting up swapspace version 1, size = 524284 KiB
-no label, UUID=6b17e4ab-9bf9-43d6-88a0-73ab47855f9d
-[root@study ~]# blkid /dev/vda6
-/dev/vda6: UUID="6b17e4ab-9bf9-43d6-88a0-73ab47855f9d" TYPE="swap"
+no label, UUID=b7228b5e-8a40-4880-b076-6ba15dcf74df
+[root@centos ~]# blkid /dev/sda6
+/dev/sda6: UUID="b7228b5e-8a40-4880-b076-6ba15dcf74df" TYPE="swap" PARTLABEL="Linux swap" PARTUUID="e3097259-940f-4b14-b0f9-72db8f463882" 
 # 确定格式化成功,且使用 blkid 确实可以识别这个设备
 ```
 
 #### 3. 开始观察与加载
 
 ```shell
-[root@study ~]# free
-total used free shared buff/cache available
-Mem: 1275140 227244 330124 7804 717772 875536 # 物理内存
-Swap: 1048572 101340 947232 # swap 相关
-# 我有 1275140K 的实体内存，使用 227244K 剩余 330124K ，使用掉的内存有
-# 717772K 用在缓冲/高速缓存的用途中。至于 swap 已经有 1048572K 了
-[root@study ~]# swapon /dev/vda6	<== 将该设备启动
-[root@study ~]# free
-total used free shared buff/cache available
-Mem: 1275140 227940 329256 7804 717944 874752
-Swap: 1572856 101260 1471596 <==有看到增加了没？
-[root@study ~]# swapon -s
-Filename Type Size Used Priority
-/dev/dm-1 partition 1048572 101260 -1
-/dev/vda6 partition 524284 0 -2
+[root@centos ~]# free
+              total        used        free      shared  buff/cache   available
+Mem:         995672      717588       80936       30404      197148      103800		# 物理内存
+Swap:       1048572       26292     1022280											# swap 相关
+	# 我有 995672K 的实体内存，使用 717588K 剩余 80936K ，使用掉的内存有 197148K 用在缓冲/高速缓存的用途中。
+# 至于 swap 已经有 1048572K 了
+
+[root@centos ~]# swapon /dev/sda6				<== 将该设备启动
+[root@centos ~]# free
+              total        used        free      shared  buff/cache   available
+Mem:         995672      717564       80896       30404      197212      103840
+Swap:       1572856       26292     1546564		<==有看到增加了没
+
+[root@centos ~]# swapon -s
+Filename				Type		Size	Used	Priority
+/dev/dm-1                              	partition	1048572	26292	-2
+/dev/sda6                              	partition	524284	0	-3
 # 上面列出目前使用的 swap 设备有哪些的意思
+
 [root@study ~]# nano /etc/fstab
-UUID="6b17e4ab-9bf9-43d6-88a0-73ab47855f9d" swap swap defaults 0 0
+/dev/sda6               swap                    swap    defaults	0 0
 # 当然要写入配置文件，只不过不是文件系统，所以没有挂载点,第二个字段写入 swap 即可。
 ```
 
 ### 7.5.2 使用文件创建内存交换文件
 
+如果是在物理分区无法支持的环境下，此时前—小节提到的 loop 设备创建方法就派上用场了。与物理分区相比，这个方法只是利用 dd 去创建一个大文件而已。接下来我们就通过文件创建的方法建立一个 128MB 的内存交换文件。
+
 #### 1. 使用 dd 这个命令来新增一个 128MB 的文件在 /tmp 下面
 
 ```shell
-[root@study ~]# dd if=/dev/zero of=/tmp/swap bs=1M count=128
+[root@centos ~]# dd if=/dev/zero of=/tmp/swap bs=1M count=128
 128+0 records in
 128+0 records out
-134217728 Bytes （134 MB） copied, 1.7066 seconds, 78.6 MB/s
-[root@study ~]# ll -h /tmp/swap
--rw-r--r--. 1 root root 128M Jun 26 17:47 /tmp/swap
+134217728 bytes (134 MB) copied, 0.145657 s, 921 MB/s
+[root@centos ~]# ll -h /tmp/swap
+-rw-r--r--. 1 root root 128M Oct 11 20:20 /tmp/swap
 ```
 
 #### 2. 使用 mkswap 将 /tmp/swap 这个文件格式化为 swap 的文件格式
 
 ```shell
-[root@study ~]# mkswap /tmp/swap
+[root@centos ~]# mkswap /tmp/swap
 Setting up swapspace version 1, size = 131068 KiB
-no label, UUID=4746c8ce-3f73-4f83-b883-33b12fa7337c
-# 这个命令下达时请“特别小心”，因为下错字符，将可能使您的文件系统挂掉
+no label, UUID=2ab98972-b1da-474d-a23e-88745d3c1f1e
 ```
 
 #### 3. 使用 swapon 来将 /tmp/swap 启动
 
 ```shell
-[root@study ~]# swapon /tmp/swap
-[root@study ~]# swapon -s
-Filename Type Size Used Priority
-/dev/dm-1 partition 1048572 100380 -1
-/dev/vda6 partition 524284 0 -2
-/tmp/swap file 131068 0 -3
+[root@centos ~]# swapon /tmp/swap
+swapon: /tmp/swap: insecure permissions 0644, 0600 suggested.
+[root@centos ~]# swapon -s
+Filename				Type		Size	Used	Priority
+/dev/dm-1                              	partition	1048572	26292	-2
+/dev/sda6                              	partition	524284	0	-3
+/tmp/swap                              	file	131068	0	-4
 ```
 
 #### 4. 使用 swapoff 关掉 swap file，并设置自动启用
 
 ```shell
-[root@study ~]# nano /etc/fstab
-/tmp/swap swap swap defaults 0 0
-# 为何这里不要使用 UUID 呢，这是因为系统仅会查询区块设备 （block device） 不会查询文件
-# 所以，这里千万不要使用 UUID，不然系统会查不到
-[root@study ~]# swapoff /tmp/swap /dev/vda6
-[root@study ~]# swapon -s
-Filename Type Size Used Priority
-/dev/dm-1 partition 1048572 100380 -1
-# 确定已经回复到原本的状态了！然后准备来测试！！
-[root@study ~]# swapon -a
-[root@study ~]# swapon -s
-# 最终你又会看正确的三个 swap 出现，这也才确定你的 /etc/fstab 设置无误
+[root@centos ~]# nano /etc/fstab
+/tmp/swap	        swap	                swap	defaults	0 0
+
+[root@centos ~]# swapoff /tmp/swap /dev/sda6
+[root@centos ~]# swapon -s
+Filename				Type		Size	Used	Priority
+/dev/dm-1                              	partition	1048572	26004	-2
+# 确定已经回复到原本的状态了，然后准备来测试
+
+[root@centos ~]# swapon -a
+swapon: /tmp/swap: insecure permissions 0644, 0600 suggested.
+[root@centos ~]# swapon -s
+Filename				Type		Size	Used	Priority
+/dev/dm-1                              	partition	1048572	26004	-2
+/dev/sda6                              	partition	524284	0	-3
+/tmp/swap                              	file	131068	0	-4
 ```
 
 # 第8章 文件与文件系统的压缩
