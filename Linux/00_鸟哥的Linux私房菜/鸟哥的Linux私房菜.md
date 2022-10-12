@@ -2163,7 +2163,7 @@ find相关的时间参数的意义：
 * 目录所需权限：用户对这个目录至少需要具有 x 的权限
 * 文件所需权限：用户对这个文件至少需要具有 x 的权限
 
-# 第7章 Linux磁盘与文件系统管理
+# 第7章 Linux 磁盘与文件系统管理
 
 ## 7.1 认识Linux文件系统
 
@@ -2907,7 +2907,7 @@ NAME                        MAJ:MIN RM SIZE RO TYPE MOUNTPOINT
   `-/dev/mapper/centos-home 253:2    0   5G  0 lvm  /home	# 完整的文件名，由 / 开始写
 ```
 
-#### blkid（block id）：列出设备的 UUID 亦即文件系统的类型
+#### blkid（block id）：列出设备的 UUID 以及文件系统的类型
 
 **<font color='blue'>UUID </font>**是全局唯一标识符（universally unique identifier），Linux 会将系统内所有的设备都给予一个独一无二的标识符， 这个标识符就可以拿来作为挂载或者是使用这个设备或文件系统
 
@@ -3453,7 +3453,7 @@ Pass 5: Checking group summary information
 
   如果你要用来挂载的目录里面并不是空的，那么挂载了文件系统之后，原目录下的东西就会暂时地消失
 
-#### 使用mount将文件系统挂载到Linux系统上
+#### 使用 mount 将文件系统挂载到Linux系统上
 
 ```shell
 [root@study ~]# mount -a
