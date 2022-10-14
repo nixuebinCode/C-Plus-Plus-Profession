@@ -3945,3 +3945,386 @@ public:
 
 接下来，每当插入新节点时，不但要依照 RB-tree 的规则来调整，并且还要维护 `header` 的正确性，使其父节点指向根节点，左子节点指向最小节点，右子节点指
 向最大节点。
+
+## 5.3 `set`
+
+ `set` 的特性是，所有元素都会根据元素的键值自动被排序，且不允许两个元素有相同的键值。
+
+我们不可以通过 set 的迭代器改变 set 的元素值，因为 set 元素值就是其键值，关系到 set 元素的排列规则。如果任意改变s et 元素值，会严重破坏 set 组织。因此， **<font color='red'>`set<T>::iterator` 被定义为底层 RB-tree 的 `const_iterator`，杜绝写入操作。</font>**
+
+set 拥有与 list 相同的某些性质：当客户端对它进行元素新增操作（insert）或删除操作（erase）时，操作之前的所有迭代器，在操作完成之后都依然有效。当然，被删除的那个元素的迭代器必然是个例外。
+
+由于 RB-tree 是一种平衡二叉搜索树，自动排序的效果很不错，所以标准的 STL `set` 即以 RB-tree 为底层机制。SGI 另外提供一种以 hash-table 为底层机制的 set，称为 `hash_set`。
+
+```c++
+template <class Key, class Compare = less<Key>, class Alloc = alloc>		// Compare 缺省情况下，使用递增排序
+class set {
+public:
+  // typedefs:
+
+  typedef Key key_type;
+  typedef Key value_type;
+  typedef Compare key_compare;
+  typedef Compare value_compare;
+private:
+  typedef rb_tree<key_type, value_type, 
+                  identity<value_type>, key_compare, Alloc> rep_type;
+  rep_type t;  				// 采用红黑树来表现 set
+public:
+  typedef typename rep_type::const_pointer pointer;
+  typedef typename rep_type::const_pointer const_pointer;
+  typedef typename rep_type::const_reference reference;
+  typedef typename rep_type::const_reference const_reference;
+  typedef typename rep_type::const_iterator iterator;		// 注意：iterator 定义为 RB-tree 的 const_iterator
+    														// 这表示 set 的迭代器无法执行写入操作
+  typedef typename rep_type::const_iterator const_iterator;
+  typedef typename rep_type::const_reverse_iterator reverse_iterator;
+  typedef typename rep_type::const_reverse_iterator const_reverse_iterator;
+  typedef typename rep_type::size_type size_type;
+  typedef typename rep_type::difference_type difference_type;
+
+  // allocation/deallocation
+  // 注意，set 一定使用 RB-tree 的 insert_unique 而非 insert_equal
+  // multiset 才使用 RB-tree 的 insert_equal
+  set() : t(Compare()) {}
+  explicit set(const Compare& comp) : t(comp) {}
+
+  template <class InputIterator>
+  set(InputIterator first, InputIterator last)
+    : t(Compare()) { t.insert_unique(first, last); }
+
+  template <class InputIterator>
+  set(InputIterator first, InputIterator last, const Compare& comp)
+    : t(comp) { t.insert_unique(first, last); }
+
+  set(const set<Key, Compare, Alloc>& x) : t(x.t) {}
+  set<Key, Compare, Alloc>& operator=(const set<Key, Compare, Alloc>& x) { 
+    t = x.t; 
+    return *this;
+  }
+
+  // accessors: 所有的操作，RB-tree 都已提供，所有 set 只要传递调用即可
+
+  key_compare key_comp() const { return t.key_comp(); }
+  value_compare value_comp() const { return t.key_comp(); }
+  iterator begin() const { return t.begin(); }
+  iterator end() const { return t.end(); }
+  bool empty() const { return t.empty(); }
+  size_type size() const { return t.size(); }
+  size_type max_size() const { return t.max_size(); }
+  void swap(set<Key, Compare, Alloc>& x) { t.swap(x.t); }
+
+  // insert，调用 RB-tree 的 insert_unique
+  typedef  pair<iterator, bool> pair_iterator_bool; 
+  pair<iterator,bool> insert(const value_type& x) { 
+    pair<typename rep_type::iterator, bool> p = t.insert_unique(x); 
+    return pair<iterator, bool>(p.first, p.second);
+  }
+  iterator insert(iterator position, const value_type& x) {
+    typedef typename rep_type::iterator rep_iterator;
+    return t.insert_unique((rep_iterator&)position, x);
+  }
+  template <class InputIterator>
+  void insert(InputIterator first, InputIterator last) {
+    t.insert_unique(first, last);
+  }
+
+  // erase
+  void erase(iterator position) { 
+    typedef typename rep_type::iterator rep_iterator;
+    t.erase((rep_iterator&)position); 
+  }
+  size_type erase(const key_type& x) { 
+    return t.erase(x); 
+  }
+  void erase(iterator first, iterator last) { 
+    typedef typename rep_type::iterator rep_iterator;
+    t.erase((rep_iterator&)first, (rep_iterator&)last); 
+  }
+  void clear() { t.clear(); }
+
+  // set operations:
+  iterator find(const key_type& x) const { return t.find(x); }
+  size_type count(const key_type& x) const { return t.count(x); }
+  iterator lower_bound(const key_type& x) const {
+    return t.lower_bound(x);
+  }
+  iterator upper_bound(const key_type& x) const {
+    return t.upper_bound(x); 
+  }
+  pair<iterator,iterator> equal_range(const key_type& x) const {
+    return t.equal_range(x);
+  }
+    
+};
+```
+
+>  `set` 内部提供了自己的 `find` 方法，面对关联式容器，应该使用其所提供的 `find` 函数来搜寻元素，会比使用 STL 算法 `find` 更有效率。因为 STL 算法 `find` 只是循序搜寻。
+
+## 5.4 `map`
+
+`map` 的元素都是 `pair`，`pair` 的第一元素被视为键值，第二元素被视为实值。`map` 中所有元素都会根据其键值自动被排序，且不允许两个元素拥有相同的键值。以下是 `stl_pair.h` 中 `pair` 的定义：
+
+```c++
+template <class T1, class T2>
+struct pair {
+  typedef T1 first_type;
+  typedef T2 second_type;
+
+  T1 first;			//pair 中的两个数据成员 first、second 是 public 的
+  T2 second;
+  pair() : first(T1()), second(T2()) {}
+  pair(const T1& a, const T2& b) : first(a), second(b) {}
+};
+```
+
+和 `set` 一样，因为 `map` 元素的**键值**关系到 `map` 元素的排列规则，任意改变 `map` 元素键值将会严重破坏 `map` 组织，所以我们不可以通过 `map` 的迭代器改变 `map` 的元素的键值。但如果想要修正元素的**实值**，却是可以，因为 `map` 元素的实值并不影响 `map` 元素的排列规则。因此，map iterators 既不是一种 constant iterators , 也不是一种 mutable iterators。
+
+`map` 拥有与 `list` 相同的某些性质：当客户端对它进行元素新增操作（insert）或删除操作（erase）时，操作之前的所有迭代器，在操作完成之后都依然有效。当然，被删除的那个元素的迭代器必然是个例外。
+
+由于 RB-tree 是一种平衡二叉搜索树，自动排序的效果很不错，所以标准的 STL `map` 即以 RB-tree 为底层机制，**<font color='red'>每个节点的内容是一个 `pair`</font>**，红黑树的节点按照 `pair` 的第一个元素排序：（SGI 另外提供一种以 hash-table 为底层机制的 map，称为 `hash_map`。）
+
+ ![image-20221014103616937](images/image-20221014103616937.png)
+
+```c++
+template <class Key, class T, class Compare = less<Key>, class Alloc = alloc>
+class map {
+public:
+
+// typedefs:
+
+  typedef Key key_type;						// 键值型别
+  typedef T data_type;						// 实值型别
+  typedef T mapped_type;
+  typedef pair<const Key, T> value_type;	// 元素型别（键值/实值）
+  typedef Compare key_compare;
+  
+  // 以下定义一个 functor, 其作用就是调用 “元素比较函数”
+  class value_compare
+    : public binary_function<value_type, value_type, bool> {
+  friend class map<Key, T, Compare, Alloc>;
+  protected :
+    Compare comp;
+    value_compare(Compare c) : comp(c) {}
+  public:
+    bool operator()(const value_type& x, const value_type& y) const {
+      return comp(x.first, y.first);
+    }
+  };
+
+private:
+  // 定义红黑树的 key 为 map 的键值，元素为 map 的键值和实值的 pair
+  typedef rb_tree<key_type, value_type, 
+                  select1st<value_type>, key_compare, Alloc> rep_type;
+  rep_type t;  // red-black tree representing map
+public:
+  typedef typename rep_type::pointer pointer;
+  typedef typename rep_type::const_pointer const_pointer;
+  typedef typename rep_type::reference reference;
+  typedef typename rep_type::const_reference const_reference;
+  typedef typename rep_type::iterator iterator;				// 注意：map 并不像 set 一样将 iterator 定义为RB-tree 的const_iterator
+    														// 因为它允许用户通过其迭代器修改元素的实值
+  typedef typename rep_type::const_iterator const_iterator;
+  typedef typename rep_type::reverse_iterator reverse_iterator;
+  typedef typename rep_type::const_reverse_iterator const_reverse_iterator;
+  typedef typename rep_type::size_type size_type;
+  typedef typename rep_type::difference_type difference_type;
+
+  // allocation/deallocation
+  // 注意， map 一定使用底 层RB-tree 的i nsert_unique 而非 insert_equal
+  // multimap 才使用 insert_equal，因 为map 不允许相同键值存在，multimap 才允许相同键值存在
+  map() : t(Compare()) {}
+  explicit map(const Compare& comp) : t(comp) {}
+
+  template <class InputIterator>
+  map(InputIterator first, InputIterator last)
+    : t(Compare()) { t.insert_unique(first, last); }
+
+  template <class InputIterator>
+  map(InputIterator first, InputIterator last, const Compare& comp)
+    : t(comp) { t.insert_unique(first, last); }
+
+  map(const map<Key, T, Compare, Alloc>& x) : t(x.t) {}
+  map<Key, T, Compare, Alloc>& operator=(const map<Key, T, Compare, Alloc>& x)
+  {
+    t = x.t;
+    return *this; 
+  }
+
+  // accessors:
+  // 以下所有的 map 操作行为，RB-tree 都已提供， map 只要转调用即可
+  key_compare key_comp() const { return t.key_comp(); }
+  value_compare value_comp() const { return value_compare(t.key_comp()); }
+  iterator begin() { return t.begin(); }
+  const_iterator begin() const { return t.begin(); }
+  iterator end() { return t.end(); }
+  const_iterator end() const { return t.end(); }
+  reverse_iterator rbegin() { return t.rbegin(); }
+  const_reverse_iterator rbegin() const { return t.rbegin(); }
+  reverse_iterator rend() { return t.rend(); }
+  const_reverse_iterator rend() const { return t.rend(); }
+  bool empty() const { return t.empty(); }
+  size_type size() const { return t.size(); }
+  size_type max_size() const { return t.max_size(); }
+    
+  // map 的下标操作符，会调用自身的 insert 方法，因此当其 key 值不存在时，会自动插入到 map 中去
+  T& operator[](const key_type& k) {
+    return (*((insert(value_type(k, T()))).first)).second;
+  }
+  void swap(map<Key, T, Compare, Alloc>& x) { t.swap(x.t); }
+
+  // insert/erase
+  pair<iterator,bool> insert(const value_type& x) { return t.insert_unique(x); }
+  iterator insert(iterator position, const value_type& x) {
+    return t.insert_unique(position, x);
+  }
+  
+  template <class InputIterator>
+  void insert(InputIterator first, InputIterator last) {
+    t.insert_unique(first, last);
+  }
+
+  void erase(iterator position) { t.erase(position); }
+  size_type erase(const key_type& x) { return t.erase(x); }
+  void erase(iterator first, iterator last) { t.erase(first, last); }
+  void clear() { t.clear(); }
+
+  // map operations:
+
+  iterator find(const key_type& x) { return t.find(x); }
+  const_iterator find(const key_type& x) const { return t.find(x); }
+  size_type count(const key_type& x) const { return t.count(x); }
+  iterator lower_bound(const key_type& x) {return t.lower_bound(x); }
+  const_iterator lower_bound(const key_type& x) const {
+    return t.lower_bound(x); 
+  }
+  iterator upper_bound(const key_type& x) {return t.upper_bound(x); }
+  const_iterator upper_bound(const key_type& x) const {
+    return t.upper_bound(x); 
+  }
+  
+  pair<iterator,iterator> equal_range(const key_type& x) {
+    return t.equal_range(x);
+  }
+  pair<const_iterator,const_iterator> equal_range(const key_type& x) const {
+    return t.equal_range(x);
+  }
+
+};
+```
+
+针对 `map` 的下标操作符：
+
+```c++
+typedef Key key_type;						// 键值型别
+typedef pair<const Key, T> value_type;		// 元素型别（键值/实值）
+
+T& operator[](const key_type& k) {
+	return (*((insert(value_type(k, T()))).first)).second;
+}
+```
+
+1. 首先，根据键值和实值做出一个 `pair`，由于实值未知，所以产生一个与实值型别相同的暂时对象替代：
+
+   ```c++
+   value_type(k, T())
+   ```
+
+2. 再将该元素插人到 `map` 里面去：
+
+   ```c++
+   insert(value_type(k, T()))
+   ```
+
+   该插入操作返回一个 `pair`，其第一元素是个迭代器，指向插入妥当的新元素，或指向插入失败点（键值重复）的旧元素，也就是说我们调用 `map[key]` 时，如果 `key` 已经存在，则插入失败，该迭代器指向已经存在的元素；如果 `key` 不存在，则插入成功，该迭代器指向插入妥当的新元素。现在我们取得该迭代器：
+
+   ```c++
+   (insert(value_type(k, T()))).first
+   ```
+
+3. 紧接着，解引用该迭代器，获得 `map` 的一个元素，其类型是一个 `pair`
+
+   ```c++
+   *((insert(value_type(k, T()))).first)
+   ```
+
+4. 最后我们取得这个 `map` 元素的第二个值，也就是其实值
+
+   ```c++
+   (*((insert(value_type(k, T()))).first)).second
+   ```
+
+## 5.5 `multiset`
+
+`multiset` 的特性以及用法和 `set` 完全相同，唯一的差别在于它允许键值重复，因此它的插人操作采用的是底层机制 RB-tree 的 `insert_equal` 而非 `insert_unique`。下面是 `multiset` 的源代码提要，只列出了与 `set` 不同之处：
+
+  ```c++
+  template <class Key, class Compare = less<Key>, class Alloc = alloc>
+  class multiset {
+  public:
+    // typedefs:
+    ... （与 set 相同）
+  
+    // allocation/deallocation
+    template <class InputIterator>
+    multiset(InputIterator first, InputIterator last)
+      : t(Compare()) { t.insert_equal(first, last); }
+    template <class InputIterator>
+    multiset(InputIterator first, InputIterator last, const Compare& comp)
+      : t(comp) { t.insert_equal(first, last); }
+    ... （其它与 set 相同）
+  
+    // accessors:
+    ... （与 set 相同）
+  
+    // insert/erase
+    iterator insert(const value_type& x) { 
+      return t.insert_equal(x);
+    }
+    iterator insert(iterator position, const value_type& x) {
+      typedef typename rep_type::iterator rep_iterator;
+      return t.insert_equal((rep_iterator&)position, x);
+    }
+    template <class InputIterator>
+    void insert(InputIterator first, InputIterator last) {
+      t.insert_equal(first, last);
+    }
+    ... （其它与 set 相同）
+  };
+  ```
+
+## 5.6 `multimap`
+
+`multimap` 的特性以及用法与 `map` 完全相同，唯一的差别在于它允许键值重复，因此它的插入操作采用的是底层机制 RB-tree 的 `insert_equal` 而非
+`insert_unique`。下面是 `multimap` 的源代码提要，只列出了与 `map` 不同之处：
+
+```c++
+template <class Key, class T, class Compare = less<Key>, class Alloc = alloc>
+class multimap {
+public:
+
+  // typedefs:
+  ... （与 set 相同）
+
+  // allocation/deallocation
+  template <class InputIterator>
+  multimap(InputIterator first, InputIterator last)
+    : t(Compare()) { t.insert_equal(first, last); }
+  template <class InputIterator>
+  multimap(InputIterator first, InputIterator last, const Compare& comp)
+    : t(comp) { t.insert_equal(first, last); }
+  ... （其它与 set 相同）
+      
+  // insert/erase
+  iterator insert(const value_type& x) { return t.insert_equal(x); }
+  iterator insert(iterator position, const value_type& x) {
+    return t.insert_equal(position, x);
+  }
+  template <class InputIterator>
+  void insert(InputIterator first, InputIterator last) {
+    t.insert_equal(first, last);
+  }
+  ... （其它与 set 相同）
+};
+```
+
