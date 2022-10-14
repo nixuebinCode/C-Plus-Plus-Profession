@@ -3994,9 +3994,13 @@ Linux里常见的压缩文件扩展名：
 *.tar.xz 	tar 程序打包的文件，其中并且经过 xz 的压缩
 ```
 
+Linux 上常见的压缩命令就是 gzip 、bzip2 以及最新的 xz，为了支持 Windows 常见的 zip，其实 Linux 也早就有 zip 命令了。**<font color='red'>不过，这些命令通常仅能针对—个文件来压缩与解压缩</font>**，如此—来，每次压缩与解压缩都要—大堆文件，此时，这个所谓的【打包软件，tar】就显得很重要。
+
+tar 可以将很多文件打包成为一个文件，甚至是目录也可以进行打包。不过，单纯的 tar 功能仅是打包而已，即将很多文件结合为—个文件，事实上，它并没有提供压缩的功能，后来， GNU 计划中，将整个 tar 与压缩的功能结合在—起，如此—来提供用户更方便并且更强大的压缩与打包功能。
+
 ### 8.2.1 gzip，zcat/zmore/zless/zgrep
 
-gzip 可以说是应用最广的压缩命令了，目前 gzip 可以解开 compress, zip 与 gzip 等软件所压缩的文件。 至于 gzip 所创建的压缩文件为 *.gz 
+gzip 可以说是应用最广的压缩命令了，目前 gzip 可以解开 compress, zip 与 gzip 等软件所压缩的文件。 gzip 所创建的压缩文件为 *.gz 
 
 ```shell
 [dmtsai@study ~]$ gzip [-cdtv#] 文件名
@@ -4009,52 +4013,67 @@ gzip 可以说是应用最广的压缩命令了，目前 gzip 可以解开 compr
 -# ：# 为数字的意思，代表压缩等级，-1 最快，但是压缩比最差、-9 最慢，但是压缩比最好！默认是 -6
 
 范例一：找出 /etc 下面 （不含子目录） 容量最大的文件，并将它复制到 /tmp ，然后以 gzip 压缩
-[dmtsai@study ~]$ ls -ldSr /etc/*
+[centos.nxb@centos ~]$ ls -ldSr /etc/*
 .....（前面省略）.....
--rw-r--r--. 1 root root 25213 Jun 10 2014 /etc/dnsmasq.conf
--rw-r--r--. 1 root root 69768 May 4 17:55 /etc/ld.so.cache
--rw-r--r--. 1 root root 670293 Jun 7 2013 /etc/services
-[dmtsai@study ~]$ cd /tmp
-[dmtsai@study tmp]$ cp /etc/services .
-[dmtsai@study tmp]$ gzip -v services
-services: 79.7% -- replaced with services.gz
-[dmtsai@study tmp]$ ll /etc/services /tmp/services*
--rw-r--r--. 1 root root 670293 Jun 7 2013 /etc/services
--rw-r--r--. 1 dmtsai dmtsai 136088 Jun 30 18:40 /tmp/services.gz
+-rw-r--r--.  1 root root    26832 Oct 13  2020 /etc/dnsmasq.conf
+-rw-r--r--.  1 root root    80033 Mar 12  2022 /etc/ld.so.cache
+-rw-r--r--.  1 root root   670293 Jun  7  2013 /etc/services
+[centos.nxb@centos ~]$ cd /tmp
+[centos.nxb@centos tmp]$ cp /etc/services .
+[centos.nxb@centos tmp]$ gzip -v services 
+services:	 79.7% -- replaced with services.gz
+[centos.nxb@centos tmp]$ ll /etc/services /tmp/services*
+-rw-r--r--. 1 root       root       670293 Jun  7  2013 /etc/services
+-rw-r--r--. 1 centos.nxb centos.nxb 136088 Oct 12 17:15 /tmp/services.gz
 ```
 
-当你使用gzip进行压缩时，在默认的状态下原本的文件会被压缩成为.gz后缀的文件，**源文件就不再存在了**。
+当你使用 gzip 进行压缩时，在默认的状态下原本的文件会被压缩成为 gz 后缀的文件，**<font color='red'>源文件就不再存在了</font>**。
+
+此外，使用 gzip 压缩的文件在 Windows 系统中，可以被 WinRAR 或 7zip 这些软件解压缩。
+
+cat/more/less 可以使用不同的方式来读取纯文本文件，那个 zcat/zmore/zless 则可以对应于 cat/more/less 的方式来读取纯文本文件被压缩后的压缩文件：
 
 ```shell
 范例二：由于 services 是文本文件，请将范例一的压缩文件的内容读出来！
-[dmtsai@study tmp]$ zcat services.gz
+[centos.nxb@centos tmp]$ zcat services.gz
 # 由于 services 这个原本的文件是是文本文件，因此我们可以尝试使用 zcat/zmore/zless 去读取
 # 此时屏幕上会显示 servcies.gz 解压缩之后的原始文件内容
-
-范例三：将范例一的文件解压缩
-[dmtsai@study tmp]$ gzip -d services.gz
-# 与 gzip 相反， gzip -d 会将原本的 .gz 删除，回复到原本的 services 文件。
-
-范例四：将范例三解开的 services 用最佳的压缩比压缩，并保留原本的文件
-[dmtsai@study tmp]$ gzip -9 -c services > services.gz
-
-范例五：由范例四再次创建的 services.gz 中，找出 http 这个关键字在哪几行？
-[dmtsai@study tmp]$ zgrep -n 'http' services.gz
-14:# http://www.iana.org/assignments/port-numbers
-89:http 80/tcp www www-http # WorldWideWeb HTTP
-90:http 80/udp www www-http # HyperText Transfer Protocol
-.....（下面省略）.....
+sipregistry    687/tcp                 # asipregistry
+asipregistry    687/udp                 # asipregistry
+realm-rusd      688/tcp                 # ApplianceWare managment protocol
+realm-rusd      688/udp                 # ApplianceWare managment protocol
+nmap            689/tcp                 # NMAP
+nmap            689/udp                 # NMAP
+vatp            690/tcp                 # Velazquez Application Transfer Protoco
+.....（后面省略）.....
 ```
 
-* -c 与 > 的使用
+在选项中加入 -d 选项可以将压缩文件解压缩，原本的 .gz 文件会被删除：
 
-  -c可以将原本要转成压缩文件的数据内容，将它变成文字类型从屏幕输出，然后我们可以通过 > 这个符号，将原本应该由屏幕输出的数据，转成输出到文件而不是屏幕，所以就能够建立压缩文件了。
+```shell
+范例三：将范例一的文件解压缩
+[centos.nxb@centos tmp]$ gzip -d services.gz 
+# 与 gzip 相反， gzip -d 会将原本的 .gz 删除，回复到原本的 services 文件。
+```
 
-* zcat/zmore/zless 可以对应于cat/more/less 的方式来读取纯文本文件被压缩后的压缩文件
+另外，如果你还想要从文字压缩文件当中找数据的话，可以通过 zgrep 来查找关键词，而不需要将压缩文件解开才以 grep 进行，这对查询备份中的文本文件数据相当有用：
+
+```shell
+范例五：由 services.gz 中，找出 http 这个关键字在哪几行？
+[centos.nxb@centos tmp]$ zgrep -n 'http' services.gz 
+14:#       http://www.iana.org/assignments/port-numbers
+89:http            80/tcp          www www-http    # WorldWideWeb HTTP
+90:http            80/udp          www www-http    # HyperText Transfer Protocol
+91:http            80/sctp                         # HyperText Transfer Protocol
+197:https           443/tcp                         # http protocol over TLS/SSL
+.....（下面省略）.....
+```
 
 ### 8.2.2 bzip2, bzcat/bzmore/bzless/bzgrep
 
 若说 gzip 是为了取代 compress 并提供更好的压缩比而成立的，那么 bzip2 则是为了取代 gzip 并提供更佳的压缩比而来的。
+
+bzip2 的用法几乎与 gzip 相同：
 
 ```shell
 [dmtsai@study ~]$ bzip2 [-cdkzv#] 文件名
@@ -4062,7 +4081,7 @@ services: 79.7% -- replaced with services.gz
 选项与参数：
 -c ：将压缩的过程产生的数据输出到屏幕上
 -d ：解压缩
--k ：保留原始文件，而不会删除原始的文件
+-k ：保留原始文件，而不会删除原始的文件		⭐
 -z ：压缩 （默认值，可以不加）
 -v ：可以显示出原文件/压缩文件的压缩比等信息；
 -# ：与 gzip 同样的，都是在计算压缩比的参数， -9 最佳， -1 最快！
@@ -4081,18 +4100,15 @@ services: 5.409:1, 1.479 bits/Byte, 81.51% saved, 670293 in, 123932 out.
 
 范例三：将范例一的文件解压缩
 [dmtsai@study tmp]$ bzip2 -d services.bz2
-
-范例四：将范例三解开的 services 用最佳的压缩比压缩，并保留原本的文件
-[dmtsai@study tmp]$ bzip2 -9 -c services > services.bz2
 ```
 
 ### 8.2.3 xz, xzcat/xzmore/xzless/xzgrep
 
-xz 是压缩比更高的软件。
+虽然 bzip2 已经具有很棒的压缩比，不过显然某些自由软件开发者还不满足，因此后来还推出了 xz 这个压缩比更高的软件。这个软件的用法也跟 gzip/bzip2 几乎—模一样：
 
 ```shell
 [dmtsai@study ~]$ xz [-dtlkc#] 文件名
-[dmtsai@study ~]$ xcat 文件名.xz
+[dmtsai@study ~]$ xzcat 文件名.xz
 选项与参数：
 -d ：解压缩
 -t ：测试压缩文件的完整性，看有没有错误
@@ -4101,32 +4117,26 @@ xz 是压缩比更高的软件。
 -c ：同样的，就是将数据由屏幕上输出的意思
 -# ：同样的，也有较佳的压缩比的意思
 
-范例一：将刚刚由 bzip2 所遗留下来的 /tmp/services 通过 xz 来压缩！
-[dmtsai@study tmp]$ xz -v services
-services （1/1）
-100 % 97.3 KiB / 654.6 KiB = 0.149
-[dmtsai@study tmp]$ ls -l services*
--rw-rw-r--. 1 dmtsai dmtsai 123932 Jun 30 19:09 services.bz2
--rw-rw-r--. 1 dmtsai dmtsai 135489 Jun 30 18:46 services.gz
--rw-r--r--. 1 dmtsai dmtsai 99608 Jun 30 18:40 services.xz
+[centos.nxb@centos tmp]$ xz -v services 
+services (1/1)
+  100 %        97.3 KiB / 654.6 KiB = 0.149                                    
+[centos.nxb@centos tmp]$ ls -l services*
+-rw-r--r--. 1 centos.nxb centos.nxb 99608 Oct 12 17:15 services.xz
 # 容量又进一步下降的更多
 
-范例二：列出这个压缩文件的信息，然后读出这个压缩文件的内容
-[dmtsai@study tmp]$ xz -l services.xz
-Strms Blocks Compressed Uncompressed Ratio Check Filename
-1 1 97.3 KiB 654.6 KiB 0.149 CRC64 services.xz
-# 可以列出这个文件的压缩前后的容量
-[dmtsai@study tmp]$ xzcat services.xz
+范例三：将他解压缩
+[centos.nxb@centos tmp]$ xz -d services.xz
 
-范例三：将他解压缩吧
-[dmtsai@study tmp]$ xz -d services.xz
-
-范例四：保留原文件的文件名，并且创建压缩文件！
-[dmtsai@study tmp]$ xz -k services
+范例四：保留原文件的文件名，并且创建压缩文件
+[centos.nxb@centos tmp]$ ll services*
+-rw-r--r--. 1 centos.nxb centos.nxb 670293 Oct 12 17:15 services
+-rw-r--r--. 1 centos.nxb centos.nxb  99608 Oct 12 17:15 services.xz
 ```
 
 ## 8.3 打包命令： tar
-前一小节谈到的命令大多仅能针对单一文件来进行压缩，虽然 gzip，bizip2，xz也能够针对目录来进行压缩，但是，它指的是**将目录内的所有文件分别进行压缩**的操作。这种将多个文件或目录包成一个大文件的命令功能，我们称它是一种**打包命令**。
+前面谈到的命令大多仅能针对单一文件来进行压缩，虽然 gzip，bizip2，xz也能够针对目录来进行压缩，但是，它指的是**<font color='red'>将目录内的所有文件分别进行压缩</font>**的操作。而不像在W indows 的系统，可以使用类似 WinRAR 这—类的压缩软件来将好多数据包成—个文件的样式。
+
+这种将多个文件或目录包成一个大文件的命令功能，我们称它是一种**<font color='blue'>打包命令</font>**。tar 可以将多个目录或文件打包成—个大文件，同时还可以通过 gzip 、bzip2 、xz 的支持，将该文件同时进行压缩。并且由于 tar 的使用太广泛了，目前 Windows 的 WinRAR 也支持 .tar.gz 文件名的解压缩。
 
 ```shell
 [dmtsai@study ~]$ tar [-z|-j|-J] [cv] [-f 待建立的新文件名] filename... <==打包与压缩
@@ -4153,27 +4163,26 @@ Strms Blocks Compressed Uncompressed Ratio Check Filename
 --exclude=FILE：在压缩的过程中，不要将 FILE 打包
 ```
 
-其实最简单的使用tar就只要记住下面的命令即可
+**<font color='red'>其实最简单的使用 tar 就只要记住下面的命令即可</font>**
 
 ```shell
 压　缩：tar -jcv -f filename.tar.bz2 要被压缩的文件或目录名称
 查　询：tar -jtv -f filename.tar.bz2
-解压缩：tar -jxv -f filename.tar.bz2 -C 欲解压缩的目录
+解压缩：tar -jxv -f filename.tar.bz2 -C 欲解压缩到的目录
 ```
 
 注意 tar 并不会主动的产生建立的文件名，我们要通过 -f 选项自定义，所以扩展名就显得很重要了。
 
-#### 使用 tar 加入 -z, -j 或 -J 的参数备份 /etc/ 目录
+#### 使用 tar 加入 -z, -j 或 -J 的参数压缩文件
 
 ```shell
-[dmtsai@study ~]$ su - # 因为备份 /etc 需要 root 的权限，否则会出现一堆错误
-[root@study ~]# time tar -zpcv -f /root/etc.tar.gz /etc
-tar: Removing leading `/' from member names <==注意这个警告信息
+[root@centos ~]# time tar -zpcv -f /root/etc.tar.gz /etc
+tar: Removing leading `/' from member names 		<==注意这个警告信息
 /etc/
 ....（中间省略）....
 /etc/hostname
 /etc/aliases.db
-real 0m0.799s # 多了 time 会显示程序运行的时间！看 real 就好了！花去了 0.799s
+real 0m0.799s 			# 多了 time 会显示程序运行的时间！看 real 就好了！花去了 0.799s
 user 0m0.767s
 sys 0m0.046s
 # 由于加上 -v 这个选项，因此正在作用中的文件名就会显示在屏幕上。
@@ -4182,7 +4191,7 @@ sys 0m0.046s
 [root@study ~]# time tar -jpcv -f /root/etc.tar.bz2 /etc
 ....（前面省略）....
 real 0m1.913s
-user 0m1.881s
+user 0m1.881sll
 sys 0m0.038s
 
 [root@study ~]# time tar -Jpcv -f /root/etc.tar.xz /etc
@@ -4196,11 +4205,9 @@ sys 0m0.086s
 -rw-r--r--. 1 root root 6721809 Jul 1 00:16 /root/etc.tar.bz2
 -rw-r--r--. 1 root root 7758826 Jul 1 00:14 /root/etc.tar.gz
 -rw-r--r--. 1 root root 5511500 Jul 1 00:16 /root/etc.tar.xz
-[root@study ~]# du -sm /etc
-28 /etc # 实际目录约占有 28MB 的意思！
 ```
 
-#### 查看 tar 文件的数据内容 （可查看文件名）
+#### 查看 tar 文件的数据内容
 
 ```shell
 [root@study ~]# tar -jtv -f /root/etc.tar.bz2
@@ -4212,7 +4219,9 @@ sys 0m0.086s
 
 加上 -v 这个选项，详细的文件权限/属性都会被列出来，如果只是想要知道文件名而已，那么就将 -v 拿掉即可。
 
-从上面的数据我们可以发现，每个文件名都没有了根目录。删掉根目录是为了安全，在tar所记录的文件名就是解压缩后实际文件名。如果拿掉了根目录，假设你将备份在 /tmp 解开，那么解压缩的文件名就会变成【/tmp/etc/xxx】。但是如果没有去掉根目录，解压缩后的文件名就会是绝对路径，即解压缩后的数据一定会被放置到 /etc/xxx 去，如此一来，可能会覆盖原本 etc 下面的数据。
+从上面的数据我们可以发现，**<font color='red'>每个文件名都没有了根目录</font>**。
+
+删掉根目录是为了安全，在 tar 所记录的文件名就是解压缩后实际文件名。如果拿掉了根目录，假设你将备份在 /tmp 解开，那么解压缩的文件名就会变成【/tmp/etc/xxx】。但是**<font color='red'>如果没有去掉根目录，解压缩后的文件名就会是绝对路径，即解压缩后的数据一定会被放置到 /etc/xxx 去，如此一来，可能会覆盖原本 etc 下面的数据。</font>**
 
 如果你确定要备份根目录到 tar 的文件中，那可以使用 -P（大写）这个选项
 
@@ -4226,7 +4235,7 @@ sys 0m0.086s
 # 这次查看文件名不含 -v 选项，所以仅有文件名而已，没有详细属性/权限等参数。
 ```
 
-#### 将备份的数据解压缩，并考虑特定目录的解压缩动作 （-C 选项的应用）
+#### 解压缩，并考虑解压到特定的目录 （-C 选项的应用）
 
 ```shell
 [root@study ~]# tar -jxv -f /root/etc.tar.bz2
@@ -4248,7 +4257,7 @@ drwxr-xr-x. 131 root root 8192 Jun 26 22:14 etc
 
 #### 仅解开单一文件的方法
 
-解开打包文件内的其中一个文件
+解开打包文件内的其中一个文件，只需要在【tar -jxv -f filename.tar.bz2】后面接上想要解开的文件名即可，可通过管道来找到对应的文件名，并注意文件名中不含有 / ：
 
 ```shell
 # 1. 先找到我们要的文件名，假设解开 shadow 文件：
@@ -4279,7 +4288,7 @@ total 4
 
 #### 仅备份比某个时刻还要新的文件
 
-有两个选项，一个是“ --newer ”另一个就是“ --newer-mtime ”，当使用“ --newer ”时，表示后续的日期包含“ mtime 与 ctime ”，而 “--newer-mtime” 则仅是 mtime 而已
+有两个选项，一个是 “ --newer ” 另一个就是 “ --newer-mtime ”，当使用 “ --newer ” 时，表示后续的日期包含 “ mtime 与 ctime ”，而  “--newer-mtime”  则仅是 mtime 而已
 
 ```shell
 # 1. 先由 find 找出比 /etc/passwd 还要新的文件
@@ -4288,6 +4297,7 @@ total 4
 # 此时会显示出比 /etc/passwd 这个文件的 mtime 还要新的文件名
 [root@study ~]# ll /etc/passwd
 -rw-r--r--. 1 root root 2092 Jun 17 00:20 /etc/passwd
+
 # 2. 好了，那么使用 tar 来进行打包吧！日期为上面看到的 2015/06/17
 [root@study ~]# tar -jcv -f /root/etc.newer.then.passwd.tar.bz2 \
 > --newer-mtime="2015/06/17" /etc/*
@@ -4300,22 +4310,17 @@ tar: Removing leading `/' from member names
 ....（中间省略）....
 tar: /etc/yum.repos.d/CentOS-fasttrack.repo: file is unchanged; not dumped
 # 最后行显示的是“没有被备份的”，亦即 not dumped 的意思！
-# 3. 显示出文件即可
-[root@study ~]# tar -jtv -f /root/etc.newer.then.passwd.tar.bz2 | grep -v '/$'
-# 通过这个命令可以调用出 tar.bz2 内的结尾非 / 的文件名,就是我们要的
 ```
 
 #### 基本名称： tarfile, tarball
 
-如果仅是打包而已，就是“ tar -cv -f file.tar ”，这个文件我们称呼为 tarfile。
+如果仅是打包而已，就是 【tar -cv -f file.tar】，这个文件我们称呼为 **<font color='blue'>tarfile</font>**。
 
-如果还有进行压缩的支持，例如“ tar -jcv -f file.tar.bz2 ”时，我们就称呼为 tarball。
+如果还有进行压缩的支持，例如【tar -jcv -f file.tar.bz2】时，我们就称呼为 **<font color='blue'>tarball</font>**。
 
-此外，tar 除了可以将数据打包成为文件之外，还能够将文件打包到某些特别的设备中去，举例来说， 磁带机（tape） 就是一个常见的例子。磁带由于是一次性读取/写入的设备，因此我们不能够使用类似 cp 等指令来复制， 那如果想要将 /home, /root, /etc 备份到磁带（/dev/st0） 时，就可以使用：
+#### ⭐特殊应用：利用管道命令与数据流模拟 cp
 
-“tar -cv -f /dev/st0 /home /root /etc”
-
-#### 特殊应用：利用管线命令与数据流
+在 tar 的使用中，有—种方式最特殊，那就是通过标准输入输出的数据流重定向，以及管道命令的方式，将待处理的文件—边打包—边解压缩到目标目录：
 
 ```shell
 # 1. 将 /etc 整个目录一边打包一边在 /tmp 解开
@@ -4323,19 +4328,21 @@ tar: /etc/yum.repos.d/CentOS-fasttrack.repo: file is unchanged; not dumped
 [root@study tmp]# tar -cvf - /etc | tar -xvf -
 # 这个动作有点像是 cp -r /etc /tmp ,依旧是有其用途的
 # 要注意的地方在于输出文件变成 - 而输入文件也变成 - ，又有一个 | 存在
-# 这分别代表 standard output, standard input 与管线命令
+# 这分别代表 standard output, standard input 与管道命令
 # 简单的想法中，你可以将 - 想成是在内存中的一个设备（缓冲区）。
 ```
 
 ## 8.4 XFS 文件系统的备份与还原
 
-#### 8.4.1 XFS 文件系统备份 xfsdump
+使用 tar 通常是针对**<font color='red'>目录树系统</font>**来进行备份的工作，那么如果想要针对整个**<font color='red'>文件系统</font>**来进行备份与还原，就需要用到 xfsdump 和 xfsrestore 两个命令
 
-xfsdump 除了可以进行文件系统的*完整备份*之外，还可以进行*增量备份*。假设你的 /home 是独立的一个文件系统，那你在第一次使用 xfsdump 进行完整备份后，等过一段时间的文件系统自然运行后， 你再进行第二次 xfsdump 时，就可以选择增量备份了，此时新备份的数据只会记录与第一次完整备份有所差异的文件。
+### 8.4.1 XFS 文件系统备份 xfsdump
+
+xfsdump 除了可以进行文件系统的**<font color='blue'>完整备份</font>**之外，还可以进行**<font color='blue'>增量备份</font>**。假设你的 /home 是独立的一个文件系统，那你在第一次使用 xfsdump 进行完整备份后，等过一段时间的文件系统自然运行后， 你再进行第二次 xfsdump 时，就可以选择增量备份了，**<font color='red'>此时新备份的数据只会记录与第一次完整备份有所差异的文件。</font>**
 
  ![image-20220402210119951](images\image-20220402210119951.png)
 
-上方的“实时文件系统”是一直随着时间而变化的数据，例如在 /home 里面的文件数据会一直变化一样。 而下面的方块则是 xfsdump 备份起来的数据，第一次备份一定是完整备份，完整备份在 xfsdump 当中被定义为 level 0 ，等到第二次备份时，/home 文件系统内的数据已经与 level 0 不一样了，而 level 1 仅只是比较目前的文件系统与 level 0 之间的差异后，备份有变化过的文件而已。**至于 level 2 则是与 level 1 进行比较**。
+上方的 “实时文件系统” 是一直随着时间而变化的数据，例如在 /home 里面的文件数据会一直变化一样。 而下面的方块则是 xfsdump 备份起来的数据，第一次备份一定是完整备份，完整备份在 xfsdump 当中被定义为 level 0 ，等到第二次备份时，/home 文件系统内的数据已经与 level 0 不一样了，而 level 1 仅只是比较目前的文件系统与 level 0 之间的差异后，备份有变化过的文件而已。**至于 level 2 则是与 level 1 进行比较**。
 
 使用 xfsdump 的限制：
 
@@ -4356,125 +4363,179 @@ xfsdump 除了可以进行文件系统的*完整备份*之外，还可以进行*
 -I ：从 /var/lib/xfsdump/inventory 列出目前备份的信息状态
 ```
 
-##### 用 xfsdump 备份完整的文件系统**
+特别注意， xfsdump 默认仅支持文件系统的备份，并不支持特定目录的备份，所以你不能用 xfsdump 去备份 /etc，因为 /etc 从来就不是一个独立的文件系统。
+
+#### 用 xfsdump 备份完整的文件系统
 
 ```shell
 # 1. 先确定 /boot 是独立的文件系统
-[root@study ~]# df -h /boot
-Filesystem Size Used Avail Use% Mounted on
-/dev/vda2 1014M 131M 884M 13% /boot # 挂载 /boot 的是 /dev/vda 设备
+[root@centos ~]# df -h /boot
+Filesystem      Size  Used Avail Use% Mounted on
+/dev/sda2      1014M  172M  843M  17% /boot
 # 确实是独立的文件系统喔 /boot 是挂载点
+
 # 2. 将完整备份的文件名记录成为 /srv/boot.dump ：
-[root@study ~]# xfsdump -l 0 -L boot_all -M boot_all -f /srv/boot.dump /boot
-xfsdump -l 0 -L boot_all -M boot_all -f /srv/boot.dump /boot
-xfsdump: using file dump （drive_simple） strategy
-xfsdump: version 3.1.4 （dump format 3.0） - type ^C for status and control
-xfsdump: level 0 dump of study.centos.vbird:/boot 			# 开始备份本机/boot
-xfsdump: dump date: Wed Jul 1 18:43:04 2015 # 备份的时间
-xfsdump: session id: 418b563f-26fa-4c9b-98b7-6f57ea0163b1 	# 这次dump的ID
-xfsdump: session label: "boot_all" 							# 简单给予一个名称
-xfsdump: ino map phase 1: constructing initial dump list 	# 开始备份程序
-xfsdump: ino map phase 2: skipping （no pruning necessary）
-xfsdump: ino map phase 3: skipping （only one dump stream）
+[root@centos ~]# xfsdump -l 0 -L boot_all -M boot_all -f /srv/boot.dump /boot
+xfsdump: using file dump (drive_simple) strategy
+xfsdump: version 3.1.7 (dump format 3.0) - type ^C for status and control
+xfsdump: level 0 dump of centos.nxb:/boot					# 开始备份本机 /boot
+xfsdump: dump date: Thu Oct 13 10:44:16 2022				# 备份的时间
+xfsdump: session id: 78181c18-bb97-405d-ace5-8f1a489e3cf9	# 这次dump的ID
+xfsdump: session label: "boot_all"							# 给予的名称
+xfsdump: ino map phase 1: constructing initial dump list	# 开始备份程序
+xfsdump: ino map phase 2: skipping (no pruning necessary)
+xfsdump: ino map phase 3: skipping (only one dump stream)
 xfsdump: ino map construction complete
-xfsdump: estimated dump size: 103188992 Bytes
-xfsdump: creating dump session media file 0 （media 0, file 0）
+xfsdump: estimated dump size: 145798784 bytes
+xfsdump: /var/lib/xfsdump/inventory created
+xfsdump: creating dump session media file 0 (media 0, file 0)
 xfsdump: dumping ino map
 xfsdump: dumping directories
 xfsdump: dumping non-directory files
 xfsdump: ending media file
-xfsdump: media file size 102872168 Bytes
-xfsdump: dump size （non-dir files） : 102637296 Bytes
+xfsdump: media file size 145478752 bytes
+xfsdump: dump size (non-dir files) : 145237176 bytes
 xfsdump: dump complete: 1 seconds elapsed
 xfsdump: Dump Summary:
-xfsdump: stream 0 /srv/boot.dump OK （success）
+xfsdump:   stream 0 /srv/boot.dump OK (success)
 xfsdump: Dump Status: SUCCESS
-# 在命令的执行方面，你也可以不加 -L 及 -M 的，只是那就会进入交互模式，要求你 enter！
-[root@study ~]# ll /srv/boot.dump
--rw-r--r--. 1 root root 102872168 Jul 1 18:43 /srv/boot.dump
-[root@study ~]# ll /var/lib/xfsdump/inventory
--rw-r--r--. 1 root root 5080 Jul 1 18:43 506425d2-396a-433d-9968-9b200db0c17c.StObj
--rw-r--r--. 1 root root 312 Jul 1 18:43 94ac5f77-cb8a-495e-a65b-2ef7442b837c.InvIndex
--rw-r--r--. 1 root root 576 Jul 1 18:43 fstab
-# 使用了 xfsdump 之后才会有上述 /var/lib/xfsdump/inventory 内的文件产生
+[root@centos ~]# ll /srv/boot.dump 
+-rw-r--r--. 1 root root 145478752 Oct 13 10:44 /srv/boot.dump
 ```
 
-##### 用 xfsdump 进行增量备份 
+#### 用 xfsdump 进行增量备份 
+
+你—定要进行过完整备份后（ - I 0）才能够继续有其他增量备份（ -1 1 - 9）的能力
 
 ```shell
 # 0. 看一下有没有任何文件系统被 xfsdump 过的数据？
-[root@study ~]# xfsdump -I
+[root@centos ~]# xfsdump -I
 file system 0:
-fs id: 94ac5f77-cb8a-495e-a65b-2ef7442b837c
-session 0:
-mount point: study.centos.vbird:/boot
-device: study.centos.vbird:/dev/vda2
-time: Wed Jul 1 18:43:04 2015
-session label: "boot_all"
-session id: 418b563f-26fa-4c9b-98b7-6f57ea0163b1
-level: 0
-resumed: NO
-subtree: NO
-streams: 1
-stream 0:
-pathname: /srv/boot.dump
-start: ino 132 offset 0
-end: ino 2138243 offset 0
-interrupted: NO
-media files: 1
-media file 0:
-mfile index: 0
-mfile type: data
-mfile size: 102872168
-mfile start: ino 132 offset 0
-mfile end: ino 2138243 offset 0
-media label: "boot_all"
-media id: a6168ea6-1ca8-44c1-8d88-95c863202eab
+	fs id:		222a6355-76d2-4d0e-a2b4-5321da8276c5
+	session 0:
+		mount point:	centos.nxb:/boot
+		device:		centos.nxb:/dev/sda2
+		time:		Thu Oct 13 10:44:16 2022
+		session label:	"boot_all"
+		session id:	78181c18-bb97-405d-ace5-8f1a489e3cf9
+		level:		0
+		resumed:	NO
+		subtree:	NO
+		streams:	1
+		stream 0:
+			pathname:	/srv/boot.dump
+			start:		ino 69 offset 0
+			end:		ino 1577745 offset 0
+			interrupted:	NO
+			media files:	1
+			media file 0:
+				mfile index:	0
+				mfile type:	data
+				mfile size:	145478752
+				mfile start:	ino 69 offset 0
+				mfile end:	ino 1577745 offset 0
+				media label:	"boot_all"
+				media id:	0935adb7-d451-4191-b95e-28bf32c74483
 xfsdump: Dump Status: SUCCESS
 # 我们可以看到目前仅有一个 session 0 的备份数据而已,而且是 level 0
+
 # 1. 创建一个大约 10 MB 的文件在 /boot 内：
-[root@study ~]# dd if=/dev/zero of=/boot/testing.img bs=1M count=10
+[root@centos ~]# dd if=/dev/zero of=/boot/testing.img bs=1M count=10
 10+0 records in
 10+0 records out
 10485760 Bytes （10 MB） copied, 0.166128 seconds, 63.1 MB/s
+
 # 2. 开始创建差异备份文件，此时我们使用 level 1 吧：
-[root@study ~]# xfsdump -l 1 -L boot_2 -M boot_2 -f /srv/boot.dump1 /boot
-....（中间省略）....
-[root@study ~]# ll /srv/boot*
--rw-r--r--. 1 root root 102872168 Jul 1 18:43 /srv/boot.dump
--rw-r--r--. 1 root root 10510952 Jul 1 18:46 /srv/boot.dump1
-# 看看文件大小，岂不是就是刚刚我们所创建的那个大文件的容量吗？
+[root@centos ~]# xfsdump -l 2 -L boot_2 -M boot_2 -f /srv/boot.dump1 /boot
+xfsdump: using file dump (drive_simple) strategy
+xfsdump: version 3.1.7 (dump format 3.0) - type ^C for status and control
+xfsdump: level 2 incremental dump of centos.nxb:/boot based on level 0 dump begun Thu Oct 13 10:44:16 2022
+xfsdump: dump date: Thu Oct 13 11:16:55 2022
+xfsdump: session id: 09b06196-3623-4bf9-bb80-650d6aa6a369
+xfsdump: session label: "boot_2"
+xfsdump: ino map phase 1: constructing initial dump list
+xfsdump: ino map phase 2: pruning unneeded subtrees
+xfsdump: ino map phase 3: skipping (only one dump stream)
+xfsdump: ino map construction complete
+xfsdump: estimated dump size: 10506880 bytes
+xfsdump: creating dump session media file 0 (media 0, file 0)
+xfsdump: dumping ino map
+xfsdump: dumping directories
+xfsdump: dumping non-directory files
+xfsdump: ending media file
+xfsdump: media file size 10510952 bytes
+xfsdump: dump size (non-dir files) : 10488408 bytes
+xfsdump: dump complete: 0 seconds elapsed
+xfsdump: Dump Summary:
+xfsdump:   stream 0 /srv/boot.dump1 OK (success)
+xfsdump: Dump Status: SUCCESS
+[root@centos ~]# ll /srv/boot*
+-rw-r--r--. 1 root root 145478752 Oct 13 10:44 /srv/boot.dump
+-rw-r--r--. 1 root root  10510952 Oct 13 11:16 /srv/boot.dump1
+# 看看文件大小，岂不是就是刚刚我们所创建的那个大文件的容量吗
+
 # 3. 最后再看一下是否有记录 level 1 备份的时间点呢？
-[root@study ~]# xfsdump -I
+[root@centos ~]# xfsdump -I
 file system 0:
-fs id: 94ac5f77-cb8a-495e-a65b-2ef7442b837c
-session 0:
-mount point: study.centos.vbird:/boot
-device: study.centos.vbird:/dev/vda2
-....（中间省略）....
-session 1:
-mount point: study.centos.vbird:/boot
-device: study.centos.vbird:/dev/vda2
-time: Wed Jul 1 18:46:21 2015
-session label: "boot_2"
-session id: c71d1d41-b3bb-48ee-bed6-d77c939c5ee8
-level: 1
-resumed: NO
-subtree: NO
-streams: 1
-stream 0:
-pathname: /srv/boot.dump1
-start: ino 455518 offset 0
-....（下面省略）....
+	fs id:		222a6355-76d2-4d0e-a2b4-5321da8276c5
+	session 0:
+		mount point:	centos.nxb:/boot
+		device:		centos.nxb:/dev/sda2
+		time:		Thu Oct 13 10:44:16 2022
+		session label:	"boot_all"
+		session id:	78181c18-bb97-405d-ace5-8f1a489e3cf9
+		level:		0
+		resumed:	NO
+		subtree:	NO
+		streams:	1
+		stream 0:
+			pathname:	/srv/boot.dump
+			start:		ino 69 offset 0
+			end:		ino 1577745 offset 0
+			interrupted:	NO
+			media files:	1
+			media file 0:
+				mfile index:	0
+				mfile type:	data
+				mfile size:	145478752
+				mfile start:	ino 69 offset 0
+				mfile end:	ino 1577745 offset 0
+				media label:	"boot_all"
+				media id:	0935adb7-d451-4191-b95e-28bf32c74483
+	session 1:
+		mount point:	centos.nxb:/boot
+		device:		centos.nxb:/dev/sda2
+		time:		Thu Oct 13 11:16:55 2022
+		session label:	"boot_2"
+		session id:	09b06196-3623-4bf9-bb80-650d6aa6a369
+		level:		2
+		resumed:	NO
+		subtree:	NO
+		streams:	1
+		stream 0:
+			pathname:	/srv/boot.dump1
+			start:		ino 113 offset 0
+			end:		ino 114 offset 0
+			interrupted:	NO
+			media files:	1
+			media file 0:
+				mfile index:	0
+				mfile type:	data
+				mfile size:	10510952
+				mfile start:	ino 113 offset 0
+				mfile end:	ino 114 offset 0
+				media label:	"boot_2"
+				media id:	9b647d05-9ebc-4579-8f4f-c3edb0879b62
+xfsdump: Dump Status: SUCCESS
 ```
 
-#### 8.4.2 XFS 文件系统还原 xfsrestore
+### 8.4.2 XFS 文件系统还原 xfsrestore
 
 ```shell
 [root@study ~]# xfsrestore -I <==用来查看备份文件
-[root@study ~]# xfsrestore [-f 备份文件] [-L S_label] [-s] 待复原目录 <==单一文件全系统恢复
-[root@study ~]# xfsrestore [-f 备份文件] -r 待复目录 <==通过增量备份文件来恢复系统
-[root@study ~]# xfsrestore [-f 备份文件] -i 待复目录 <==进入交互模式
+[root@study ~]# xfsrestore [-f 备份文件] [-L S_label] [-s] 待复原目录 	<==单一文件全系统恢复
+[root@study ~]# xfsrestore [-f 备份文件] -r 待复目录 					<==通过增量备份文件来恢复系统
+[root@study ~]# xfsrestore [-f 备份文件] -i 待复目录 					<==进入交互模式
 选项与参数：
 -I ：跟 xfsdump 相同的输出。可查询备份数据，包括 Label 名称与备份时间等
 -f ：后面接的就是备份文件，企业界很有可能会接 /dev/st0 等磁带机，我们这里接文件名。
@@ -4484,278 +4545,234 @@ start: ino 455518 offset 0
 -i ：进入交互模式，高级管理员使用的，一般我们不太需要操作它
 ```
 
-##### 用 xfsrestore 观察 xfsdump 后的备份数据内容
+#### 用 xfsrestore 观察 xfsdump 后的备份数据内容
+
+要找出 xfsdump 的内容就使用 xfsrestore -I 来查看即可，不需要加任何参数，因 为 xfsdump 与 xfsrestore 都会到 /var/libfxfsdump/inventory/ 里面去取数据来显示，因此两者输出是相同的:
 
 ```shell
-[root@study ~]# xfsrestore -I
+[root@centos ~]# xfsrestore -I
 file system 0:
-fs id: 94ac5f77-cb8a-495e-a65b-2ef7442b837c
-session 0:
-mount point: study.centos.vbird:/boot
-device: study.centos.vbird:/dev/vda2
-time: Wed Jul 1 18:43:04 2015
-session label: "boot_all"
-session id: 418b563f-26fa-4c9b-98b7-6f57ea0163b1
-level: 0
-pathname: /srv/boot.dump
-mfile size: 102872168
-media label: "boot_all"
-session 1:
-mount point: study.centos.vbird:/boot
-device: study.centos.vbird:/dev/vda2
-time: Wed Jul 1 18:46:21 2015
-session label: "boot_2"
-session id: c71d1d41-b3bb-48ee-bed6-d77c939c5ee8
-level: 1
-pathname: /srv/boot.dump1
-mfile size: 10510952
-media label: "boot_2"
+	fs id:		222a6355-76d2-4d0e-a2b4-5321da8276c5
+	session 0:
+		mount point:	centos.nxb:/boot
+		device:		centos.nxb:/dev/sda2
+		time:		Thu Oct 13 10:44:16 2022
+		session label:	"boot_all"
+		session id:	78181c18-bb97-405d-ace5-8f1a489e3cf9
+		level:		0
+		resumed:	NO
+		subtree:	NO
+		streams:	1
+		stream 0:
+			pathname:	/srv/boot.dump
+			start:		ino 69 offset 0
+			end:		ino 1577745 offset 0
+			interrupted:	NO
+			media files:	1
+			media file 0:
+				mfile index:	0
+				mfile type:	data
+				mfile size:	145478752
+				mfile start:	ino 69 offset 0
+				mfile end:	ino 1577745 offset 0
+				media label:	"boot_all"
+				media id:	0935adb7-d451-4191-b95e-28bf32c74483
+	session 1:
+		mount point:	centos.nxb:/boot
+		device:		centos.nxb:/dev/sda2
+		time:		Thu Oct 13 11:16:55 2022
+		session label:	"boot_2"
+		session id:	09b06196-3623-4bf9-bb80-650d6aa6a369
+		level:		2
+		resumed:	NO
+		subtree:	NO
+		streams:	1
+		stream 0:
+			pathname:	/srv/boot.dump1
+			start:		ino 113 offset 0
+			end:		ino 114 offset 0
+			interrupted:	NO
+			media files:	1
+			media file 0:
+				mfile index:	0
+				mfile type:	data
+				mfile size:	10510952
+				mfile start:	ino 113 offset 0
+				mfile end:	ino 114 offset 0
+				media label:	"boot_2"
+				media id:	9b647d05-9ebc-4579-8f4f-c3edb0879b62
 xfsrestore: Restore Status: SUCCESS
 # 我们可以看到这个文件系统是 /boot 载点，然后有两个备份，一个 level 0 一个 level 1。
 # 也看到这两个备份的数据的内容大小,更重要的，就是那个 session label
 ```
 
-##### 简单恢复 level 0 的文件系统
+#### 简单恢复 level 0 的文件系统
+
+我们只要知道想要被恢复的那个文件，以及该文件的 session label name，就可以恢复，我们从上面的观察已经知道 level 0 的 session label 是【boot_all 】
 
 ```shell
 # 1. 直接将数据给它覆盖回去即可。
-[root@study ~]# xfsrestore -f /srv/boot.dump -L boot_all /boot
-xfsrestore: using file dump （drive_simple） strategy
-xfsrestore: version 3.1.4 （dump format 3.0） - type ^C for status and control
+[root@centos ~]# xfsrestore -f /srv/boot.dump -L boot_all /boot
+xfsrestore: using file dump (drive_simple) strategy
+xfsrestore: version 3.1.7 (dump format 3.0) - type ^C for status and control
 xfsrestore: using online session inventory
 xfsrestore: searching media for directory dump
 xfsrestore: examining media file 0
 xfsrestore: reading directories
-xfsrestore: 8 directories and 327 entries processed
+xfsrestore: 11 directories and 337 entries processed
+xfsrestore: directory post-processing
+xfsrestore: restoring non-directory files
+xfsrestore: restore complete: 0 seconds elapsed
+xfsrestore: Restore Summary:
+xfsrestore:   stream 0 /srv/boot.dump OK (success)
+xfsrestore: Restore Status: SUCCESS
+
+[root@centos ~]# ll /boot/testing.img 
+-rw-r--r--. 1 root root 10485760 Oct 13 11:13 /boot/testing.img	# /boot/testing.img 竟然还在里面！
+```
+
+因为原本 /boot 里面的东西我们没有删除，直接恢复的结果就是：**<font color='red'>同名的文件会被覆盖，其他系统内新的文件会被保留。</font>**所以，那个 /boot/testing.img 就会—直在里面，如果备份的目的地是新的位置，当然就只有原本备份的数据而已。
+
+#### 恢复增量备份数据
+
+其实恢复增量备份与恢复单一文件系统相似。如果备份数据是由 level 0 -> level 1 -> level 2 去进行的，当然恢复就得要相同的流程来恢复。因此我们需要先恢复了level 0 之后，再恢复level 1 到系统内：
+
+```shell
+[root@centos ~]# mkdir /tmp/boot
+[root@centos ~]# xfsrestore -f /srv/boot.dump -L boot_all /tmp/boot
+xfsrestore: using file dump (drive_simple) strategy
+xfsrestore: version 3.1.7 (dump format 3.0) - type ^C for status and control
+xfsrestore: using online session inventory
+xfsrestore: searching media for directory dump
+xfsrestore: examining media file 0
+xfsrestore: reading directories
+xfsrestore: 11 directories and 337 entries processed
 xfsrestore: directory post-processing
 xfsrestore: restoring non-directory files
 xfsrestore: restore complete: 1 seconds elapsed
 xfsrestore: Restore Summary:
-xfsrestore: stream 0 /srv/boot.dump OK （success） # 是否是正确的文件？
+xfsrestore:   stream 0 /srv/boot.dump OK (success)
 xfsrestore: Restore Status: SUCCESS
-# 2. 将备份数据在 /tmp/boot 下面解开！
-[root@study ~]# mkdir /tmp/boot
-[root@study ~]# xfsrestore -f /srv/boot.dump -L boot_all /tmp/boot
+# testing.img 不在备份当中
+[root@centos ~]# ll /tmp/boot/testing.img
+ls: cannot access /tmp/boot/testing.img: No such file or directory
+
+# 恢复 level 1 到 /tmp/boot 当中
+[root@centos ~]# xfsrestore -f /srv/boot.dump1  /tmp/boot
+xfsrestore: using file dump (drive_simple) strategy
+xfsrestore: version 3.1.7 (dump format 3.0) - type ^C for status and control
+xfsrestore: searching media for dump
+xfsrestore: examining media file 0
+xfsrestore: dump description: 
+xfsrestore: hostname: centos.nxb
+xfsrestore: mount point: /boot
+xfsrestore: volume: /dev/sda2
+xfsrestore: session time: Thu Oct 13 11:16:55 2022
+xfsrestore: level: 2
+xfsrestore: session label: "boot_2"
+xfsrestore: media label: "boot_2"
+xfsrestore: file system id: 222a6355-76d2-4d0e-a2b4-5321da8276c5
+xfsrestore: session id: 09b06196-3623-4bf9-bb80-650d6aa6a369
+xfsrestore: media id: 9b647d05-9ebc-4579-8f4f-c3edb0879b62
+xfsrestore: using online session inventory
+xfsrestore: searching media for directory dump
+xfsrestore: reading directories
+xfsrestore: 1 directories and 12 entries processed
+xfsrestore: directory post-processing
+xfsrestore: restoring non-directory files
+xfsrestore: restore complete: 0 seconds elapsed
+xfsrestore: Restore Summary:
+xfsrestore:   stream 0 /srv/boot.dump1 OK (success)
+xfsrestore: Restore Status: SUCCESS
+# testing.img 出现在备份当中
+[root@centos ~]# ll /tmp/boot/testing.img
+-rw-r--r--. 1 root root 10485760 Oct 13 11:13 /tmp/boot/testing.img
 ```
 
-##### 恢复增量备份数据
+#### 仅还原部分文件的 xfsrestore 交互模式
 
-```shell
-# 继续恢复 level 1 到 /tmp/boot 当中！
-[root@study ~]# xfsrestore -f /srv/boot.dump1 /tmp/boot
-```
+如果只想还原备份文件中的部分数据，可以利用 -s 选项，但是，如果根本不知道备份文件里面有啥文件，就没办法了，此时可以就通过 -i 这个交互界面。
 
-##### 仅还原部分文件的 xfsrestore 交互模式
-
-刚刚的 -s 可以接部分数据来还原，但是，如果我们根本不知道备份文件里面有啥文件，就可以通过 -i 这个交互界面来完成。
+举例来说，我们想要知道 level0 的备份数据里面有哪些东西，然后再少量的还原回来的话，可以这样做：
 
 ```shell
 # 1. 先进入备份文件内，找出需要备份的文件，同时预计还原到 /tmp/boot3 当中
-[root@study ~]# mkdir /tmp/boot3
-[root@study ~]# xfsrestore -f /srv/boot.dump -i /tmp/boot3
-========================== subtree selection dialog ==========================
+[root@centos ~]# mkdir /tmp/boot3
+[root@centos ~]# xfsrestore -f /srv/boot.dump -i /tmp/boot3
+xfsrestore: using file dump (drive_simple) strategy
+xfsrestore: version 3.1.7 (dump format 3.0) - type ^C for status and control
+xfsrestore: searching media for dump
+xfsrestore: examining media file 0
+xfsrestore: dump description: 
+xfsrestore: hostname: centos.nxb
+xfsrestore: mount point: /boot
+xfsrestore: volume: /dev/sda2
+xfsrestore: session time: Thu Oct 13 10:44:16 2022
+xfsrestore: level: 0
+xfsrestore: session label: "boot_all"
+xfsrestore: media label: "boot_all"
+xfsrestore: file system id: 222a6355-76d2-4d0e-a2b4-5321da8276c5
+xfsrestore: session id: 78181c18-bb97-405d-ace5-8f1a489e3cf9
+xfsrestore: media id: 0935adb7-d451-4191-b95e-28bf32c74483
+xfsrestore: using online session inventory
+xfsrestore: searching media for directory dump
+xfsrestore: reading directories
+xfsrestore: 11 directories and 337 entries processed
+xfsrestore: directory post-processing
+
+ ========================== subtree selection dialog ==========================
+
 the following commands are available:
-pwd
-ls [ <path> ]
-cd [ <path> ]
-add [ <path> ] # 可以加入恢复文件列表中
-delete [ <path> ] # 从恢复列表拿掉文件名，并非删除
-extract # 开始恢复操作
-quit
-help
--> ls
-	455517 initramfs-3.10.0-229.el7.x86_64kdump.img
-	138 initramfs-3.10.0-229.el7.x86_64.img
-	141 initrd-plymouth.img
-	140 vmlinuz-0-rescue-309eb890d09f440681f596543d95ec7a
-	139 initramfs-0-rescue-309eb890d09f440681f596543d95ec7a.img
-	137 vmlinuz-3.10.0-229.el7.x86_64
-	136 symvers-3.10.0-229.el7.x86_64.gz
-	135 config-3.10.0-229.el7.x86_64
-	134 System.map-3.10.0-229.el7.x86_64
-	133 .vmlinuz-3.10.0-229.el7.x86_64.hmac
-	1048704 grub2/
-	131 grub/
--> add grub
--> add grub2
--> add config-3.10.0-229.el7.x86_64
--> extract
-[root@study ~]# ls -l /tmp/boot3
--rw-r--r--. 1 root root 123838 Mar 6 19:45 config-3.10.0-229.el7.x86_64
-drwxr-xr-x. 2 root root 26 May 4 17:52 grub
-drwxr-xr-x. 6 root root 104 Jun 25 00:02 grub2
-# 就只会有 3 个文件名被恢复，当然，如果文件名是目录，那下面的子文件当然也会被还原回来的
+	pwd 
+	ls [ <path> ]
+	cd [ <path> ]
+	add [ <path> ]			# 加入到恢复文件列表中
+	delete [ <path> ]		# 从恢复列表中删掉文件
+	extract 				# 开始恢复操作
+	quit 
+	help 
+
+ -> ls
+              75 initramfs-3.10.0-1160.el7.x86_64.img 
+              77 vmlinuz-0-rescue-0aa18f4088fa46dba63e92ae3c067ef9 
+              76 initramfs-0-rescue-0aa18f4088fa46dba63e92ae3c067ef9.img 
+              74 vmlinuz-3.10.0-1160.el7.x86_64 
+              73 symvers-3.10.0-1160.el7.x86_64.gz 
+              72 config-3.10.0-1160.el7.x86_64 
+              71 System.map-3.10.0-1160.el7.x86_64 
+              70 .vmlinuz-3.10.0-1160.el7.x86_64.hmac 
+              68 grub/
+         1572928 grub2/
+              67 efi/
+
+ -> add grub	
+
+ -> add grub2
+
+ -> add config-3.10.0-1160.el7.x86_64 
+
+ -> extract
+
+ --------------------------------- end dialog ---------------------------------
+
+xfsrestore: restoring non-directory files
+xfsrestore: restore complete: 113 seconds elapsed
+xfsrestore: Restore Summary:
+xfsrestore:   stream 0 /srv/boot.dump OK (success)
+xfsrestore: Restore Status: SUCCESS
+[root@centos ~]# ll /tmp/boot3
+total 152
+-rw-r--r--. 1 root root 153591 Oct 20  2020 config-3.10.0-1160.el7.x86_64
+drwxr-xr-x. 2 root root     27 Mar 12  2022 grub
+drwx------. 5 root root     97 Mar 12  2022 grub2
+# 只会有 3 个文件名被恢复，当然，如果文件名是目录，那下面的子文件当然也会被还原回来的
 ```
 
-## 8.5 光盘写入工具
+## 8.5 其他常见的压缩与备份工具
 
-命令行模式的刻录操作通常是：
+### 8.5.1 dd
 
-* 先将所需备份的数据创建成为一个镜像文件（iso），利用 mkisofs 命令来处理
-* 将该镜像文件刻录至CD或DVD当中，利用cdrecord命令来处理
-
-### 8.5.1 mkisofs：创建镜像文件
-
-#### 制作一般数据光盘镜像文件
-
-```shell
-[root@study ~]# mkisofs [-o 镜像文件] [-Jrv] [-V vol] [-m file] 待备份文件... \
-> -graft-point isodir=systemdir ...
-选项与参数：
--o ：后面接你想要产生的那个镜像文件文件名。
--J ：产生较兼容于 windows 机器的文件名结构，可增加文件名长度到 64 个 unicode 字符
--r ：通过 Rock Ridge 产生支持 Unix/Linux 的文件数据，可记录较多的信息（如 UID/GID等） ；
--v ：显示创建 ISO文件的过程
--V vol ：创建 Volume，有点像 Windows 在文件资源管理器内看到的 CD 卷标
--m file ：-m 为排除文件 （exclude） 的意思，后面的文件不备份到镜像文件中，也能使用 * 通配符
--graft-point：graft有转嫁或移植的意思，相关内容在下面文章内说明。
-```
-
-光盘的格式一般称为 iso9660 ，这种格式一般仅支持旧版的 DOS 文件名，亦即文件名只能以 8.3 （文件名8个字符，扩展名3个字符） 的方式存在。如果加上 -r 的选项之后，那么文件信息能够被记录的比较完整，可包括UID/GID与权限等等！ 所以，记得加这个 -r 的选项。
-
-一般默认的情况下，所有要被加到镜像文件中的文件都会被放置到镜像文件中的根目录， 如此一来可能会造成刻录后的文件分类不易的情况。所以，你可以使用 -graft-point 这个选项，当你使用这个选项之后， 可以利用如下的方法来定义位于镜像文件中的目录：
-
-* 镜像文件中的目录所在=实际 Linux 文件系统的目录所在
-* /movies/=/srv/movies/ （在 Linux 的 /srv/movies 内的文件，加至镜像文件中的 /movies/ 目录）
-* /linux/etc=/etc （将 Linux 中的 /etc/ 内的所有数据备份到镜像文件中的 /linux/etc/ 目录中）
-
-```shell
-[root@study ~]# mkisofs -r -v -o /tmp/system.img /root /home /etc
-I: -input-charset not specified, using utf-8 （detected in locale settings）
-genisoimage 1.1.11 （Linux）
-Scanning /root
-.....（中间省略）.....
-Scanning /etc/scl/prefixes
-Using SYSTE000.;1 for /system-release-cpe （system-release） 		# 被改名子了
-Using CENTO000.;1 for /centos-release-upstream （centos-release） # 被改名子了
-Using CRONT000.;1 for /crontab （crontab）
-genisoimage: Error: '/etc/crontab' and '/root/crontab' have the same Rock Ridge name 'crontab'.
-Unable to sort directory 										 # 文件名不可一样
-NOTE: multiple source directories have been specified and merged into the root
-of the filesystem. Check your program arguments. genisoimage is not tar.
-# 因为文件名一模一样，所以就不给你创建 ISO 文件了
-# 请先删除 /root/crontab 这个文件，然后再重复执行一次 mkisofs
-[root@study ~]# rm /root/crontab
-[root@study ~]# mkisofs -r -v -o /tmp/system.img /root /home /etc
-.....（前面省略）.....
-83.91% done, estimate finish Thu Jul 2 18:48:04 2015
-92.29% done, estimate finish Thu Jul 2 18:48:04 2015
-Total translation table size: 0
-Total rockridge attributes Bytes: 600251
-Total directory Bytes: 2150400
-Path table size（Bytes）: 12598
-Done with: The File（s） Block（s） 58329
-Writing: Ending Padblock Start Block 59449
-Done with: Ending Padblock Block（s） 150
-Max brk space used 548000
-59599 extents written （116 MB）
-[root@study ~]# ll -h /tmp/system.img
--rw-r--r--. 1 root root 117M Jul 2 18:48 /tmp/system.img
-[root@study ~]# mount -o loop /tmp/system.img /mnt
-[root@study ~]# df -h /mnt
-Filesystem Size Used Avail Use% Mounted on
-/dev/loop0 117M 117M 0 100% /mnt
-[root@study ~]# ls /mnt
-abrt festival mail.rc rsyncd.conf
-adjtime filesystems makedumpfile.conf.sample rsyslog.conf
-alex firewalld man_db.conf rsyslog.d
-# 三个目录（/root /home /etc）的数据通通放置到了镜像文件的最顶层目录中
-[root@study ~]# umount /mnt
-# 测试完毕要记得卸载
-```
-可以看到三个目录（/root /home /etc）的数据通通放置到了镜像文件的最顶层目录中，而且由于 /root/etc 的存在，导致 /etc 的数据似乎没有被包含进来。
-
-```shell
-[root@study ~]# mkisofs -r -V 'linux_file' -o /tmp/system.img \
-> -m /root/etc -graft-point /root=/root /home=/home /etc=/etc
-[root@study ~]# ll -h /tmp/system.img
--rw-r--r--. 1 root root 92M Jul 2 19:00 /tmp/system.img
-# 上面的指令会创建一个大文件，其中 -graft-point 后面接的就是我们要备份的数据。
-# 必须要注意的是那个等号的两边，等号左边是在镜像文件内的目录，右侧则是实际的数据。
-[root@study ~]# mount -o loop /tmp/system.img /mnt
-[root@study ~]# ll /mnt
-dr-xr-xr-x. 131 root root 34816 Jun 26 22:14 etc
-dr-xr-xr-x. 5 root root 2048 Jun 17 00:20 home
-dr-xr-xr-x. 8 root root 4096 Jul 2 18:48 root
-# 数据是分门别类的在各个目录中,最后将数据卸载一下：
-[root@study ~]# umount /mnt
-```
-
-### 8.5.2 cdrecord：光盘刻录工具
-
-新版的 CentOS 7 使用的是 wodim 这个命令来进行刻录的操作。
-
-```shell
-[root@study ~]# wodim --devices dev=/dev/sr0... 		<==查询刻录机的 bus 位置
-[root@study ~]# wodim -v dev=/dev/sr0 blank=[fast|all] 	<==抹除重复读写盘
-[root@study ~]# wodim -v dev=/dev/sr0 -format 			<==格式化DVD+RW
-[root@study ~]# wodim -v dev=/dev/sr0 [可用选项功能] file.iso
-选项与参数：
---devices ：用在扫描磁盘总线并找出可用的刻录机，后续的设备为 ATA 接口
--v ：在 cdrecord 运行的过程中显示过程
-dev=/dev/sr0 ：可以找出此光驱的 bus 地址，非常重要
-blank=[fast|all]：blank 为抹除可重复写入的CD/DVD-RW，使用fast较快，all较完整
--format ：对光盘片进行格式化，但是仅针对 DVD+RW 这种格式的 DVD 而已；
-[可用选项功能] 主要是写入 CD/DVD 时可使用的选项，常见的选项包括有：
-	-data ：指定后面的文件以数据格式写入，不是以 CD 音轨（-audio）方式写入
-	speed=X ：指定刻录速度，例如CD可用 speed=40，DVD则可用 speed=4 之类
-	-eject ：指定刻录完毕后自动推出光盘
-	fs=Ym ：指定缓冲内存大小，可用在将镜像文件先暂存至缓冲内存。默认为 4m，
-			一般建议可增加到 8m ，不过，还是得视你的刻录机而定。
-针对 DVD 的选项功能：
-	driveropts=burnfree ：打开 Buffer Underrun Free 模式的写入功能
-	-sao ：支持 DVD-RW 的格式
-```
-
-#### 检测你的刻录机所在位置
-
-```shell
-[root@study ~]# ll /dev/sr0
-brw-rw----+ 1 root cdrom 11, 0 Jun 26 22:14 /dev/sr0 # 一般 Linux 光驱名称
-[root@demo ~]# wodim --devices dev=/dev/sr0
-wodim: Overview of accessible drives （1 found） :
--------------------------------------------------------------------------
-0 dev='/dev/sr0' rwrw-- : 'ASUS' 'DRW-24D1ST'
--------------------------------------------------------------------------
-```
-
-#### 进行 CD/DVD 的刻录操作
-
-```shell
-# 0. 先抹除光盘的原始内容：（非可重复读写则可略过此步骤）
-[root@demo ~]# wodim -v dev=/dev/sr0 blank=fast
-# 中间会跑出一堆信息告诉你抹除的进度，而且会有 10 秒钟的时间等待你的取消
-# 1. 开始刻录：
-[root@demo ~]# wodim -v dev=/dev/sr0 speed=4 -dummy -eject /tmp/system.img
-....（前面省略）....
-Waiting for reader process to fill input buffer ... input buffer ready.
-Starting new track at sector: 0
-Track 01: 86 of 86 MB written （fifo 100%） [buf 97%] 4.0x. # 这里有流程时间
-Track 01: Total Bytes read/written: 90937344/90937344 （44403 sectors）.
-Writing time: 38.337s 		# 写入的总时间
-Average write speed 1.7x. 	# 换算下来的写入时间
-Min drive buffer fill was 97%
-Fixating...
-Fixating time: 120.943s
-wodim: fifo had 1433 puts and 1433 gets.
-wodim: fifo was 0 times empty and 777 times full, min fill was 89%.
-# 因为有加上 -eject 这个选项的缘故，因此刻录完成后，DVD 会被推出光驱，记得推回去
-# 2. 刻录完毕后，测试挂载一下，检验内容：
-[root@demo ~]# mount /dev/sr0 /mnt
-[root@demo ~]# df -h /mnt
-Filesystem Size Used Avail Use% Mounted on
-/dev/sr0 87M 87M 0 100% /mnt
-[root@demo ~]# ll /mnt
-dr-xr-xr-x. 135 root root 36864 Jun 30 04:00 etc
-dr-xr-xr-x. 19 root root 8192 Jul 2 13:16 root
-[root@demo ~]# umount /mnt <==不要忘了卸载
-```
-
-## 8.6 其他常见的压缩与备份工具
-
-### 8.6.1 dd
-
-dd 可以读取磁盘设备的内容（几乎是直接读取扇区），然后将整个设备备份成一个文件。
+dd 命令除了可以制作文件，其最大的功能，应该是在于备份，因为**<font color='red'> dd 可以读取磁盘设备的内容（几乎是直接读取扇区），然后将整个设备备份成一个文件。</font>**
 
 ```shell
 [root@study ~]# dd if="input_file" of="output_file" bs="block_size" count="number"
@@ -4777,93 +4794,27 @@ count：多少个 bs 的意思。
 # 所以默认是 512 Bytes 为一个单位，因此，上面那个 4+1 表示有 4 个完整的 512 Bytes，
 # 以及未满 512 Bytes 的另一个 block 的意思,事实上，感觉好像是 cp 这个指令
 
-范例二：将刚刚刻录的光驱的内容，再次的备份下来成为镜像文件
-[root@study ~]# dd if=/dev/sr0 of=/tmp/system.iso
-177612+0 records in
-177612+0 records out
-90937344 Bytes （91 MB） copied, 22.111 s, 4.1 MB/s
-# 要将数据抓下来用这个方法，如果是要将镜像文件写入 U盘，就会变如下一个范例
 
-范例三：假设你的 USB 是 /dev/sda 好了，请将刚刚范例二的 image 刻录到U盘中
-[root@study ~]# lsblk /dev/sda
-NAME MAJ:MIN RM SIZE RO TYPE MOUNTPOINT
-sda 8:0 0 2G 0 disk # 确实是 disk 而且有 2GB
-[root@study ~]# dd if=/tmp/system.iso of=/dev/sda
-[root@study ~]# mount /dev/sda /mnt
-[root@study ~]# ll /mnt
-dr-xr-xr-x. 131 root root 34816 Jun 26 22:14 etc
-dr-xr-xr-x. 5 root root 2048 Jun 17 00:20 home
-dr-xr-xr-x. 8 root root 4096 Jul 2 18:48 root
-# 如果你不想要使用 DVD 来作为启动设备，那可以将镜像文件使用这个 dd 写入 USB 磁盘，
-# 该磁盘就会变成跟可启动光盘一样的功能，可以让你用U盘来安装 Linux ，速度快很多
-
-范例四：将你的 /boot 整个文件系统通过 dd 备份下来
+范例二：将你的 /boot 整个文件系统通过 dd 备份下来
 [root@study ~]# df -h /boot
 Filesystem Size Used Avail Use% Mounted on
-/dev/vda2 1014M 149M 866M 15% /boot # 请注意！备份的容量会到 1G
+/dev/vda2 1014M 149M 866M 15% /boot 				# 请注意！备份的容量会到 1G
 [root@study ~]# dd if=/dev/vda2 of=/tmp/vda2.img
 [root@study ~]# ll -h /tmp/vda2.img
 -rw-r--r--. 1 root root 1.0G Jul 2 23:39 /tmp/vda2.img
 # 等于是将整个 /dev/vda2 通通保存下来的意思，所以，文件容量会跟整块磁盘的最大量一样大
 ```
 
-#### 举例：将你的 /dev/vda2 完整硬盘分区上
+dd 是—个—个扇区去读写的，而且即使没有用到的扇区也会被写入备份文件中，因此这个文件会变得跟原本的磁盘—模—样大，不像使用 xfsdump 只备份文件系统中使用到的部分。不过， dd 就是因为不理会文件系统，单纯有啥记录啥，所以不论该磁盘内的文件系统你是否识别，它都可以备份、还原。
+
+### 8.5.2 cpio
+
+cpio 可以备份任何东西，包括设备文件，不过 cpio 有个大问题，那就是它不会主动地去找文件来备份，所以，—般来说，**<font color='red'> cpio 要配合类似 find 等可以查找文件的命令来告知 cpio 该被备份的数据在哪里</font>**：
 
 ```shell
-# 1. 先进行分区的操作
-[root@study ~]# fdisk /dev/sda
-Command （m for help）: n
-Partition type:
-p primary （0 primary, 0 extended, 4 free）
-e extended
-Select （default p）: p
-Partition number （1-4, default 1）: 1
-First sector （2048-4195455, default 2048）: Enter
-Using default value 2048
-Last sector, +sectors or +size{K,M,G} （2048-4195455, default 4195455）: Enter
-Using default value 4195455
-Partition 1 of type Linux and of size 2 GiB is set
-Command （m for help）: p
-Device Boot Start End Blocks Id System
-/dev/sda1 2048 4195455 2096704 83 Linux
-Command （m for help）: w
-[root@study ~]# partprobe
-# 2. 不需要格式化，直接进行 sector 表面的复制
-[root@study ~]# dd if=/dev/vda2 of=/dev/sda1
-2097152+0 records in
-2097152+0 records out
-1073741824 Bytes （1.1 GB） copied, 71.5395 s, 15.0 MB/s
-[root@study ~]# xfs_repair -L /dev/sda1 # 一定要先清除一堆 log 才行！、
-[root@study ~]# uuidgen # 下面两行在给予一个新的 UUID
-896c38d1-bcb5-475f-83f1-172ab38c9a0c
-[root@study ~]# xfs_admin -U 896c38d1-bcb5-475f-83f1-172ab38c9a0c /dev/sda1
-# 因为 XFS 文件系统主要使用 UUID 来分辨文件系统，但我们使用 dd 复制，连 UUID 也都复制成为相同。
-# 当然就得要使用上述的 xfs_repair 及 xfs_admin 来修订一下
-[root@study ~]# mount /dev/sda1 /mnt
-[root@study ~]# df -h /boot /mnt
-Filesystem Size Used Avail Use% Mounted on
-/dev/vda2 1014M 149M 866M 15% /boot
-/dev/sda1 1014M 149M 866M 15% /mnt
-# 这两个玩意儿会“一模一样”
-# 3. 接下来,让我们将文件系统放大吧
-[root@study ~]# xfs_growfs /mnt
-[root@study ~]# df -h /boot /mnt
-Filesystem Size Used Avail Use% Mounted on
-/dev/vda2 1014M 149M 866M 15% /boot
-/dev/sda1 2.0G 149M 1.9G 8% /mnt
-[root@study ~]# umount /mnt
-```
-
-新划分出来的硬盘分区不需要经过格式化，因为 dd 可以在原本旧的硬盘分区上面将扇区的数据整个复制过来。当然连同超级区块、启动扇区、原数组等也会复制过来。
-
-### 8.6.2 cpio
-
-cpio 不会主动地去找文件来备份，一般来说，cpio 要配合类似 find 等可以查找文件地命令来告知 cpio 该备份地数据在哪里。
-
-```shell
-[root@study ~]# cpio -ovcB > [file|device] <==备份
-[root@study ~]# cpio -ivcdu > [file|device] <==还原
-[root@study ~]# cpio -ivct > [file|device] <==查看
+[root@study ~]# cpio -ovcB > [file|device]		<==备份
+[root@study ~]# cpio -ivcdu > [file|device]		<==还原
+[root@study ~]# cpio -ivct > [file|device]		<==查看
 备份会使用到的选项与参数：
 	-o ：将数据复制输出到文件或设备上
 	-B ：让默认的 Blocks 可以增加至 5120 Bytes ，默认是 512 Bytes
