@@ -4328,3 +4328,437 @@ public:
 };
 ```
 
+## 5.7 `hashtable` 散列表
+
+### 5.7.1 `hashtable` 概述
+
+`hashtable` 也可被视为一种字典结构（dictionary）。这种结构的用意在于提供常数时间的基本操作，就像 stack 或 queue 那样。`hashtable` 实现的方法是使用某种映射函数，将大数映射为小数。负责将某一元素映射为一个 “大小可接受的索引＂，这样的函数称为 **<font color='blue'>hash function （散列函数）</font>**。例如，假设 `x` 是任意整数， `TableSize` 是 array 大小，则 `x % TableSize` 会得到一个整数，范围在0 - `TableSize`-1 之间，恰可作为 array 的索引。
+
+使用 hash function 会带来一个问题：可能有不同的元素被映射到相同的位置，这无法避免，因为元素个数大于 array 容量。这便是所谓的**<font color='blue'>碰撞（collision）</font>**问题。解决碰撞间题的方法有许多种，包括线性探测、二次探测、开链等做法。
+
+#### 线性探测
+
+当 hash function 计算出某个元素的**插入**位置，而该位置上的空间已不再可用时，循序往下一一寻找（如果到达尾端，就绕到头部继续寻找），直到找到一个可用空间为止。
+
+进行元素**搜寻**操作时，如果 hash function 计算出来的位置上的元素值与我们的搜寻目标不符，就循序往下一一寻找，直到找到吻合者，或直到遇上空格元素。
+
+元素的**删除**，必须采用惰性删除，也就是**<font color='red'>只标记删除记号</font>**，实际删除操作则待表格重新整理（rehashing）时再进行一一这是因为 hash table 中的每一个元素不仅表述它自己，也关系到其它元素的排列。
+
+下图是采用线性探测依次插入 5 个元素的过程：
+
+ ![image-20221015142836071](images/image-20221015142836071.png)
+
+线性探测存在一个问题，平均插入成本的成长幅度，远高于负载系数的成长幅度。这样的现象在 hashing 过程中称为**<font color='blue'>主集团</font>**。此时的我们手上有的是一大团已被用过的方格，插入操作极有可能在主集团所形成的泥泞中奋力爬行，不断解决碰撞问题，最后才射门得分，但是却又助长了主集团的泥泞面积。
+
+#### 二次探测
+
+二次探测主要用来解决主集团的问题。其命名由来是因为解决碰撞问题的方程式 $$F(i)＝i^2$$ 是个二次方程式。
+
+更明确地说，如果 hash function 计算出新元素的位置为 H，而该位置实际上已被使用，那么我们就依序尝试 $$H+1^2$$, $$H+2^2$$, $$H+3^2$$, ..., $$H+i^2$$ 而不是像线性探测那样依序尝试 $$H+1$$, $$H+2$$, $$H+3$$, $$H+i$$ ：
+
+ ![image-20221015143633613](images/image-20221015143633613.png)
+
+二次探测可以消除主集团，却可能造成**<font color='blue'>次集团</font>**：两个元素经 hash function 计算出来的位置若相同，则插入时所探测的位置也相同，形成某种浪费。
+
+#### 开链
+
+这种做法是在每一个表格元素中维护一个 `list`: hash function 为我们分配某一个 `list`，然后我们在那个 `list` 身上执行元素的插入、搜寻、删除等操作。虽然**<font color='red'>针对 `list` 而进行的搜寻只能是一种线性操作</font>**，但如果 `list` 够短，速度还是够快。
+
+SGI STL 的 `hashtable` 便是采用这种做法：
+
+ ![image-20221015144921551](images/image-20221015144921551.png)
+
+### 5.7.2 `hashtable` 的桶子（buckets）与节点（nodes）
+
+我们一般称 `hashtable` 表格内的元素为桶子，此名称的大约意义是，表格内的每个单元，涵盖的不只是个节点（元素），甚且可能是一 “桶” 节点。
+
+下面是 `hashtable` 的节点定义：
+
+```c++
+template <class Value>
+struct __hashtable_node
+{
+  __hashtable_node* next;
+  Value val;
+};  
+```
+
+ ![image-20221015145337467](images/image-20221015145337467.png)
+
+SGI STL 中 bucket 所维护的 linked list，并不采用 STL 的 `list` 或 `slist`，而是自行维护上述的 hash table node。至于 buckets 聚合体，则以 `vector` 完成，
+以便有动态扩充能力。
+
+### 5.7.3 `hashtable` 的迭代器
+
+以下是 `hashtable` 迭代器的定义：
+
+```c++
+template <class Value, class Key, class HashFcn,
+          class ExtractKey, class EqualKey, class Alloc>
+struct __hashtable_iterator {
+  typedef hashtable<Value, Key, HashFcn, ExtractKey, EqualKey, Alloc>
+          hashtable;
+  typedef __hashtable_iterator<Value, Key, HashFcn, 
+                               ExtractKey, EqualKey, Alloc>
+          iterator;
+  typedef __hashtable_const_iterator<Value, Key, HashFcn, 
+                                     ExtractKey, EqualKey, Alloc>
+          const_iterator;
+  typedef __hashtable_node<Value> node;
+
+  typedef forward_iterator_tag iterator_category;		// hashtable 的迭代器为 forward iterator
+  typedef Value value_type;
+  typedef ptrdiff_t difference_type;
+  typedef size_t size_type;
+  typedef Value& reference;
+  typedef Value* pointer;
+
+  node* cur;			// 迭代器目前所指节点
+  hashtable* ht;		// 保持与 buckets vector 的关系（因为可能需要从 bucket 跳到 bucket）
+
+  __hashtable_iterator(node* n, hashtable* tab) : cur(n), ht(tab) {}
+  __hashtable_iterator() {}
+  reference operator*() const { return cur->val; }
+#ifndef __SGI_STL_NO_ARROW_OPERATOR
+  pointer operator->() const { return &(operator*()); }
+#endif /* __SGI_STL_NO_ARROW_OPERATOR */
+  iterator& operator++();
+  iterator operator++(int);
+  // 注意， hash table 的迭代器是 forward iterator，没有定义 operator--
+  bool operator==(const iterator& it) const { return cur == it.cur; }
+  bool operator!=(const iterator& it) const { return cur != it.cur; }
+};
+```
+
+注意， `hasttable` 迭代器必须永远维系着与整个 “buckets vector" 的关系，并记录目前所指的节点。
+
+其前进操作是首先尝试从目前所指的节点出发，前进一个位置（节点），由于节点被安置于 list 内，所以利用节点的 `next` 指针即可轻易达成前进操作。**<font color='red'>如果目前节点正巧是 list 的尾端，就跳至下一个 bucket 身上</font>**，那正是指向下一个 list 的头部节点：
+
+```c++
+template <class V, class K, class HF, class ExK, class EqK, class A>
+__hashtable_iterator<V, K, HF, ExK, EqK, A>&
+__hashtable_iterator<V, K, HF, ExK, EqK, A>::operator++()
+{
+  const node* old = cur;
+  cur = cur->next;
+  if (!cur) {										// 如果前进一个位置后到达 list 的尾端
+    size_type bucket = ht->bkt_num(old->val);		// 获得当前的桶在 buckets vector 中的序号
+    while (!cur && ++bucket < ht->buckets.size())	// 一直向后移动一个桶，直到该桶内有元素
+      cur = ht->buckets[bucket];					// 令 cur 指向这个桶的第一个元素
+  }
+  return *this;
+}
+```
+
+### 5.7.4 `hashtable` 的数据结构
+
+```c++
+// 前置声明
+template <class Value, class Key, class HashFcn,
+          class ExtractKey, class EqualKey, class Alloc = alloc>
+class hashtable;
+
+
+
+template <class Value, class Key, class HashFcn,
+          class ExtractKey, class EqualKey,
+          class Alloc>			// 前置声明已给予 Alloc 默认值 alloc
+class hashtable {
+public:
+  typedef HashFcn hasher;				// 为 template 型别参数重新定义一个名称
+  typedef EqualKey key_equal;			// 为 template 型别参数重新定义一个名称
+  typedef size_t            size_type;
+
+private:
+  // 以下三者都是 function objects
+  hasher hash;
+  key_equal equals;
+  ExtractKey get_key;
+
+  typedef __hashtable_node<Value> node;					// hash table 的节点
+  typedef simple_alloc<node, Alloc> node_allocator;		// 节点分配器
+
+  vector<node*,Alloc> buckets;							// buckets vector
+  size_type num_elements;	
+
+public:
+
+  // bucket 个数即 buckets vector 的大小
+  size_type bucket_count() const { return buckets.size(); }
+  ...
+
+};
+```
+
+`hashtable` 的模板参数相当多，包括：
+
+* Value：节点的实值型别
+
+* Key：节点的键值型别
+
+* HashFcn：hash function 的函数型别
+
+  `stl_hash_fun.h` 中定义有数个现成的 hash functions，全都是仿函数。hash function 是计算元素位置的函数，SGI 将这项任务赋予 `bk_num`，由它调用hash function 取得一个可以执行取模运算的值
+
+* ExtractKey：从节点中取出键值的方法（函数或仿函数）
+
+* EqualKey：判断键值相同与否的方法（函数或仿函数）
+
+* Alloc：空间配置器，缺省使用 `std: :alloc`
+
+### 5.7.5 `hashtable` 的构造与内存管理
+
+#### 节点配置与释放
+
+```c++
+private:
+  node* new_node(const value_type& obj)
+  {
+    node* n = node_allocator::allocate();
+    n->next = 0;
+    __STL_TRY {
+      construct(&n->val, obj);
+      return n;
+    }
+    __STL_UNWIND(node_allocator::deallocate(n));
+  }
+
+  void delete_node(node* n)
+  {
+    destroy(&n->val);
+    node_allocator::deallocate(n);
+  }
+```
+
+#### 构造函数
+
+```c++
+public:  
+  hashtable(size_type n,
+            const HashFcn&    hf,
+            const EqualKey&   eql,
+            const ExtractKey& ext)
+    : hash(hf), equals(eql), get_key(ext), num_elements(0)
+  {
+    initialize_buckets(n);
+  }
+private:
+  void initialize_buckets(size_type n)
+  {
+    const size_type n_buckets = next_size(n);				// next_size 返回最接近 n 并大于 n 的质数
+    buckets.reserve(n_buckets);								// 为 buckets vector 保留 n_buckets 个元素空间
+    buckets.insert(buckets.end(), n_buckets, (node*) 0);	// 将每个 bucket 设置为空
+    // 注意此时 buckets vector 的 size 和 capacity 都是 next_size(n)
+    num_elements = 0;
+  }
+```
+
+#### 插入操作与表格重整
+
+```c++
+  pair<iterator, bool> insert_unique(const value_type& obj)
+  {
+    resize(num_elements + 1);				// 判断是否需要重建表格，如需要就扩充
+    return insert_unique_noresize(obj);
+  }
+```
+
+表格重建与否的判断原则是拿元素个数（把新增元素计入后）和 buckets vector 的大小来比。如果前者大于后者，就重建表格：
+
+```c++
+template <class V, class K, class HF, class Ex, class Eq, class A>
+void hashtable<V, K, HF, Ex, Eq, A>::resize(size_type num_elements_hint)
+{
+  const size_type old_n = buckets.size();
+  if (num_elements_hint > old_n) {					// 如果 hashtable 的元素个数（计入新增的元素）大于 buckets vector 的大小，就重建表格	
+    const size_type n = next_size(num_elements_hint);	// 找出下一个质数
+    if (n > old_n) {
+      vector<node*, A> tmp(n, (node*) 0);				// 设定新的 buckets vector
+      __STL_TRY {
+        for (size_type bucket = 0; bucket < old_n; ++bucket) {	// 以下处理 buckets vector 中每一个旧 bucket
+          node* first = buckets[bucket];						// 指向该 bucket 的第一个节点
+          while (first) {										// 以下处理该 bucket 中每一个节点
+            size_type new_bucket = bkt_num(first->val, n);		// 该节点落在新 buckets vector 哪一个位置
+            buckets[bucket] = first->next;						// 将该节点从旧的 bucket 中摘掉
+            first->next = tmp[new_bucket];						// 将该节点插入新的 bucket 中
+            tmp[new_bucket] = first;							// 做为其第一个节点
+            first = buckets[bucket];          					// 令 first 指向该 bucket 中的下一个节点，迭代处理
+          }
+        }
+        buckets.swap(tmp);										// 新旧两个 buckets vector 对调，离开时释放 tmp 的内存
+      }
+    }
+  }
+}
+```
+
+实际插入过程：
+
+```c++
+template <class V, class K, class HF, class Ex, class Eq, class A>
+pair<typename hashtable<V, K, HF, Ex, Eq, A>::iterator, bool> 
+hashtable<V, K, HF, Ex, Eq, A>::insert_unique_noresize(const value_type& obj)
+{
+  const size_type n = bkt_num(obj);			// 决定新插入的元素置于哪一个桶
+  node* first = buckets[n];					// first 指向对应桶的第一个节点
+
+  // 如果发现与桶中的某键值相同，就不插入，立刻返回
+  for (node* cur = first; cur; cur = cur->next) 
+    if (equals(get_key(cur->val), get_key(obj)))
+      return pair<iterator, bool>(iterator(cur, this), false);
+
+  // 以头插的方式插入桶中，即新增加的元素会成为桶中的第一个元素
+  node* tmp = new_node(obj);
+  tmp->next = first;
+  buckets[n] = tmp;
+  ++num_elements;
+  return pair<iterator, bool>(iterator(tmp, this), true);
+}
+```
+
+**<font color='red'>注意，无论是重建表格后的插入，还是最后向元素对应的桶里插入，都是采用头插法，即新增加的元素会成为桶中的第一个元素。</font>**
+
+同时，为了实现 `hash_multiset` 和 `hash_multimap`，`hashtable` 还提供了 `insert_equal`，允许插入重复的元素。当插入重复的元素时，该元素就会被插入在与其相同的元素的后面，否则插入在桶的第一个位置：
+
+```c++
+  void insert_equal(const value_type* f, const value_type* l)
+  {
+    size_type n = l - f;
+    resize(num_elements + n);
+    for ( ; n > 0; --n, ++f)
+      insert_equal_noresize(*f);
+  }
+
+template <class V, class K, class HF, class Ex, class Eq, class A>
+typename hashtable<V, K, HF, Ex, Eq, A>::iterator 
+hashtable<V, K, HF, Ex, Eq, A>::insert_equal_noresize(const value_type& obj)
+{
+  const size_type n = bkt_num(obj);
+  node* first = buckets[n];
+
+  // 链表中存在相同的元素
+  for (node* cur = first; cur; cur = cur->next) 		
+    if (equals(get_key(cur->val), get_key(obj))) {
+      node* tmp = new_node(obj);
+      tmp->next = cur->next;
+      cur->next = tmp;
+      ++num_elements;
+      return iterator(tmp, this);
+    }
+
+  node* tmp = new_node(obj);
+  tmp->next = first;
+  buckets[n] = tmp;
+  ++num_elements;
+  return iterator(tmp, this);
+}
+```
+
+#### 判知元素的落脚处（`bkt_num`）
+
+判知元素的落脚处本来是 hash function 的责任，SGI 把这个任务包装了一层，**<font color='red'>先交给 `bkt_num` 函数，再由此函数调用 hash function，取得一个可以执行取模运算的数值，再对 buckets vector 的 size 进行取模运算。因为有些元素型别无法直接拿来对 hashtable 的大小进行模运算，例如字符字符串 `const char*`，这时候我们需要做一些转换。</font>**
+
+```c++
+private:  
+  // 版本1：接受实值（value）和 buckets 个数
+  size_type bkt_num(const value_type& obj, size_t n) const
+  {
+    return bkt_num_key(get_key(obj), n);
+  }
+
+  // 版本2：只接受实值（value）
+  size_type bkt_num(const value_type& obj) const
+  {		
+    return bkt_num_key(get_key(obj));				
+  }
+
+  size_type bkt_num_key(const key_type& key) const
+  {
+    return bkt_num_key(key, buckets.size());
+  }
+
+  // 最终都会调用到此函数，是SGI 的所有内建的 hash
+  size_type bkt_num_key(const key_type& key, size_t n) const
+  {
+    return hash(key) % n;
+  }
+```
+
+### 5.7.6 hash function
+
+`stl_hash_fun.h` 定义有数个现成的 hash functions，全都是仿函数。前面已经提到过**<font color='red'>这里的 hash functions 的作用是取得一个可以对 `hashtable` 的 `size` 进行模运算的值。</font>**
+
+针对 `char`，`int`，`long` 等整数型别，hash functions 什么也不做，只是返回原值，但对于字符字符串（`const char*`），就设计了一个转换函数：
+
+```c++
+template <class Key> struct hash { };
+
+inline size_t __stl_hash_string(const char* s)
+{
+  unsigned long h = 0; 
+  for ( ; *s; ++s)
+    h = 5*h + *s;
+  
+  return size_t(h);
+}
+
+// 以下所有的 __STL_TEMPLATE_NULL, 在 stl_config.h 中皆被定义为 template<>
+__STL_TEMPLATE_NULL struct hash<char*>
+{
+  size_t operator()(const char* s) const { return __stl_hash_string(s); }
+};
+
+__STL_TEMPLATE_NULL struct hash<const char*>
+{
+  size_t operator()(const char* s) const { return __stl_hash_string(s); }
+};
+
+__STL_TEMPLATE_NULL struct hash<char> {
+  size_t operator()(char x) const { return x; }
+};
+__STL_TEMPLATE_NULL struct hash<unsigned char> {
+  size_t operator()(unsigned char x) const { return x; }
+};
+__STL_TEMPLATE_NULL struct hash<signed char> {
+  size_t operator()(unsigned char x) const { return x; }
+};
+__STL_TEMPLATE_NULL struct hash<short> {
+  size_t operator()(short x) const { return x; }
+};
+__STL_TEMPLATE_NULL struct hash<unsigned short> {
+  size_t operator()(unsigned short x) const { return x; }
+};
+__STL_TEMPLATE_NULL struct hash<int> {
+  size_t operator()(int x) const { return x; }
+};
+__STL_TEMPLATE_NULL struct hash<unsigned int> {
+  size_t operator()(unsigned int x) const { return x; }
+};
+__STL_TEMPLATE_NULL struct hash<long> {
+  size_t operator()(long x) const { return x; }
+};
+__STL_TEMPLATE_NULL struct hash<unsigned long> {
+  size_t operator()(unsigned long x) const { return x; }
+};
+```
+
+由此观之，**<font color='red'> SGI `hashtable` 无法处理上述所列各项型别以外的元素，例如 `string`, `double`, `float` 。欲处理这些型别，用户必须自行为它们定义 hash function。</font>**
+
+```c++
+// hash table
+// <value, key, hash-func, extract-key, equal-key, allocator>
+hashtable<string, string, hash<string>, identity<string>, equal_to<string>, alloc>
+    iht(50, hash<string>(), equal_to<string>());
+cout << iht.size() << endl;				// 0
+cout << iht.bucket_count() << endl;		// 53
+iht.insert_unique(string("jjhou"));		// error
+
+// hashtable 无法处理的型别，hash_set 当然也无法处理
+hash_set<string> shs;
+hash_set<double> dhs;
+shs.insert(string("jjhou")); 			// error
+dhs.insert(15.0); 						// error
+```
+
+
+
