@@ -4760,5 +4760,307 @@ shs.insert(string("jjhou")); 			// error
 dhs.insert(15.0); 						// error
 ```
 
+> **<font color='red'>注：本章中下面所介绍的 `hash_set`、`hash_map`、`hash_multiset`、`hash_multimap` 在 C++11 中已被改为 `unordered_set`、`unordered_map`、`unordered_multiset`、`unordered_multimap`，并且已被纳入标准库。</font>**
 
+## 5.8 `hash_set`
 
+STL `set`  多半以 RB-tree 为底层机制。SGI 则在 STL 标准规格之外另又提供了一个所谓的 `hash_set`，以 `hashtable` 为底层机制。
+
+运用 set，为的是能够快速搜寻元素。这一点，不论其底层是 RB-tree 或是 hash table，都可以达成任务。但是：
+
+1. **<font color='red'>RB-tree 有自动排序功能而 hashtable没有，反应出来的结果就是， `set` 的元素有自动排序功能而 `hash_set` 没有。</font>**
+2. `hashtable` 有一些无法处理的型别（除非用户为那些型别撰写 hash function) 。凡是 `hashtable` 无法处理者， `hash_set` 也无法处理。
+
+`hash_set` 源码摘录：
+
+```c++
+template <class Value, class HashFcn = hash<Value>,
+          class EqualKey = equal_to<Value>,
+          class Alloc = alloc>
+class hash_set
+{
+private:
+  typedef hashtable<Value, Value, HashFcn, identity<Value>, 
+                    EqualKey, Alloc> ht;
+  ht rep;			// 底层数据结构为 hash table
+
+public:
+  typedef typename ht::key_type key_type;
+  typedef typename ht::value_type value_type;
+  typedef typename ht::hasher hasher;
+  typedef typename ht::key_equal key_equal;
+
+  typedef typename ht::size_type size_type;
+  typedef typename ht::difference_type difference_type;
+  typedef typename ht::const_pointer pointer;
+  typedef typename ht::const_pointer const_pointer;
+  typedef typename ht::const_reference reference;
+  typedef typename ht::const_reference const_reference;
+
+  typedef typename ht::const_iterator iterator;
+  typedef typename ht::const_iterator const_iterator;
+
+  hasher hash_funct() const { return rep.hash_funct(); }
+  key_equal key_eq() const { return rep.key_eq(); }
+
+public:
+  // 缺省使用大小为 100 的 buckets vector，将被 hashtable 调整为最接近且比 100 大的质数
+  hash_set() : rep(100, hasher(), key_equal()) {}
+  explicit hash_set(size_type n) : rep(n, hasher(), key_equal()) {}
+  hash_set(size_type n, const hasher& hf) : rep(n, hf, key_equal()) {}
+  hash_set(size_type n, const hasher& hf, const key_equal& eql)
+    : rep(n, hf, eql) {}
+  
+  // 以下，插入操作全部使用 insert_unique，不允许键值重复
+  template <class InputIterator>
+  hash_set(InputIterator f, InputIterator l)
+    : rep(100, hasher(), key_equal()) { rep.insert_unique(f, l); }
+  template <class InputIterator>
+  hash_set(InputIterator f, InputIterator l, size_type n)
+    : rep(n, hasher(), key_equal()) { rep.insert_unique(f, l); }
+  template <class InputIterator>
+  hash_set(InputIterator f, InputIterator l, size_type n,
+           const hasher& hf)
+    : rep(n, hf, key_equal()) { rep.insert_unique(f, l); }
+  template <class InputIterator>
+  hash_set(InputIterator f, InputIterator l, size_type n,
+           const hasher& hf, const key_equal& eql)
+    : rep(n, hf, eql) { rep.insert_unique(f, l); }
+
+public:
+  // 所有操作几乎都有 hashtable 对应版本，传递调用就行
+  size_type size() const { return rep.size(); }
+  size_type max_size() const { return rep.max_size(); }
+  bool empty() const { return rep.empty(); }
+  void swap(hash_set& hs) { rep.swap(hs.rep); }
+  friend bool operator== __STL_NULL_TMPL_ARGS (const hash_set&,
+                                               const hash_set&);
+
+  iterator begin() const { return rep.begin(); }
+  iterator end() const { return rep.end(); }
+
+public:
+  pair<iterator, bool> insert(const value_type& obj)
+    {
+      pair<typename ht::iterator, bool> p = rep.insert_unique(obj);
+      return pair<iterator, bool>(p.first, p.second);
+    }
+    
+  template <class InputIterator>
+  void insert(InputIterator f, InputIterator l) { rep.insert_unique(f,l); }
+  pair<iterator, bool> insert_noresize(const value_type& obj)
+  {
+    pair<typename ht::iterator, bool> p = rep.insert_unique_noresize(obj);
+    return pair<iterator, bool>(p.first, p.second);
+  }
+
+  iterator find(const key_type& key) const { return rep.find(key); }
+
+  size_type count(const key_type& key) const { return rep.count(key); }
+  
+  pair<iterator, iterator> equal_range(const key_type& key) const
+    { return rep.equal_range(key); }
+
+  size_type erase(const key_type& key) {return rep.erase(key); }
+  void erase(iterator it) { rep.erase(it); }
+  void erase(iterator f, iterator l) { rep.erase(f, l); }
+  void clear() { rep.clear(); }
+
+public:
+  void resize(size_type hint) { rep.resize(hint); }
+  size_type bucket_count() const { return rep.bucket_count(); }
+  size_type max_bucket_count() const { return rep.max_bucket_count(); }
+  size_type elems_in_bucket(size_type n) const
+    { return rep.elems_in_bucket(n); }
+};
+```
+
+注意：使用 `hash_set` 的时候，除了要注意 `HashFcn` 以外，还要注意 `EqualKey`，前者缺省使用 `hash<T>`，后者缺省使用 `EqualKey<T>`。例如当使用 `hash_set` 存储 C 字符串的时候，默认的 `EqualKey<const char*>` 比较的是指针而不是字符串，应当使用 `strcom` 进行比较：
+
+```c++
+struct eqstr {
+	bool operator()(const char* s1, const char* s2) const{		// 注意要加上 const 限定符
+		return strcmp(s1, s2) == 0;
+	}
+};
+
+unordered_set<const char*, hash<const char*>, eqstr> Set;
+Set.insert("kiwi");
+...
+```
+
+## 5.9 `hash_map`
+
+SGI 在 STL 标准规格之外另又提供了一个所谓的 `hash_map`，以 `hashtable` 为底层机制。
+
+运用 map，为的是能够根据键值快速搜寻元素。这一点，不论其底层是 RB-tree 或是 hash table，都可以达成任务。但是：
+
+1. **<font color='red'>RB-tree 有自动排序功能而 hashtable没有，反应出来的结果就是， `map` 的元素有自动排序功能而 `hash_map` 没有。</font>**
+2. `hashtable` 有一些无法处理的型别（除非用户为那些型别撰写 hash function) 。凡是 `hashtable` 无法处理者， `hash_map` 也无法处理。
+
+`hash_map` 源码摘录
+
+```c++
+template <class Key, class T, class HashFcn = hash<Key>,
+          class EqualKey = equal_to<Key>,
+          class Alloc = alloc>
+class hash_map
+{
+private:
+  typedef hashtable<pair<const Key, T>, Key, HashFcn,						// 底层 hashtable 的元素是 hash_map 的键值组成的 pair
+                    select1st<pair<const Key, T> >, EqualKey, Alloc> ht;	// 键值是 hash_map 的键值
+  ht rep;		// 底层数据结构为 hashtable
+
+public:
+  typedef typename ht::key_type key_type;
+  typedef T data_type;
+  typedef T mapped_type;
+  typedef typename ht::value_type value_type;
+  typedef typename ht::hasher hasher;
+  typedef typename ht::key_equal key_equal;
+
+  typedef typename ht::size_type size_type;
+  typedef typename ht::difference_type difference_type;
+  typedef typename ht::pointer pointer;
+  typedef typename ht::const_pointer const_pointer;
+  typedef typename ht::reference reference;
+  typedef typename ht::const_reference const_reference;
+
+  typedef typename ht::iterator iterator;
+  typedef typename ht::const_iterator const_iterator;
+
+  hasher hash_funct() const { return rep.hash_funct(); }
+  key_equal key_eq() const { return rep.key_eq(); }
+
+public:
+  // 缺省使用大小为 100 的 buckets vector，将被 hashtable 调整为最接近且比 100 大的质数
+  hash_map() : rep(100, hasher(), key_equal()) {}
+  explicit hash_map(size_type n) : rep(n, hasher(), key_equal()) {}
+  hash_map(size_type n, const hasher& hf) : rep(n, hf, key_equal()) {}
+  hash_map(size_type n, const hasher& hf, const key_equal& eql)
+    : rep(n, hf, eql) {}
+
+  // 以下所有的操作均使用 insert_unique，不允许键值重复
+  template <class InputIterator>
+  hash_map(InputIterator f, InputIterator l)
+    : rep(100, hasher(), key_equal()) { rep.insert_unique(f, l); }
+  template <class InputIterator>
+  hash_map(InputIterator f, InputIterator l, size_type n)
+    : rep(n, hasher(), key_equal()) { rep.insert_unique(f, l); }
+  template <class InputIterator>
+  hash_map(InputIterator f, InputIterator l, size_type n,
+           const hasher& hf)
+    : rep(n, hf, key_equal()) { rep.insert_unique(f, l); }
+  template <class InputIterator>
+  hash_map(InputIterator f, InputIterator l, size_type n,
+           const hasher& hf, const key_equal& eql)
+    : rep(n, hf, eql) { rep.insert_unique(f, l); }
+
+public:
+  // 所有操作几乎都有 hash table 对应版本。传递调用就行
+  size_type size() const { return rep.size(); }
+  size_type max_size() const { return rep.max_size(); }
+  bool empty() const { return rep.empty(); }
+  void swap(hash_map& hs) { rep.swap(hs.rep); }
+  friend bool
+  operator== __STL_NULL_TMPL_ARGS (const hash_map&, const hash_map&);
+
+  iterator begin() { return rep.begin(); }
+  iterator end() { return rep.end(); }
+  const_iterator begin() const { return rep.begin(); }
+  const_iterator end() const { return rep.end(); }
+
+public:
+  pair<iterator, bool> insert(const value_type& obj)
+    { return rep.insert_unique(obj); }
+    
+  template <class InputIterator>
+  void insert(InputIterator f, InputIterator l) { rep.insert_unique(f,l); }
+
+  pair<iterator, bool> insert_noresize(const value_type& obj)
+    { return rep.insert_unique_noresize(obj); }    
+
+  iterator find(const key_type& key) { return rep.find(key); }
+  const_iterator find(const key_type& key) const { return rep.find(key); }
+
+  T& operator[](const key_type& key) {
+    return rep.find_or_insert(value_type(key, T())).second;
+  }
+
+  size_type count(const key_type& key) const { return rep.count(key); }
+  
+  pair<iterator, iterator> equal_range(const key_type& key)
+    { return rep.equal_range(key); }
+  pair<const_iterator, const_iterator> equal_range(const key_type& key) const
+    { return rep.equal_range(key); }
+
+  size_type erase(const key_type& key) {return rep.erase(key); }
+  void erase(iterator it) { rep.erase(it); }
+  void erase(iterator f, iterator l) { rep.erase(f, l); }
+  void clear() { rep.clear(); }
+
+public:
+  void resize(size_type hint) { rep.resize(hint); }
+  size_type bucket_count() const { return rep.bucket_count(); }
+  size_type max_bucket_count() const { return rep.max_bucket_count(); }
+  size_type elems_in_bucket(size_type n) const
+    { return rep.elems_in_bucket(n); }
+};
+```
+
+使用 `hash_map` 的时候，和 `hash_set` 类似，除了要注意 `HashFcn` 以外，还要注意 `EqualKey`，前者缺省使用 `hash<T>`，后者缺省使用 `EqualKey<T>`。例如当使用 `hash_map` 存储 C 字符串的时候，默认的 `EqualKey<const char*>` 比较的是指针而不是字符串，应当使用 `strcom` 进行比较：
+
+```c++
+struct eqstr {
+	bool operator()(const char* s1, const char* s2) const{
+		return strcmp(s1, s2) == 0;
+	}
+};
+
+int main() {
+	unordered_map<const char*, int, hash<const char*>, eqstr> days;
+	days["january"] = 31;
+	days["february"] = 28;
+	cout << days["february"] << endl;
+}
+```
+
+## 5.10 `hash_multiset`
+
+`hash_multiset` 的特性与 `multiset` 完全相同，唯一的差别在于它的底层机制是 `hashtable`。也因此， `hash_multiset` 的元素并不会被自动排序。
+
+`hash_multiset`  和 `hash_set` 实现上的唯一差别在于，前者的元素插入操作采用底层机制 `hashtable` 的 `insert_equal`，后者则是采用 `insert_unique`。
+
+## 5.11 `hash_multimap`
+
+`hash_multimap` 的特性与 `multimap` 完全相同，唯一的差别在于它的底层机制是 `hashtable`。也因此， `hash_multimap` 的元素并不会被自动排序。
+
+`hash_multimap`  和 `hash_map` 实现上的唯一差别在于，前者的元素插入操作采用底层机制 `hashtable` 的 `insert_equal`，后者则是采用 `insert_unique`。
+
+# 第六章 算法
+
+## 6.1 算法概观
+
+本章所讨论的，是可施行于 “无太多特殊条件限制” 的空间中的**<font color='red'>某一段元素区间</font>**的算法。
+
+### 6.1.1 质变算法——会改变操作对象的值
+
+所有的 STL 算法都作用在由迭代器 [first, last) 所标示出来的区间上。
+
+所谓 “质变算法”，是指运算过程中会更改区间内（迭代器所指）的元素内容。诸如拷贝(copy) 、互换(swap) 、替换(replace) 、填写(fill) 、删除(remove) 、
+排列组合(permutation) 、分割(partition) 、随机重排(random shuffling) 、排序(sort) 等算法，都属此类。
+
+### 6.1.2 非质变算法——不改变操作对象的值
+
+所谓“非质变算法”，是指运算过程中不会更改区间内（迭代器所指）的元素内容。诸如查找(find) 、匹配(search) 、计数(count) 、巡访(for_each) 、比较(equal,
+mismatch) 、寻找极值(max, min) 等算法，都属此类。但是如果你在 巡访(for_each) 算法身上应用一个会改变元素内容的仿函数，那么当然元素会被改变。
+
+### 6.1.3 STL 算法的—般形式
+
+所有泛型算法的前两个参数都是一对迭代器，通常称为 first 和 last，用以标示算法的操作区间。STL 习惯采用**<font color='red'>前闭后开</font>**区间，写成［firrst，last)
+
+根据行进特性，迭代器可分为 5 类。每一个 STL 算法的声明，都表现出它所需要的最低程度的迭代器类型。例如 find 需要一个 lnputlterator，这是它的最低要求，但它也可以接受更高类型的迭代器，如 Forwardlterator，Bidirectionallterator 或 RandomAccesslterator。但如果你交给 find 一个 OutputIterator，会导致错误。
+
+许多 STL 算法不只支持一个版本。这一类算法的某个版本采用缺省运算行为，另一个版本提供额外参数，接受外界传入一个仿函数，以便采用其他策略。例如`unique` 缺省情况下使用 equality 操作符来比较两个相邻元素，但如果这些元素的型别并未供应 equality 操作符，或如果用户希望定义自己的 equality 操作符，便可以传一个仿函数给另一版本的 `unique`。有些算法干脆将这样的两个版本分为两个不同名称的实体，附从的那个总是以 `_if` 作为尾词，例如 `find_if`。
+
+质变算法通常提供两个版本：一个是就地进行版本，就地改变其操作对象；另一个是 copy 版，将操作对象的内容复制一份副本，然后在副本上进行修改并返回该副本。copy 版总是以 `_copy` 作为函数名称尾词，例如 `replace` 和 `replace_copy`。不过并不是所有质变算法都有 copy 版，例如 `sort` 就没有。
