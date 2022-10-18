@@ -5064,3 +5064,397 @@ mismatch) 、寻找极值(max, min) 等算法，都属此类。但是如果你�
 许多 STL 算法不只支持一个版本。这一类算法的某个版本采用缺省运算行为，另一个版本提供额外参数，接受外界传入一个仿函数，以便采用其他策略。例如`unique` 缺省情况下使用 equality 操作符来比较两个相邻元素，但如果这些元素的型别并未供应 equality 操作符，或如果用户希望定义自己的 equality 操作符，便可以传一个仿函数给另一版本的 `unique`。有些算法干脆将这样的两个版本分为两个不同名称的实体，附从的那个总是以 `_if` 作为尾词，例如 `find_if`。
 
 质变算法通常提供两个版本：一个是就地进行版本，就地改变其操作对象；另一个是 copy 版，将操作对象的内容复制一份副本，然后在副本上进行修改并返回该副本。copy 版总是以 `_copy` 作为函数名称尾词，例如 `replace` 和 `replace_copy`。不过并不是所有质变算法都有 copy 版，例如 `sort` 就没有。
+
+## 6.2 数值算法
+
+这一节介绍的算法，统称为数值（numeric）算法。STL 规定，欲使用它们，客户端必须包含表头 `<numeric>` 。
+
+### 6.2.1 `accumulate`
+
+`accumulate` 的行为顺序有明确的定义：先将 `init` 初始化，然后针对 [first, last) 区间中的每一个迭代器 `i` 依序执行 `init =init＋ *i`（第一版本）或		 `init = binary_op(init, *i)`（第二版本） :
+
+```c++
+// 使用实例
+vector<int> iv = {1,2,3,4,5};
+cout << accumulate(iv.begin(), iv.end(), 0) << endl;
+// 15, i.e. 0 + 1 + 2 + 3 + 4 + 5
+cout << accumulate(iv.begin(), iv.end(), 0, minus<int>()) << endl;
+// -15, i.e. 0 - 1 - 2 - 3 - 4 - 5
+```
+
+代码摘录：
+
+```c++
+// 版本1
+template <class InputIterator, class T>
+T accumulate(InputIterator first, InputIterator last, T init) {
+  for ( ; first != last; ++first)
+    init = init + *first;				// 将每个元素值累加到初值 init 身上
+  return init;
+}
+
+// 版本2
+template <class InputIterator, class T, class BinaryOperation>
+T accumulate(InputIterator first, InputIterator last, T init,
+             BinaryOperation binary_op) {
+  for ( ; first != last; ++first)
+    init = binary_op(init, *first);		// 对每个元素执行二元操作
+  return init;
+}
+```
+
+### 6.2.2 `adjacent_difference`
+
+算法 `adjacent_difference` 用来计算 `[first, last)`  中相邻元素的差额。它将 `*first` 赋值给 `*result`，并针对 `[first + 1, last)` 内的每个迭代器 `i`，将 `*i - *(i - 1)` 之值赋值给 `*(result + (i - first))`。第二个版本则是将 `binary(*i - *(i - 1))` 的运算结果赋值给												`*(result + (i - first))`。**<font color='red'>注意 `result` 可以等于 `first`，这个时候，就变成就地运算，该算法也就变成了质变算法。</font>**
+
+**<font color='red'>算法返回输出区间的最尾端位置：`result + (last - first)`</font>**
+
+```c++
+// 使用实例
+vector<int> iv = {1,2,3,4,5};
+ostream_iterator<int> oite(cout, " ");		// 该迭代器绑定到 cout
+adjacent_difference(iv.begin(), iv.end(), oite);
+// 输出 1 1 1 1 1（#1元素照录，#n新元素等于 #n旧元素 - #n-1旧元素）
+adjacent_difference(iv.begin(), iv.end(), oite, plus<int>());
+// 输出 1 3 5 7 9（#1元素照录，#n新元素等于 op(#n旧元素, #n-1旧元素）
+```
+
+代码摘录：
+
+```c++
+template <class Iterator>
+inline typename iterator_traits<Iterator>::value_type*
+value_type(const Iterator&) {
+  return static_cast<typename iterator_traits<Iterator>::value_type*>(0);
+}
+
+// 版本1
+template <class InputIterator, class OutputIterator>
+OutputIterator adjacent_difference(InputIterator first, InputIterator last, 
+                                   OutputIterator result) {
+  if (first == last) return result;
+  *result = *first;
+  return __adjacent_difference(first, last, result, value_type(first));
+  // 传递调用是为了获取迭代器first所指的型别，也可以直接写成：
+  // typename iterator_traits<InputIterator>::value_type value = *first;
+  // ...
+}
+template <class InputIterator, class OutputIterator, class T>
+OutputIterator __adjacent_difference(InputIterator first, InputIterator last, 
+                                     OutputIterator result, T*) {
+  T value = *first;				// value 保存 #n-1 的值
+  while (++first != last) {			
+    T tmp = *first;				// tmp 保存 #n 的值
+    *++result = tmp - value;
+    value = tmp;				// 更新 #n-1 的值，迭代处理
+  }
+  return ++result;				
+}
+
+// 版本2
+template <class InputIterator, class OutputIterator, class BinaryOperation>
+OutputIterator adjacent_difference(InputIterator first, InputIterator last,
+                                   OutputIterator result,
+                                   BinaryOperation binary_op) {
+  if (first == last) return result;
+  *result = *first;
+  return __adjacent_difference(first, last, result, value_type(first),
+                               binary_op);
+}
+
+template <class InputIterator, class OutputIterator, class T, 
+          class BinaryOperation>
+OutputIterator __adjacent_difference(InputIterator first, InputIterator last, 
+                                     OutputIterator result, T*,
+                                     BinaryOperation binary_op) {
+  T value = *first;
+  while (++first != last) {
+    T tmp = *first;
+    *++result = binary_op(tmp, value);
+    value = tmp;
+  }
+  return ++result;
+}
+```
+
+### 6.2.3 `partial_sum`
+
+算法 `partial_sum` 用来计算局部总和。运算中的总和首先初始为 `*first`，然后赋值给 `*result`。然后对于 [first+1, last) 中每个迭代器 `i`, 从头至尾依序执行`sum = sum + *i`（第一版本）或 `sum = binary_op(sum, *i)` （第二版本），然后再将 `sum` 赋值给 `*(result + (i - first))`
+
+```c++
+// 使用实例
+vector<int> iv = {1,2,3,4,5};
+ostream_iterator<int> oite(cout, " ");		// 该迭代器绑定到 cout
+partial_sum(iv.begin(), iv.end(), oite);
+// 输出 1 3 6 10 15（第 n 个新元素是前 n 个旧元素的相加总和）
+partial_sum(iv.begin(), iv.end(), oite, minus<int>());
+// 输出 1 -1 -4 -8 -13（第 n 个新元素是前 n 个旧元素的运算总和）
+```
+
+代码摘录
+
+```c++
+// 版本1
+template <class InputIterator, class OutputIterator>
+OutputIterator partial_sum(InputIterator first, InputIterator last,
+                           OutputIterator result) {
+  if (first == last) return result;
+  *result = *first;
+  return __partial_sum(first, last, result, value_type(first));
+}
+
+template <class InputIterator, class OutputIterator, class T>
+OutputIterator __partial_sum(InputIterator first, InputIterator last,
+                             OutputIterator result, T*) {
+  T value = *first;				// value 保存 前 n-1 个数的和
+  while (++first != last) {
+    value = value + *first;		// 加上第 n 个数的值，为新的第 n 个元素的值
+    *++result = value;
+  }
+  return ++result;
+}
+
+// 版本2
+template <class InputIterator, class OutputIterator, class BinaryOperation>
+OutputIterator partial_sum(InputIterator first, InputIterator last,
+                           OutputIterator result, BinaryOperation binary_op) {
+  if (first == last) return result;
+  *result = *first;
+  return __partial_sum(first, last, result, value_type(first), binary_op);
+}
+
+template <class InputIterator, class OutputIterator, class T,
+          class BinaryOperation>
+OutputIterator __partial_sum(InputIterator first, InputIterator last,
+                             OutputIterator result, T*,
+                             BinaryOperation binary_op) {
+  T value = *first;
+  while (++first != last) {
+    value = binary_op(value, *first);
+    *++result = value;
+  }
+  return ++result;
+}
+```
+
+如果加法与减法的定义一如常规定义，那么 `partial_sum` 与先前介绍过的 `adjacent_difference` 互为逆运算。这里的意思是，如果对区间值 1,2,3,4,5 执行
+`partial_sum` ，获得结果为 1,3,6,10,15，再对此结果执行 `adjacent_difference`，便会获得原始区间值 1,2,3,4,5 。
+
+### ⭐6.2.4 `power`
+
+这个算法由 SGI 专属，并不在 STL 标准之列。它用来计算某数的 n 幕次方。这里所谓的 n 幕次是指自己对自已进行某种运算，达n 次。运算类型可由外界指定；
+如果指定为乘法，那就是乘幕。
+
+```c++
+// 实例
+cout << power(10,3) << endl; // 1000, i.e. 10*10*10
+cout << power(10,3, plus<int>()) << endl; // 30, i.e. 10+10+10
+```
+
+代码摘录
+
+```c++
+// 版本一，乘幕
+template <class T, class Integer>
+inline T power(T x, Integer n) {
+  return power(x, n, multiplies<T>());		// 指定运算型式为乘法
+}
+
+template <class T, class Integer, class MonoidOperation>
+T power(T x, Integer n, MonoidOperation op) {
+  if (n == 0)
+    return identity_element(op);		// 取出“证同元素” identity element
+  else {
+    while ((n & 1) == 0) {				// 将 n 转化为 2 进制，过滤末尾的 0，每过滤一次，令 x = x^2
+      n >>= 1;
+      x = op(x, x);
+    }
+
+    T result = x;						// 过滤完后，末尾必定为 1，令 result = x 
+    n >>= 1;							// 将 n 右移一位
+    while (n != 0) {
+      x = op(x, x);						// 每移动一次，令 x = x^2
+      if ((n & 1) != 0)					// 如果当前位为1，则让result乘以x
+        result = op(result, x);	
+      n >>= 1;							// 处理下一位
+    }
+    return result;
+  }
+}
+```
+
+#### 算法思想
+
+例如当计算 $$10^{13}$$ 时，可以将 $$13$$ 转换为二进制 $$1101$$ ，即 $$13 = 2^3 + 2^2 + 2^0$$ ，因此 $$10^{13} = 10^{2^3 + 2^2 + 2^0} = 10^{2^3} * 10^{2^2} * 10^{2^0} $$ ，而这里的 0，2，3 正是 13 对应的二进制中为 1 的位数。也就是说我们可以看成二进制第一位对应$$10^1$$，第二位对应$$10^2$$，第三位对应$$10^4$$，第四位对应$$10^8$$...当这一位为  1 时，就将结果乘以该位对应的数，举例来说：
+
+* 13 第一位为 1，result = $$10^1$$
+* 13 第三位为1，result = result  * $$10^4$$ = $$10^1 * 10^4$$
+* 13 第四位为1，result = result  * $$10^8$$ = $$10^1 * 10^4 * 10^8$$
+
+由于 n 的二进制共有 lgn 位，所以该算法的复杂度就为 lgn。
+
+而对于 n = 48 时，对应的二进制为 110000，可以进一步优化，先把末位的 0 给过滤掉。
+
+## 6.3 基本算法
+
+### 6.3.1 `equal`, `fill`, `fill_n`, `iter_swap`, `max`, `min`, `mismatch`, `swap`
+#### `equal`
+
+如果两个序列在 [first,last) 区间内相等，`equal` 返回 `true` 。如果第二序列的元素比较多，多出来的元素不予考虑。因此，如果我们希望保证两个序列完全相等，必须先判断其元素个数是否相同：
+
+```c++
+if(vec1.size() == vec2.size() &&
+  	equal(vec1.begin(), vec1.end(), vec2.begin()));
+```
+
+或者直接使用容器所提供的 equality 操作符，例如 `vecl==vec2`
+
+```c++
+template <class InputIterator1, class InputIterator2>
+inline bool equal(InputIterator1 first1, InputIterator1 last1,
+		  InputIterator2 first2) {
+  for ( ; first1 != last1; ++first1, ++first2)
+    if (*first1 != *first2)
+      return false;
+  return true;
+}
+
+// 版本2：允许我们指定仿函数 pred 做为比较依据
+template <class InputIterator1, class InputIterator2, class BinaryPredicate>
+inline bool equal(InputIterator1 first1, InputIterator1 last1,
+		  InputIterator2 first2, BinaryPredicate binary_pred) {
+  for ( ; first1 != last1; ++first1, ++first2)
+    if (!binary_pred(*first1, *first2))
+      return false;
+  return true;
+}
+```
+
+#### `fill`
+
+将 [first, last) 内的所有元素改填新值。
+
+```c++
+template <class ForwardIterator, class T>
+void fill(ForwardIterator first, ForwardIterator last, const T& value) {
+  for ( ; first != last; ++first)
+    *first = value;
+}
+```
+
+#### `fill_n`
+
+将 [first, last) 内的前 n 个元素改填新值，返回的迭代器指向被填入的最后一个元素的下一位置。
+
+```c++
+template <class OutputIterator, class Size, class T>
+OutputIterator fill_n(OutputIterator first, Size n, const T& value) {
+  for ( ; n > 0; --n, ++first)
+    *first = value;
+  return first;
+}
+```
+
+#### `iter_swap`
+
+将两个 Forwardlterators 所指的对象对调。
+
+```c++
+template <class ForwardIterator1, class ForwardIterator2>
+inline void iter_swap(ForwardIterator1 a, ForwardIterator2 b) {
+  __iter_swap(a, b, value_type(a));
+}
+
+template <class ForwardIterator1, class ForwardIterator2, class T>
+inline void __iter_swap(ForwardIterator1 a, ForwardIterator2 b, T*) {
+  T tmp = *a;
+  *a = *b;
+  *b = tmp;
+}
+```
+
+该函数必须知道迭代器的 value type，才能够据此声明一个对象，用来暂时存放迭代器所指对象。为此，上述源代码特别设计了一个双层构造，第一层调用第二层，并多出一个额外的参数 `value_type(a)` 。这么一来，第二层就有 value type 可以用了。其实这并非必要，直接这么写就行：
+
+```c++
+template <class ForwardIterator1, class ForwardIterator2>
+inline void __iter_swap(ForwardIterator1 a, ForwardIterator2 b) {
+  typename iterator_traits<ForwardIterator1>::value_type tmp = *a;
+  *a = *b;
+  *b = tmp;
+}
+```
+
+#### `max`
+
+取两个对象中的较大值。有两个版本，版本一使用对象型别 `T` 所提供的 greater-than 操作符来判断大小，版本二使用仿函数 `comp` 来判断大小:
+
+```c++
+template <class T>
+inline const T& max(const T& a, const T& b) {
+  return  a < b ? b : a;
+}
+
+template <class T, class Compare>
+inline const T& max(const T& a, const T& b, Compare comp) {
+  return comp(a, b) ? b : a;
+}
+```
+
+#### `min`
+
+取两个对象中的较大值。有两个版本，版本一使用对象型别 `T` 所提供的 less-than 操作符来判断大小，版本二使用仿函数 `comp` 来判断大小:
+
+```c++
+template <class T>
+inline const T& min(const T& a, const T& b) {
+  return b < a ? b : a;
+}
+
+template <class T, class Compare>
+inline const T& min(const T& a, const T& b, Compare comp) {
+  return comp(b, a) ? b : a;
+}
+```
+
+#### `mismatch`
+
+用来平行比较两个序列，指出两者之间的第一个不匹配点。返回一对迭代器，分别指向两序列中的不匹配点。如果两序列的所有对应元素都匹配，返回的便是两序列各自的 last 迭代器。缺省情况下是以 equality 操作符来比较元素；第二版本允许用户指定比较操作。如果第二序列的元素个数比第一序列多，多出来的元素忽略不计。如果第二序列的元素个数比第一序列少，会发生未可预期的行为。
+
+```c++
+template <class InputIterator1, class InputIterator2>
+pair<InputIterator1, InputIterator2> mismatch(InputIterator1 first1,
+					      InputIterator1 last1,
+					      InputIterator2 first2) {
+  while (first1 != last1 && *first1 == *first2) {
+    ++first1;
+    ++first2;
+  }
+  return pair<InputIterator1, InputIterator2>(first1, first2);
+}
+
+template <class InputIterator1, class InputIterator2, class BinaryPredicate>
+pair<InputIterator1, InputIterator2> mismatch(InputIterator1 first1,
+					      InputIterator1 last1,
+					      InputIterator2 first2,
+					      BinaryPredicate binary_pred) {
+  while (first1 != last1 && binary_pred(*first1, *first2)) {
+    ++first1;
+    ++first2;
+  }
+  return pair<InputIterator1, InputIterator2>(first1, first2);
+}
+```
+
+#### `swap`
+
+该函数用来交换（对调）两个对象的内容。
+
+```c++
+template <class T>
+inline void swap(T& a, T& b) {
+  T tmp = a;
+  a = b;
+  b = tmp;
+}
+```
+
