@@ -98,7 +98,7 @@ int main()
 
  ![image-20220921141441082](images/image-20220921141441082.png)
 
-# 第二章 空间配置器
+# 第二章 空间配置器 （Allocator）
 
 整个 STL 的操作对象（所有的数值）都存放在容器之内，而容器一定需要配置空间以置放资料。
 
@@ -921,7 +921,7 @@ __uninitialized_fill_n_aux(ForwardIterator first, Size n,
 }
 ```
 
-# 第三章 迭代器 (iterators) 概念与 traits 编程技法
+# 第三章 迭代器（iterators）概念与 traits 编程技法
 ## 3.1 迭代器设计思维一STL 关键所在
 
 STL 的中心思想在于：将数据容器 (containers) 和算法 (algorithms) 分开，彼此独立设计，最后再以一帖胶着剂将它们撮合在一起。而迭代器就是扮演粘胶角色。
@@ -1510,7 +1510,7 @@ template <class T> inline void copy(T* source, T* destination, int n, __true_typ
 
 > 究竟一个 class 什么时候该有自己的 non-trivial default constructor, non-trivial copy constructor, non-trivial assignment operator, non-trivial destructor 呢？一个简单的判断准则是：如果 class 内含指针成员，并且对它进行内存动态配置，那么这个 class 就需要实现出自己的 non-trivial-xxx。
 
-# 第四章 序列式容器 Sequence Containers
+# 第四章 序列式容器 （Sequence Containers）
 
 ## 4.1 容器的概观与分类
 
@@ -3595,7 +3595,7 @@ public:		// 注意，没有 push_back
 
 **<font color='red'>这里，需要注意的是，`slist` 中含有一个 `__slist_node_base` 的头部，它不是指针，是一个实物，它不包含数据元素，只包含一个 `next` 指针，指向 `slist` 的第一个元素。</font>**
 
-# 第五章 关联式容器 Associative Containers
+# 第五章 关联式容器 （Associative Containers）
 
 标准的 STL 关联式容器分为 `set` 和 `map` 两大类，以及这两大类的衍生体 `multiset` 和 `multimap`。**<font color='red'>这些容器的底层机制均以红黑树完成。红黑树也是一个独立容器，但并不开放给外界使用。</font>**
 
@@ -5037,7 +5037,7 @@ int main() {
 
 `hash_multimap`  和 `hash_map` 实现上的唯一差别在于，前者的元素插入操作采用底层机制 `hashtable` 的 `insert_equal`，后者则是采用 `insert_unique`。
 
-# 第六章 算法
+# 第六章 算法（algorithms）
 
 ## 6.1 算法概观
 
@@ -7508,4 +7508,226 @@ void mergesort(BidirectionalIter first, BidirectionalIter last){
 }
 ```
 
-# 第七章 仿函数
+# 第七章 仿函数（functors）
+
+## 7.1 仿函数概览
+
+STL 所提供的各种算法，往往有两个版本。其中一个版本表现出最常用（或最直观）的某种运算，第二个版本则表现出最泛化的演算流程，允许用户　”以template 参数来指定所要采行的策略”。
+
+将某种 “操作“ 当做算法的参数，有以下两种办法：
+
+1. 将该 “操作“  设计为一个函数，再将**函数指针**当做算法的一个参数；
+2. 将该 “操作“ 设计为一个所谓的仿函数（就语言层面而言是个 class) ，再**以该仿函数产生一个对象**，并以此对象作为算法的一个参数。
+
+而函数指针毕竟不能满足 STL 对抽象性的要求，也无法和 STL 其它组件（如配接器adapter）搭配，产生更灵活的变化。
+
+任何应用程序欲使用 STL 内建的仿函数，都必须包含 `functional` 头文件。
+
+## 7.2 可配接（Adaptable）的关键
+
+STL 仿函数应该有能力被函数配接器（function adapter）修饰。为了拥有配接能力，**每一个仿函数必须定义自己的相应型别**，就像迭代器如果要融入整个 STL 大家庭，也必须依照规定定义自己的 5 个相应型别一样。
+
+这些相应型别是为了让配接器能够取出，获得仿函数的某些信息。相应型别都只是—些 `typedef`，所有必要操作在编译期就全部完成了，对程序的执行效率没有任何影响，不带来任何额外负担。
+
+仿函数的相应型别主要用来表现**函数参数型别**和**返回值型别**。为了方便起见，`stl_function.h` 定义了两 classes，分别代表一元仿函数和二元仿函数，其中没有任何 data members 或 member functions，唯有一些型别定义。任何仿函数，只要依个人需求选择继承其中一个 class，便自动拥有了那些相应型别，也就自动拥有了配接能力。
+
+### 7.2.1 `unary_function`
+
+`unary_function` 用来呈现**一元函数**的参数型别和返回值型别：
+
+```c++
+// STL 规定，每一个 Adaptable Unary Function 都应该继承此类别
+template <class Arg, class Result>
+struct unary_function {
+    typedef Arg argument_type;
+    typedef Result result_type;
+};
+```
+
+### 7.2.2 `binary_function`
+
+`binary_function` 用来呈现**二元函数**的第一参数型别、第二参数荆别，以及返回值型别。
+
+```c++
+// STL 规定，每一个 Adaptable Binary Function 都应该继承此类别
+template <class Arg1, class Arg2, class Result>
+struct binary_function {
+    typedef Arg1 first_argument_type;
+    typedef Arg2 second_argument_type;
+    typedef Result result_type;
+};      
+```
+
+## 7.3 算术类（Arithmetic）仿函数
+
+STL 内建的算数类仿函数，除了否定运算为一元运算，其他都是二元运算：
+
+- 加法： `plus<T>`
+- 减法： `minus<T>`
+- 乘法： `multiplies<T>`
+- 除法： `divides<T>`
+- 取模 : `modulus<T>`
+- 取相反数：`negate<T>`
+
+```c++
+template <class T>
+struct plus : public binary_function<T, T, T> {
+    T operator()(const T& x, const T& y) const { return x + y; }
+};
+
+template <class T>
+struct minus : public binary_function<T, T, T> {
+    T operator()(const T& x, const T& y) const { return x - y; }
+};
+
+template <class T>
+struct multiplies : public binary_function<T, T, T> {
+    T operator()(const T& x, const T& y) const { return x * y; }
+};
+
+template <class T>
+struct divides : public binary_function<T, T, T> {
+    T operator()(const T& x, const T& y) const { return x / y; }
+};
+
+template <class T>
+struct modulus : public binary_function<T, T, T> {
+    T operator()(const T& x, const T& y) const { return x % y; }
+};
+
+template <class T>
+struct negate : public unary_function<T, T> {
+    T operator()(const T& x) const { return -x; }
+};
+
+```
+
+这些仿函数所产生的对象，用法和一般函数完全相同。当然，我们也可以**产生一个无名的临时对象来履行函数功能**
+
+```c++
+plus<int> plusobj;
+cout << plusobj(3, 5) << endl;
+cout << plus<int>()(3, 5) << endl;
+```
+
+仿函数的主要用途是为了搭配 STL 算法。例如，以下式子表示要以 1 为基本元素，对 `iv` 中的每一个元素进行乘法(multiplies) 运算：
+
+```c++
+accumulate(iv.begin(), iv.end(), 1, multiplies<int>());
+```
+
+#### 证同元素（identity element）
+
+所谓 “运算 op 的证同元素“，意思是任意的数值 A 若与该元素做 op 运算，会得到 A 自己。加法的证同元素为 0， 因为任何元素加上 0 仍为自己。乘法的证同元素为 1，因为任何元素乘以 1 仍为自己。
+
+```c++
+template <class T> inline T identity_element(plus<T>) { return T(0); }
+
+template <class T> inline T identity_element(multiplies<T>) { return T(1); }
+// 乘法的证同元素应用于 stl_numerics.h 的 power
+```
+
+## 7.4 关系运算类（Relational）仿函数
+
+STL 内建的 “关系运算类仿函数” 每一个都是二元运算：
+
+- 等于：`equal_to<T>`
+- 不等于: `not_equal_to<T>`
+- 大于：`greater<T>`
+- 大于或等于：`greater_equal<T>`
+- 小于：`less<T>`
+- 小于或等于：`less_equal<T>`
+
+```c++
+template <class T>
+struct equal_to : public binary_function<T, T, bool> {
+    bool operator()(const T& x, const T& y) const { return x == y; }
+};
+
+template <class T>
+struct not_equal_to : public binary_function<T, T, bool> {
+    bool operator()(const T& x, const T& y) const { return x != y; }
+};
+
+template <class T>
+struct greater : public binary_function<T, T, bool> {
+    bool operator()(const T& x, const T& y) const { return x > y; }
+};
+
+template <class T>
+struct less : public binary_function<T, T, bool> {
+    bool operator()(const T& x, const T& y) const { return x < y; }
+};
+
+template <class T>
+struct greater_equal : public binary_function<T, T, bool> {
+    bool operator()(const T& x, const T& y) const { return x >= y; }
+};
+
+template <class T>
+struct less_equal : public binary_function<T, T, bool> {
+    bool operator()(const T& x, const T& y) const { return x <= y; }
+};
+```
+
+## 7.5 逻辑运算类（Logical）仿函数
+
+STL 内建的 "逻辑运算类仿函数” 中 And 和 Or 为二元运算，Not 为一元运算：
+
+- 逻辑运算与：`logical_and<T>`
+- 逻辑运算或：`logical_or<T>`
+- 逻辑运算非：`logical_not<T>`
+
+```c++
+template <class T>
+struct logical_and : public binary_function<T, T, bool> {
+    bool operator()(const T& x, const T& y) const { return x && y; }
+};
+
+template <class T>
+struct logical_or : public binary_function<T, T, bool> {
+    bool operator()(const T& x, const T& y) const { return x || y; }
+};
+
+template <class T>
+struct logical_not : public unary_function<T, bool> {
+    bool operator()(const T& x) const { return !x; }
+};
+
+```
+
+## 7.6 证同（identity）、选择（select）
+
+这一节介绍的仿函数，都只是将其参数原封不动地传回。其中某些仿函数对传回的参数有刻意的选择。之所以不在STL 或其它泛型程序设计过程中直接使用原本极其简单的 identity，select 等操作，而要再划分一层出来，全是为了间接性。
+
+```c++
+// 证同函数，任何数值通过此函数后，不会有任何改变
+// 此式运用于<stl_set.h>, 用来指定 RB-tree 所需的 KeyOfValue
+// 那是因为 set 元素的键值即实值，所以采用过 identity
+template <class T>
+struct identity : public unary_function<T, T> {
+  const T& operator()(const T& x) const { return x; }
+};
+
+// 选择函数：接受一个 pair，传回其第一元素
+// 此式运用于<stl_map.h> ，用来指定RB-tree 所需的 KeyOfValue
+// 由于 map 系以 pair 元素的第一元素为其键值，所以采用 select1st
+template <class Pair>
+struct select1st : public unary_function<Pair, typename Pair::first_type> {
+  const typename Pair::first_type& operator()(const Pair& x) const
+  {
+    return x.first;
+  }
+};
+
+// 选择函数：接受一个 pair，传回其第二元素
+template <class Pair>
+struct select2nd : public unary_function<Pair, typename Pair::second_type> {
+  const typename Pair::second_type& operator()(const Pair& x) const
+  {
+    return x.second;
+  }
+};
+```
+
+# 第八章 配接器（adapters）
