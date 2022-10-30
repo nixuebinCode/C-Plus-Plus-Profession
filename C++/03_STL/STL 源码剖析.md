@@ -3595,7 +3595,7 @@ public:		// 注意，没有 push_back
 
 **<font color='red'>这里，需要注意的是，`slist` 中含有一个 `__slist_node_base` 的头部，它不是指针，是一个实物，它不包含数据元素，只包含一个 `next` 指针，指向 `slist` 的第一个元素。</font>**
 
-# 第五章 关联式容器 associative containers
+# 第五章 关联式容器 Associative Containers
 
 标准的 STL 关联式容器分为 `set` 和 `map` 两大类，以及这两大类的衍生体 `multiset` 和 `multimap`。**<font color='red'>这些容器的底层机制均以红黑树完成。红黑树也是一个独立容器，但并不开放给外界使用。</font>**
 
@@ -5458,3 +5458,2054 @@ inline void swap(T& a, T& b) {
 }
 ```
 
+### 6.3.2 copy
+
+由于`copy` 进行的是复制操作，而复制操作不外乎运用 assignment operator 或 copy constructor，copy 运用的是前者，但是某些元素型别拥有的是 trivial assignment operator ，因此，如果能够使用内存直接复制行为（例如 C 标准函数 `memmove` 或 `memcpy`），便能够节省大量时间。为此， SGI STL 的 `copy` 算法用尽各种办法，包括函数重载、型别特性、偏特化等编程技巧，加强效率。
+
+`copy` 可将输入区间 [first,last) 内的元素复制到输出区间 [result, result + (last－first) )内。也就是说，它会执行赋值操作 `*result = *first`, `*(result + 1) = *(result + 1)` 依此类推。
+
+注意 `copy` 更改的是 [result, result + (last－first) ) 中的迭代器所指对象，而非更改迭代器本身。它会为输出区间内的元素**<font color='red'>赋予新值</font>**，而**<font color='red'>不是产生新的元素</font>**。它
+不能改变输出区间的迭代器个数。换句话说， copy 不能直接用来将元素插入空容
+器中。
+
+### 6.3.2 `copy`
+
+由于`copy` 进行的是复制操作，而复制操作不外乎运用 assignment operator 或 copy constructor，`copy` 运用的是前者，但是某些元素型别拥有的是 trivial assignment operator ，因此，如果能够使用内存直接复制行为（例如 C 标准函数 `memmove` 或 `memcpy`），便能够节省大量时间。为此， SGI STL 的 `copy` 算法用尽各种办法，包括**<font color='blue'>函数重载</font>**、**<font color='blue'>型别特性</font>**、**<font color='blue'>偏特化</font>**等编程技巧，加强效率。
+
+`copy` 可将输入区间 [first,last) 内的元素复制到输出区间 [result, result + (last－first) )内。也就是说，它会执行赋值操作 `*result = *first`, `*(result + 1) = *(result + 1)` ... 依此类推。
+
+注意 `copy` 更改的是 [result, result + (last－first) ) 中的迭代器所指对象，而非更改迭代器本身。它会为输出区间内的元素**<font color='red'>赋予新值</font>**，而**<font color='red'>不是产生新的元素</font>**。它不能改变输出区间的迭代器个数。换句话说， `copy` 不能直接用来将元素插入空容器中。如果想要将元素插入（而非赋值）序列之内，可以使用 `copy` 算法并搭配 `insert_iterator`。
+
+#### 对外接口
+
+```c++
+// 完全泛化版本
+template <class InputIterator, class OutputIterator>
+inline OutputIterator copy(InputIterator first, InputIterator last,
+                           OutputIterator result)
+{
+  return __copy_dispatch<InputIterator,OutputIterator>()(first, last, result);
+}
+```
+
+```c++
+// 针对原生指针 const char* 和 const wchar_t* 的重载版本，进行内存直接拷贝操作
+inline char* copy(const char* first, const char* last, char* result) {
+  memmove(result, first, last - first);
+  return result + (last - first);
+}
+
+inline wchar_t* copy(const wchar_t* first, const wchar_t* last,
+                     wchar_t* result) {
+  memmove(result, first, sizeof(wchar_t) * (last - first));
+  return result + (last - first);
+}
+```
+
+#### `__copy_dispatch` 仿函数
+
+`copy` 的泛化版本中调用了一个 `__copy_dispatch` 仿函数，此仿函数有一个完全泛化版本和两个偏特化版本：
+
+1. 完全泛化版本
+
+   ```c++
+   // 完全泛化版本，提取出迭代器的类型
+   template <class InputIterator, class OutputIterator>
+   struct __copy_dispatch
+   {
+     OutputIterator operator()(InputIterator first, InputIterator last,
+                               OutputIterator result) {
+       return __copy(first, last, result, iterator_category(first));
+     }
+   };
+   ```
+
+   其根据迭代器种类的不同，调用了不同的 `__copy`，为的是不同种类的迭代器所使用的循环条件不同，有快慢之别：
+
+   * InputIterator 版本：**<font color='red'>以迭代器等同与否，决定循环是否继续，速度慢</font>**
+
+     ```c++
+     template <class InputIterator, class OutputIterator>
+     inline OutputIterator __copy(InputIterator first, InputIterator last,
+                                  OutputIterator result, input_iterator_tag)
+     {
+       for ( ; first != last; ++result, ++first)
+         *result = *first;
+       return result;
+     }
+     ```
+
+   * RandomAccessIterator 版本：**<font color='red'>以整个拷贝区间的长度 n 决定循环执行的次数，速度快</font>**
+
+     ```c++
+     template <class RandomAccessIterator, class OutputIterator>
+     inline OutputIterator 
+     __copy(RandomAccessIterator first, RandomAccessIterator last,
+            OutputIterator result, random_access_iterator_tag)
+     {
+       return __copy_d(first, last, result, distance_type(first));
+     }
+     
+     template <class RandomAccessIterator, class OutputIterator, class Distance>
+     inline OutputIterator
+     __copy_d(RandomAccessIterator first, RandomAccessIterator last,
+              OutputIterator result, Distance*)
+     {
+       for (Distance n = last - first; n > 0; --n, ++result, ++first) 
+         *result = *first;
+       return result;
+     }
+     ```
+
+2. 偏特化版本：当迭代器为原生指针时
+
+   ```c++
+   // 偏特化版本 1，两个参数都是 T* 指针形式，提取出指针所指型别是否具有 trivial assignment operator
+   template <class T>
+   struct __copy_dispatch<T*, T*>
+   {
+     T* operator()(T* first, T* last, T* result) {
+       typedef typename __type_traits<T>::has_trivial_assignment_operator t; 
+       return __copy_t(first, last, result, t());
+     }
+   };
+   
+   // 偏特化版本 2，第一个参数为 const T*，第二个参数为 T*
+   // 提取出指针所指型别是否具有 trivial assignment operator
+   template <class T>
+   struct __copy_dispatch<const T*, T*>
+   {
+     T* operator()(const T* first, const T* last, T* result) {
+       typedef typename __type_traits<T>::has_trivial_assignment_operator t; 
+       return __copy_t(first, last, result, t());
+     }
+   };
+   ```
+
+   这两个偏特化版是在 “参数为原生指针形式” 的前提下，希望进一步探测 ”指针所指型别是否具有 trivial assignment operator。这一点对效率的影响不小，因为这里的复制操作是由 assignment 操作符负责，如果指针所指对象拥有 non-trivial assignment operator，复制操作就一定得通过它来进行。但如果指针所指对象拥有的是 trivial assignment operator，复制操作可以不通过它，直接以最快速的内存对拷方式（`memmove`）完成：
+
+   * 指针所指对象具备 trivial assignment operator
+
+     ```c++
+     template <class T>
+     inline T* __copy_t(const T* first, const T* last, T* result, __true_type) {
+       memmove(result, first, sizeof(T) * (last - first));	
+       // memmove 第三个参数为拷贝多少字节，last - first 为需要拷贝的元素个数
+       // 因此总的字节数需要乘以 sizeof(T)
+       return result + (last - first);
+     }
+     ```
+
+   * 指针所指对象具备 non-trivial assignment operator
+
+     ```c++
+     template <class T>
+     inline T* __copy_t(const T* first, const T* last, T* result, __false_type) {
+       return __copy_d(first, last, result, (ptrdiff_t*) 0);
+     }
+     ```
+
+     原生指针是一种 RandomAccessIterator，因此交给处理 RandomAccessIterator 的 `__copy_d` 去做。
+
+> 注意，`vector` 迭代器的实现方式为原生指针：
+>
+> ```c++
+> template <class T, class Alloc = alloc>
+> class vector {
+> public:
+> 	typedef T value_type;
+> 	typedef value_type* iterator; 	// vector 的迭代器是原生指针
+>  ...
+> };
+> ```
+>
+> 所以当 `copy` 的参数为 `vector` 的迭代器时，调用的是 `__copy_dispatch<T*, T*>` ，而不是  `__copy(random_access_iterator_tag)`
+
+#### `copy` 算法完整流程
+
+ ![image-20221022110033502](/images/image-20221022110033502.png)
+
+#### 输入区间和输出区间重叠
+
+`copy` 是一一进行元素的赋值操作，如果**<font color='red'>输出区间的起点位于输入区间内</font>**， `copy` （**<font color='red'>可能</font>**）会在输入区间的（某些）元素尚未被复制之前，就覆盖其值，导致错误结果：
+
+ ![image-20221022110414097](/images/image-20221022110414097.png)
+
+**<font color='red'>在这里使用 “可能“  是因为，如果 `copy` 算法根据其所接收的迭代器的特性决定调用 `memmove` 来执行任务，就不会造成上述错误，因为 `memmove` 会先将整个输人区间的内容复制下来，没有被覆盖的危险。</font>**
+
+### 6.3.3 `copy_backward`
+
+`copy_backward` 将 [first, last] 区间内的每一个元素，以逆行的方向复制到以 `result - 1` 为起点，方向亦为逆行的区间上。换句话说，它会执行赋值操作 `*(result - 1) = *(last - 1)`,  `*(result - 2) = *(last - 2)`... 依此类推。
+
+ ![image-20221022111652248](/images/image-20221022111652248.png)
+
+`copy_backward` 在实现方式上与 `copy` 类似。
+
+## 6.4 `set` 相关算法
+
+STL 一共提供了四种与 set 相关的算法，分别是并集(union) 、交集(intersection) 、差集(difference) 、对称差集(symmetric difference) 。这四个算法所接受的 `set`，必须是有序区间。因此 `hash_set` / `hash_multiset` 不可以应用于这四个算法。
+
+### 6.4.1 `set_union`
+
+`set_union` 可构造 S1、S2 的并集，此集合内含 S1 或 S2 内的每一个元素。 S1、S2 及其并集都是以排序区间表示。返回值为一个迭代器，指向输出区间的尾端。
+
+由于 S1、S2 内的每个元素都不需唯一，因此，**<font color='red'>如果某个值在 S1 出现 n 次，在 S2 出现 m 次，那么该值在输出区间中会出现 max(m, n)次，其中 n 个来自 S1，其余来自 S2。</font>**
+
+```c++
+template <class InputIterator1, class InputIterator2, class OutputIterator>
+OutputIterator set_union(InputIterator1 first1, InputIterator1 last1,
+                         InputIterator2 first2, InputIterator2 last2,
+                         OutputIterator result) {
+  // 实际上就是对 S1 和 S2 进行一次归并，比较特殊的是，当 S1 中 和 S2 中的元素相等时，同时移动两个指针
+  while (first1 != last1 && first2 != last2) {
+    if (*first1 < *first2) {		
+      *result = *first1;
+      ++first1;
+    }
+    else if (*first2 < *first1) {
+      *result = *first2;
+      ++first2;
+    }
+    else {
+      *result = *first1;
+      ++first1;
+      ++first2;
+    }
+    ++result;
+  }
+  // 将尚未到达尾端的区间的剩余所有元素拷贝到目的端
+  return copy(first2, last2, copy(first1, last1, result));
+}
+```
+
+### 6.4.2 `set_intersection`
+
+`set_intersection` 可构造 S1、S2 的交集。此集合内含同时出现于 S1、S2 内的每一个元素。 S1、S2 及其交集都是以排序区间表示。返回值为一个迭代器，指向输出区间的尾端。
+
+由于 S1、S2 内的每个元素都不需唯一，因此，**<font color='red'>如果某个值在 S1 出现 n 次，在 S2 出现 m 次，那么该值在输出区间中会出现 min (m, n) 次，并且全部来自 S1</font>**。
+
+```c++
+template <class InputIterator1, class InputIterator2, class OutputIterator>
+OutputIterator set_intersection(InputIterator1 first1, InputIterator1 last1,
+                                InputIterator2 first2, InputIterator2 last2,
+                                OutputIterator result) {
+  while (first1 != last1 && first2 != last2) 
+    // 在两区间内分别移动迭代器，直到遇有元素值相同，暂停，将该值记录于目标区，
+    // 再继续移动迭代器...直到两区之中有一区到达尾端
+    if (*first1 < *first2) 
+      ++first1;
+    else if (*first2 < *first1) 
+      ++first2;
+    else {
+      *result = *first1;
+      ++first1;
+      ++first2;
+      ++result;
+    }
+  return result;
+}
+```
+
+### 6.4.3 `set_difference`
+
+`set_difference`可构造 S1 、S2 的差集。此集合内含 “出现于 S1 但不出现于 S2" 的每一个元素。S1 、S2 及其差集都是以排序区间表示。返回值为一个迭代器，指向输出区间的尾端。
+
+由于 S1 、S2 内的每个元素都不需唯一，因此**<font color='red'>如果某个值在 S1 出现 n 次，在 S2 出现 m 次，那么该值在输出区间中会出现 max(n-m, 0) 次，并且全部来自 S1。</font>**
+
+```c++
+template <class InputIterator1, class InputIterator2, class OutputIterator>
+OutputIterator set_difference(InputIterator1 first1, InputIterator1 last1,
+                              InputIterator2 first2, InputIterator2 last2,
+                              OutputIterator result) {
+  while (first1 != last1 && first2 != last2)
+    // 当 s1 的元素小于 s2 的元素时，因为 s2 后面的元素只会比 s1 更大，此元素即为只在 s1 中出现的元素，加入结果集，前进 s1
+    if (*first1 < *first2) {
+      *result = *first1;
+      ++first1;
+      ++result;
+    }
+    // 当 s1 的元素大于 s2 的元素时，s1 后面的元素肯定也会大于 s2 的元素，因此 s2 当前元素没有比较的价值，前进 s2
+    else if (*first2 < *first1)
+      ++first2;
+    // 当 s1 的元素等于 s2 的元素时，同时前进 s1 和 s2
+    else {
+      ++first1;
+      ++first2;
+    }
+  // 把 S1 剩余结果拿过来
+  return copy(first1, last1, result);
+}
+```
+
+ ![image-20221022114348599](/images/image-20221022114348599.png)
+
+
+
+### 6.4.4 `set_symmetric_difference`
+
+算法 `set_symmetric_difference` 可构造 S1 、S2 的对称差集。也就是说，它能构造出集合 (S1-S2) U (S2-S1) ，此集合内含 “出现于 S1 但不出现于 S2" 以及 “出现于 S2 但不出现于 S1" 的每一个元素。Sl1、S2 及其对称差集都是以排序区间表示。返回值为一个迭代器，指向输出区间的尾端。
+
+由于 S1 和 S2 内的每个元素都不需唯一，因此如果某个值在 S1 出现 n 次，在 S2 出现 m 次，那么该值在输出区间中会出现 abs(n - m) 次。如果 n > m, 输出区间内的最后 n - m 个元素将由 S1 复制而来，如果 n < m， 则输出区间内的最后 m - n 个元素将由 S2 复制而来。
+
+```c++
+template <class InputIterator1, class InputIterator2, class OutputIterator>
+OutputIterator set_symmetric_difference(InputIterator1 first1,
+                                        InputIterator1 last1,
+                                        InputIterator2 first2,
+                                        InputIterator2 last2,
+                                        OutputIterator result) {
+  while (first1 != last1 && first2 != last2)
+    // 当 s1 的元素小于 s2 的元素时，因为 s2 后面的元素只会比 s1 更大，此元素即为只在 s1 中出现的元素，加入结果集，前进 s1
+    if (*first1 < *first2) {
+      *result = *first1;
+      ++first1;
+      ++result;
+    }
+    // 当 s2 的元素小于 s1 的元素时，因为 s1 后面的元素只会比 s1 更大，此元素即为只在 s2 中出现的元素，加入结果集，前进 s2
+    else if (*first2 < *first1) {
+      *result = *first2;
+      ++first2;
+      ++result;
+    }
+    // 当 s1 的元素等于 s2 的元素时，同时前进 s1 和 s2
+    else {
+      ++first1;
+      ++first2;
+    }
+  // 把 S1 或 S2 剩余结果拿过来
+  return copy(first2, last2, copy(first1, last1, result));
+}
+```
+
+## 6.5 `heap` 算法
+
+heap 相关的算法共有 4 个：
+
+* `make_heap`
+* `pop_heap`
+* `push_heap`
+* `sort_heap`
+
+其具体的内容已经在 4.7.2 节中介绍过。
+
+## 6.6 其它算法
+
+### 6.6.1 单纯的数据处理
+
+这一小节所列的算法，都只进行单纯的数据移动、线性查找、计数、循环遍历、逐一对元素施行指定运算等操作。
+
+#### `adjacent_find`
+
+找出第一组满足条件的相邻元素。这里所谓的条件，在版本一中是指 “两元素相等”，在版本二中允许用户指定一个二元运算，两个操作数分别是相邻的第一元素和第二元素。
+
+```c++
+template <class ForwardIterator>
+ForwardIterator adjacent_find(ForwardIterator first, ForwardIterator last) {
+  if (first == last) return last;
+  ForwardIterator next = first;
+  while(++next != last) {
+    if (*first == *next) return first;		// 如果找到相邻的元素相同，就结束
+    first = next;
+  }
+  return last;
+}
+
+template <class ForwardIterator, class BinaryPredicate>
+ForwardIterator adjacent_find(ForwardIterator first, ForwardIterator last,
+                              BinaryPredicate binary_pred) {
+  if (first == last) return last;
+  ForwardIterator next = first;
+  while(++next != last) {
+    // 如果找到相邻的元素符合外界指定条件，就结束
+	// 以下，两个操作数分别是相邻的第一元素和第二元素
+    if (binary_pred(*first, *next)) return first;
+    first = next;
+  }
+  return last;
+}
+```
+
+#### `count`
+
+运用 equality 操作符，将 [first,last) 区间内的每一个元素拿来和指定值 value 比较，并返回与 value 相等的元素个数。
+
+```c++
+template <class InputIterator, class T>
+typename iterator_traits<InputIterator>::difference_type			// return type
+count(InputIterator first, InputIterator last, const T& value) {
+  typename iterator_traits<InputIterator>::difference_type n = 0;
+  for ( ; first != last; ++first)		// 遍历整个区间
+    if (*first == value)				// 如果元素的值和 value 相等
+      ++n;								// 计数器 +1
+  return n;
+}
+```
+
+#### `count_if`
+
+将指定操作（一个仿函数） `pred` 实施于 [first,last) 区间内的每一个元素身上，并将“ 造成 `pred` 的计算结果为 `true`" 的所有元素的个数返回。
+
+```c++
+template <class InputIterator, class Predicate>
+typename iterator_traits<InputIterator>::difference_type
+count_if(InputIterator first, InputIterator last, Predicate pred) {
+  typename iterator_traits<InputIterator>::difference_type n = 0;
+  for ( ; first != last; ++first)		// 遍历整个区间
+    if (pred(*first))					// 如果元素带入 pred 的运算结果为 true
+      ++n;								// 计数器 +1
+  return n;
+}
+```
+
+#### ⭐`find`
+
+运用 equality 操作符，将 [first,last) 区间内的每一个元素拿来和指定值 value 比较，找出第一个与 value 相等的元素。如果找到，就返回一个 lnputlterator 指向该元素，否则返回迭代器 `last`。
+
+```c++
+template <class InputIterator, class T>
+InputIterator find(InputIterator first, InputIterator last, const T& value) {
+  while (first != last && *first != value) ++first;		// 遍历整个区间，直至找到目标元素，或者走到区间尾部
+  return first;
+}
+```
+
+#### `find_if`
+
+根据指定的 pred 运算条件（以仿函数表示），循序查找［first,last) 内的所有元素，找出第一个令 pred 运算结果为 true 的元素。如果找到就返回一个 lnputlterator 指向该元素，否则返回迭代器 `last` 。
+
+```c++
+template <class InputIterator, class Predicate>
+InputIterator find_if(InputIterator first, InputIterator last,
+                      Predicate pred) {
+  while (first != last && !pred(*first)) ++first;
+  return first;
+}
+```
+
+#### ⭐`find_end`
+
+在序列一 [first1, last1) 所涵盖的区间中，查找序列二 [first2, last2)  的最后一次出现点。如果序列一之内不存在 “完全匹配序列二“ 的子序列，便返回迭代器 `last`：
+
+ ![image-20221026165357841](/images/image-20221026165357841.png)
+
+此函数有两个版本，版本一使用 equality 操作符比较两个序列中的元素。版本二则允许用户指定某个二元运算（以仿函数呈现），作为判断元素相等与否的依据。
+
+由于这个算法查找的是 “最后一次出现地点”，如果我们有能力逆向查找，题目就变成了 “首次出现地点”，那对设计者而言当然比较省力。逆向查找的关键在于迭代器的双向移动能力，因此， SGI 将算法设计为双层架构，一般称呼此种上层函数为 dispatch function（分派函数、派送函数）：
+
+```c++
+// 版本一
+template <class ForwardIterator1, class ForwardIterator2>
+inline ForwardIterator1 
+find_end(ForwardIterator1 first1, ForwardIterator1 last1, 
+         ForwardIterator2 first2, ForwardIterator2 last2)
+{
+  typedef typename iterator_traits<ForwardIterator1>::iterator_category
+          category1;
+  typedef typename iterator_traits<ForwardIterator2>::iterator_category
+          category2;
+  // 根据两个区间的迭代器的种类，调用不同的下层函数
+  return __find_end(first1, last1, first2, last2, category1(), category2());
+}
+```
+
+> 注意 _find_end 参数中的 `category1()` 和 `category2()`：
+>
+> 这是一种常见的技巧，令函数传递调用过程中产生迭代器类型的**<font color='red'>临时对象</font>**，再利用编译器的**<font color='red'>参数推导机制</font>**，自动调用某个对应函数。
+
+1. forward_iterators 版
+
+   ```c++
+   template <class ForwardIterator1, class ForwardIterator2>
+   ForwardIterator1 __find_end(ForwardIterator1 first1, ForwardIterator1 last1,
+                               ForwardIterator2 first2, ForwardIterator2 last2,
+                               forward_iterator_tag, forward_iterator_tag)
+   {
+     if (first2 == last2)
+       return last1;
+     else {
+       ForwardIterator1 result = last1;
+       while (1) {
+         // 利用 search 查找某个子序列的首次出现点。找不到的话返回 last1
+         ForwardIterator1 new_result = search(first1, last1, first2, last2);
+         if (new_result == last1)		// 区间1中不含有区间2表示的子序列
+           return result;
+         else {
+           result = new_result;		// 记录当前查找结果
+           first1 = new_result;		// 继续向后查找
+           ++first1;
+           // 这里不能写 first1 = new_result + 1，因为 forward_iterator 只能进行自增操作
+         }
+       }
+     }
+   }
+   ```
+
+2. bidirectional_iterator 版本
+
+   ```c++
+   template <class BidirectionalIterator1, class BidirectionalIterator2>
+   BidirectionalIterator1
+   __find_end(BidirectionalIterator1 first1, BidirectionalIterator1 last1,
+              BidirectionalIterator2 first2, BidirectionalIterator2 last2,
+              bidirectional_iterator_tag, bidirectional_iterator_tag)
+   {
+     // 由于要使用反向查找，利用 reverse_iterator
+     typedef reverse_iterator<BidirectionalIterator1> reviter1;
+     typedef reverse_iterator<BidirectionalIterator2> reviter2;
+   
+     reviter1 rlast1(first1);
+     reviter2 rlast2(first2);
+     // 利用 reverse_iterator 和 search 在区间1中反向查找区间2
+     reviter1 rresult = search(reviter1(last1), rlast1, reviter2(last2), rlast2);
+   
+     if (rresult == rlast1)		// 区间1中不含有区间2表示的子序列
+       return last1;				// 返回 last1
+     else {						// 如果找到了，rresult 将是指向子序列末尾的逆向迭代器
+       BidirectionalIterator1 result = rresult.base();		// 将结果转化为正向迭代器
+       advance(result, -distance(first2, last2));			// 调整回到子序列的起始位置
+       return result;
+     }
+   }
+   ```
+
+#### `find_first_of`
+
+以 [first2, last2)  区间内的某些元素作为查找目标，寻找它们在 [first1, last1)  区间内的第一次出现地点。如果区间一内并未包含区间二中的任何元素，返回 `last1` 。
+
+本算法提供两个版本，第一个版本使用元素型别所提供的 equality 操作符，第二个版本允许用户指定一个二元运算 `pred` 。
+
+```c++
+// 版本 1
+template <class InputIterator, class ForwardIterator>
+InputIterator find_first_of(InputIterator first1, InputIterator last1,
+                            ForwardIterator first2, ForwardIterator last2)
+{
+  for ( ; first1 != last1; ++first1) 
+    for (ForwardIterator iter = first2; iter != last2; ++iter)
+      if (*first1 == *iter)
+        return first1;
+  return last1;
+}
+```
+
+```c++
+// 版本 2
+template <class InputIterator, class ForwardIterator, class BinaryPredicate>
+InputIterator find_first_of(InputIterator first1, InputIterator last1,
+                            ForwardIterator first2, ForwardIterator last2,
+                            BinaryPredicate comp)
+{
+  for ( ; first1 != last1; ++first1) 
+    for (ForwardIterator iter = first2; iter != last2; ++iter)
+      if (comp(*first1, *iter))
+        return first1;
+  return last1;
+}
+```
+
+#### `for_each`
+
+将仿函数 `f` 施行于 [first, last)  区间内的每一个元素身上。
+
+```c++
+template <class InputIterator, class Function>
+Function for_each(InputIterator first, InputIterator last, Function f) {
+  for ( ; first != last; ++first)
+    f(*first);
+  return f;
+}
+```
+
+注意：**<font color='red'>`f` 不可以改变区间中元素内容，因为 `first` 和 `last` 都是 InputIterator。</font>**
+
+#### ⭐`includes`（应用于有序区间）
+
+判断序列 S1 中是否 "含有" 序列 S2。S1 和 S2 都必须是有序集合，其中的元素都可重复（不必唯一）。所谓 ”含有“，是指 “S2 的每一个元素都出现于 S1"。注意，由于 S1 和 S2 中的元素可重复，假设某元素在 S2 出现 n 次，在 S1 出现m 次，那么如果 m< n，此算法会返回 `false` 。
+
+ ![image-20221026201246586](/images/image-20221026201246586.png)
+
+```c++
+// 版本一，判断区间二的每个元素值是否都存在于区间一中
+// 前提：区间一和区间二都是增序排序
+template <class InputIterator1, class InputIterator2>
+bool includes(InputIterator1 first1, InputIterator1 last1,
+              InputIterator2 first2, InputIterator2 last2) {
+  while (first1 != last1 && first2 != last2)
+    if (*first2 < *first1)			// 序列二的元素比序列一小，序列一后面的元素只会更大，因此序列一不会含有序列二
+      return false;
+    else if(*first1 < *first2) 		// 序列一的元素比序列二小，检查序列一后面是否有与序列二当前元素相等的元素
+      ++first1;
+    else							// 检查序列二中的下一个元素
+      ++first1, ++first2;
+
+  return first2 == last2;
+}
+```
+
+```c++
+// 当序列一和二中的元素为降序排列时，即以 greater 排序
+// 需要调用 includes(first1, last1, first2, last2, greater<int>())
+template <class InputIterator1, class InputIterator2, class Compare>
+bool includes(InputIterator1 first1, InputIterator1 last1,
+              InputIterator2 first2, InputIterator2 last2, Compare comp) {
+  while (first1 != last1 && first2 != last2)
+    if (comp(*first2, *first1))
+      return false;
+    else if(comp(*first1, *first2)) 
+      ++first1;
+    else
+      ++first1, ++first2;
+
+  return first2 == last2;
+}。
+```
+
+#### `merge`（用于有序区间）
+
+将两个经过排序的集合 S1 和S2，合并起来置于另一段空间。所得结果也是一个有序序列。返回一个迭代器，指向最后结果序列的最后一个元素的下一位置。
+
+```C++
+template <class InputIterator1, class InputIterator2, class OutputIterator>
+OutputIterator merge(InputIterator1 first1, InputIterator1 last1,
+                     InputIterator2 first2, InputIterator2 last2,
+                     OutputIterator result) {
+  while (first1 != last1 && first2 != last2) {
+    if (*first2 < *first1) {
+      *result = *first2;
+      ++first2;
+    }
+    else {
+      *result = *first1;
+      ++first1;
+    }
+    ++result;
+  }
+  // 最后剩余元素以 copy 复制到目的端。以下两个序列一定至少有一个为空
+  return copy(first2, last2, copy(first1, last1, result));	
+}
+```
+
+#### ⭐`partition`
+
+`partition` 会将区间 [first, last) 中的元素重新排列。所有被一元条件运算 pred 判定为 `true` 的元素，都会被放在区间的前段，被判定为 `false` 的元素，都会被放在区间的后段。这个算法并不保证保留元素的原始相对位置。如果需要保留原始相对位置，应使用`stable_partition` 。
+
+```c++
+// 所有被 pred 判定为 true 的元素，都被放到前段
+// 被 pred 判定为 falise 的元素，都被放到后段
+// not stable
+template <class BidirectionalIterator, class Predicate>
+BidirectionalIterator partition(BidirectionalIterator first,
+                                BidirectionalIterator last, Predicate pred) {
+  while (true) {
+    // 从前往后查找第一个需要移动到后段的元素，即被 pred 判定为 false 的元素
+    while (true)
+      if (first == last)		// 如果 first 和 last 相遇，说明整个区间已经处理完毕，返回	
+        return first;
+      else if (pred(*first))	// 当前元素不需要移动，继续判断下一个元素
+        ++first;
+      else						// 当前元素需要移动，停止查找，first 当前指向元素需要移动到后段
+        break;
+      
+    --last;						// 使 last 指向最后一个元素
+    // 从后往前查找第一个需要移动到前段的元素，即被 pred 判定为 true 的元素
+    while (true)
+      if (first == last)		// 如果 first 和 last 相遇，说明整个区间已经处理完毕，返回
+        return first;
+      else if (!pred(*last))	// 当前元素不需要移动，继续判断前一个元素
+        --last;
+      else
+        break;					// 当前元素需要移动，停止查找，last 当前指向元素需要移动到后段
+     
+    // 交换两个需要移动的元素
+    iter_swap(first, last);
+    // 交换完毕后，first 指针向前移动一位，继续查找下一个元素
+    ++first;
+  }
+}
+```
+
+以下是当 `pred` 为 ”判断一个值是否为偶数“ 的仿函数时，`partition` 的工作原理：
+
+ ![image-20221026204454374](/images/image-20221026204454374.png)
+
+#### `remove_copy`
+
+移除 [first,last) 之中所有与 value 相等的元素。这算法并不真正从容器中删除那些元素（换句话说容器大小并未改变），而是将结果复制到一个以 result 标示起始位置的容器身上。新容器可以和原容器重叠。返回值指向被复制的最后元素的下一位置。
+
+```c++
+template <class InputIterator, class OutputIterator, class T>
+OutputIterator remove_copy(InputIterator first, InputIterator last,
+                           OutputIterator result, const T& value) {
+  for ( ; first != last; ++first)
+    if (*first != value) {		// 如果当前元素的值不等于 value
+      *result = *first;			// 将当前元素赋值给新容器
+      ++result;
+    }
+  return result;
+}
+```
+
+#### `remove` 移除（但不删除）
+
+移除 [first,last) 之中所有与 value 相等的元素。这算法并不真正从容器中删除那些元素（换句话说容器大小并未改变），而是将每一个不与 value 相等的元素**<font color='red'>轮番赋值给 first 之后的空间</font>**。返回值指向重新整理后的最后元素的下一位置。
+
+例如序列 { 0, 1, 0, 2, 0, 3, 0, 4}，如果我们执行 `remove`， 希望移除所有 0 值元素，执行结果将是 {1, 2, 3, 4, 0, 3, 0, 4｝。每一个与 0 不相等的元素 1, 2, 3, 4 分别被拷贝到第一、二、三、四个位置上。第四个位置以后不动。返回值指向第五个位置。
+
+```c++
+template <class ForwardIterator, class T>
+ForwardIterator remove(ForwardIterator first, ForwardIterator last,
+                       const T& value) {
+  first = find(first, last, value);		// 找到容器中第一个等于 value 的元素
+  ForwardIterator next = first;
+  // 它前面的元素均不等于 value，无需进行处理
+  // s当前的元素等于 value，是需要被移除的，因此直接令 remove_copy 的 result 指向当前元素
+  // 处理范围从当前元素下一个元素开始，一直到容器尾端
+  return first == last ? first : remove_copy(++next, last, first, value);
+}
+```
+
+#### `remove_copy_if`
+
+与 `remove_copy` 类似，移除 [first,last) 之中所有被仿函数 pred 评估为 true 的元素。将结果复制到一个以 result 标示起始位置的容器身上。
+
+```c++
+template <class InputIterator, class OutputIterator, class Predicate>
+OutputIterator remove_copy_if(InputIterator first, InputIterator last,
+                              OutputIterator result, Predicate pred) {
+  for ( ; first != last; ++first)
+    if (!pred(*first)) {
+      *result = *first;
+      ++result;
+    }
+  return result;
+}
+```
+
+#### `remove_if`
+
+与 `remove_copy` 类似，移除 [first,last) 之中所有被仿函数 pred 评估为 true 的元素。
+
+```c++
+template <class ForwardIterator, class Predicate>
+ForwardIterator remove_if(ForwardIterator first, ForwardIterator last,
+                          Predicate pred) {
+  first = find_if(first, last, pred);
+  ForwardIterator next = first;
+  return first == last ? first : remove_copy_if(++next, last, first, pred);
+}
+```
+
+ ![image-20221026212736369](/images/image-20221026212736369.png)
+
+#### `replace`
+
+将 [first,last) 区间内的所有 old_value 都以 new_value 取代。
+
+```c++
+// 迭代器型别要求是写入型以上
+template <class ForwardIterator, class T>
+void replace(ForwardIterator first, ForwardIterator last, const T& old_value,
+             const T& new_value) {
+  for ( ; first != last; ++first)
+    if (*first == old_value) *first = new_value;
+}
+```
+
+#### `replace_copy`
+
+行为与`replace`类似，唯一不同的是新序列会被复制到 result 所指的容器中。返回值指向被复制的最后一个元素的下一位置。原序列没有任何改变。
+
+```c++
+// 区间一迭代器为只读以上，区间二迭代器为只写以上
+template <class InputIterator, class OutputIterator, class T>
+OutputIterator replace_copy(InputIterator first, InputIterator last,
+                            OutputIterator result, const T& old_value,
+                            const T& new_value) {
+  for ( ; first != last; ++first, ++result)
+    *result = *first == old_value ? new_value : *first;
+  return result;
+}
+```
+
+#### `replace_if`
+
+将 [first, last) 区间内所有 ”被 pred 评估为 true" 的元素，都以 new_value 取而代之。
+
+```c++
+template <class ForwardIterator, class Predicate, class T>
+void replace_if(ForwardIterator first, ForwardIterator last, Predicate pred,
+                const T& new_value) {
+  for ( ; first != last; ++first)
+    if (pred(*first)) *first = new_value;
+}
+```
+
+#### `replace_copy_if`
+
+行为与 `replace_if` 类似，但是新序列会被复制到 result 所指的区间内。返回值指向被复制的最后一个元素的下一位置。原序列无任何改变。
+
+```c++
+template <class Iterator, class OutputIterator, class Predicate, class T>
+OutputIterator replace_copy_if(Iterator first, Iterator last,
+                               OutputIterator result, Predicate pred,
+                               const T& new_value) {
+  for ( ; first != last; ++first, ++result)
+    *result = pred(*first) ? new_value : *first;
+  return result;
+}
+```
+
+#### ⭐`reverse`
+
+将序列 [first, last) 的元素在原容器中颠倒重排。例如序列 {0, 1, 1, 3, 5} 颠倒重排后为 {5, 3, 1, 1, 0} 。迭代器的双向或随机定位能力，影响了这个算法的效率，所以设计为双层架构。
+
+```c++
+template <class BidirectionalIterator>
+inline void reverse(BidirectionalIterator first, BidirectionalIterator last) {
+  __reverse(first, last, iterator_category(first));
+}
+```
+
+1. BidirectionalIterator 版本
+
+   ```c++
+   template <class BidirectionalIterator>
+   void __reverse(BidirectionalIterator first, BidirectionalIterator last, 
+                  bidirectional_iterator_tag) {
+     while (true)
+       // 每次迭代开始时，last 会减 1
+       if (first == last || first == --last)	// 容器为空，或者头尾指针相遇
+         return;
+       else
+         iter_swap(first++, last);				// 交换完成后，first 再增加 1
+   }
+   ```
+
+2. RandomAccessIterator 版本
+
+   ```c++
+   template <class RandomAccessIterator>
+   void __reverse(RandomAccessIterator first, RandomAccessIterator last,
+                  random_access_iterator_tag) {
+     // 头尾两两互换，然后头部前进一个位置，尾部后退一个位置。两者交错时停止
+     while (first < last) iter_swap(first++, --last);
+   }
+   ```
+
+> 注意 BidirectionalIterator 版本不能这样写：
+>
+> ```c++
+> while (first != last) iter_swap(first++, --last);
+> ```
+>
+> 当序列中的元素个数为奇数时，最后一步 first 指针和 last 指针将会相遇，即 first = last。在完成交换后，first 指针向前一步，last 指针向后一步，此时 first > last，循环条件 first != last 判定为 true，将会继续交换，导致无线循环。
+
+#### `reverse_copy`
+
+行为类似 `reverse`，但产生出来的新序列会被置于以 `result` 指出的容器中。返回值指向新产生的最后元素的下一位置。原序列没有任何改变。
+
+```c++
+template <class BidirectionalIterator, class OutputIterator>
+OutputIterator reverse_copy(BidirectionalIterator first,
+                            BidirectionalIterator last,
+                            OutputIterator result) {
+  while (first != last) {				// 遍历整个序列
+    --last;								// 尾端前移一个位置
+    *result = *last;					// 将尾端所指元素复制到 result 所指位置
+    ++result;							// result 前进一个位置
+  }
+  return result;
+}
+```
+
+> 因为只需要用 first != last 去做为判定条件，不用区分 BidirectionalIterator  和 RandomAccessIterator 
+
+#### ⭐`rotate`
+
+将 [first, middle) 内的元素和 [middle,last) 内的元素互换。middle 所指的元素会成为容器的第一个元素：
+
+ ![image-20221027112703959](/images/image-20221027112703959.png)
+
+迭代器的移动能力，影响了这个算法的效率，所以设计为双层架构：
+
+```c++
+template <class ForwardIterator>
+inline void rotate(ForwardIterator first, ForwardIterator middle,
+                   ForwardIterator last) {
+  if (first == middle || middle == last) return;		// 第一个区间或第二个区间为空，则返回
+  __rotate(first, middle, last, distance_type(first),	// 分派函数
+           iterator_category(first));
+}
+```
+
+1. ForwardIterator 版本
+
+   ```c++
+   template <class ForwardIterator, class Distance>
+   void __rotate(ForwardIterator first, ForwardIterator middle,
+                 ForwardIterator last, Distance*, forward_iterator_tag) {
+     for (ForwardIterator i = middle; ;) {
+       iter_swap(first, i);		// 前段、后段的元素一一交换
+       ++first;
+       ++i;
+       
+       if (first == middle) {		// 前段结束了
+         if (i == last) return;	// 后段也同时结束了，返回
+         middle = i;				// 后段还没有结束，调整区间，对新的前、后段再作交换
+       }
+       else if (i == last)			// 前段还没有结束，后段结束了
+         i = middle;				// 调整区间，对新的前、后段再作交换
+         
+       // 前段，后段均未结束，继续交换两段的元素
+     }
+   }
+   ```
+
+    ![image-20221027114346766](/images/image-20221027114346766.png)
+
+2. BidirectionalIterator 版本：
+
+   ```c++
+   // reverse 至少要求迭代器为 BidirectionalIterator 
+   template <class BidirectionalIterator, class Distance>
+   void __rotate(BidirectionalIterator first, BidirectionalIterator middle,
+                 BidirectionalIterator last, Distance*,
+                 bidirectional_iterator_tag) {
+     reverse(first, middle);		// 先翻转前段
+     reverse(middle, last);		// 再翻转后段
+     reverse(first, last);			// 最后翻转整个区间
+   }
+   ```
+
+    ![image-20221027114738127](/images/image-20221027114738127.png)
+
+3. RandomAccessIterator 版本：**<font color='red'>无需交换，只需赋值，且赋值次数更少</font>**
+
+   该算法的本质是序列的循环移位，假设前段长度为 n，总长为 m。所谓的元素互换可以看成是将整个容器中的元素循环向左移动  n 位：
+
+   * 首先求出 n 与 m 的最大公约数 d
+
+   * 将 m 个数分为若干组，每一组的元素个数为 d
+
+      ![image-20221027134055828](/images/image-20221027134055828.png)
+
+     分 d 次移动元素，每次移动以下分组，将每组左移 n 位
+
+     1. 第一分组：{0, d, 2d,...  n-d}
+     2. 第一分组：{1, d+1, 2d+1...... n-d+1}
+     3. 第三分组：{2, d+2, 2d+2...... n-d+2}
+     4. ....
+
+     移动每组的函数就是 `__rotate`
+
+   ```c++
+   template <class RandomAccessIterator, class Distance>
+   void __rotate(RandomAccessIterator first, RandomAccessIterator middle,
+                 RandomAccessIterator last, Distance*,
+                 random_access_iterator_tag) {
+     // 以下迭代器的相减操作，只适用于 RandomAccessIterator
+     Distance n = __gcd(last - first, middle - first);	// 取全长和前段的最大公因子
+     while (n--)
+       __rotate_cycle(first, last, first + n, middle - first,
+                      value_type(first));
+   }
+   ```
+
+   ```c++
+   // 辗转相除法求最大公因子
+   template <class EuclideanRingElement>
+   EuclideanRingElement __gcd(EuclideanRingElement m, EuclideanRingElement n)
+   {
+     while (n != 0) {			// 从最后一个分组开始循环左移
+       EuclideanRingElement t = m % n;
+       m = n;
+       n = t;
+     }
+     return m;
+   }
+   ```
+
+   ```c++
+   // 从 initial 开始，间隔为 shift 的元素组成一个分组，将该分组循环左移 shift 位 
+   template <class RandomAccessIterator, class Distance, class T>
+   void __rotate_cycle(RandomAccessIterator first, RandomAccessIterator last,
+                       RandomAccessIterator initial, Distance shift, T*) {
+     T value = *initial;
+     RandomAccessIterator ptr1 = initial;		// ptr1 初始指向分组第一个元素
+     RandomAccessIterator ptr2 = ptr1 + shift;	// ptr2 初始指向分组第二个元素
+     while (ptr2 != initial) {
+       *ptr1 = *ptr2;				// 把后一个元素的值赋给前一个
+       ptr1 = ptr2;				// 更新 ptr1
+       if (last - ptr2 > shift)	// 更新 ptr2，相当于做取模操作
+         ptr2 += shift;
+       else
+         ptr2 = first + (shift - (last - ptr2));
+     }
+     *ptr1 = value;				// 最后把最后一个元素的值更改为第一个元素的初始值
+   }
+   ```
+
+#### `rotate_copy`
+
+行为类似 `rotate` ，但产生出来的新序列会被置于 result 所指出的容器中。返回值指向新产生的最后元素的下一位置。原序列没有任何改变。
+
+由于它不需要就地在原容器中调整内容，实现上也就简单得多。**<font color='red'>旋转操作其实只是两段元素彼此交换，所以只要先把后段复制到新容器的前端，再把前段接续复制到新容器，即可。</font>**
+
+```c++
+template <class ForwardIterator, class OutputIterator>
+OutputIterator rotate_copy(ForwardIterator first, ForwardIterator middle,
+                           ForwardIterator last, OutputIterator result) {
+  return copy(first, middle, copy(middle, last, result));
+}
+
+```
+
+#### `search`
+
+在序列一 [first1, last1) 中，查找序列二 [first2, last2)  的首次出现点。如果序列一内不存在与序列二完全匹配的子序列，便返回迭代器 last1。版本一使用元素型别所提供的 equality 操作符，版本二允许用户指定某个二元运算（以仿函数呈现），作为判断相等与否的依据。
+
+```c++
+template <class ForwardIterator1, class ForwardIterator2>
+inline ForwardIterator1 search(ForwardIterator1 first1, ForwardIterator1 last1,
+                               ForwardIterator2 first2, ForwardIterator2 last2)
+{
+  return __search(first1, last1, first2, last2, distance_type(first1),
+                  distance_type(first2));
+}
+```
+
+```c++
+template <class ForwardIterator1, class ForwardIterator2, class Distance1,
+          class Distance2>
+ForwardIterator1 __search(ForwardIterator1 first1, ForwardIterator1 last1,
+                          ForwardIterator2 first2, ForwardIterator2 last2,
+                          Distance1*, Distance2*) {
+  Distance1 d1 = 0;						// 区间一的长度
+  distance(first1, last1, d1);
+  Distance2 d2 = 0;						// 区间二的长度
+  distance(first2, last2, d2);
+
+  if (d1 < d2) return last1;		
+
+  // 双指针分别遍历两个区间
+  ForwardIterator1 current1 = first1;
+  ForwardIterator2 current2 = first2;
+
+  while (current2 != last2) 			// 遍历第二个序列
+    if (*current1 == *current2) {		// 如果这个元索相同
+      ++current1;						// 调整，以便比对下一个元素
+      ++current2;
+    }
+    else {								// 如果这个元索不相同
+      if (d1 == d2)						// 如果两个序列一样长
+        return last1;					// 不可能拥有子序列
+      else {							// 如果序列一的长度大于序列二
+        current1 = ++first1;			// 比较序列一的下一个元素
+        current2 = first2;				// 序列二从头比较
+        --d1;							// 已经排除了序列一的一个元素，所以序列一的长度减1
+      }
+    }
+  return first1;
+}
+```
+
+#### `search_n`
+
+在序列 [first, last) 区间中，查找 “连续 count 个符合条件的元素” 所形成的子序列，并返回一个迭代器指向该子序列起始处。如果找不到这样的子序列，就返回迭代器 last。
+
+上述所谓的 “某条件”，在 `search_n` 版本一指的是相等条件，在`search_n` 版本二指的是用户指定的某个二元运算（以仿函数呈现）。
+
+例如，面对序列 {10, 8, 8, 7, 2, 8, 7, 2, 2, 8, 7, 0} ：
+
+* 查找 “连续两个8" 所形成的子序列起点，可以这么写：
+  `iter1 = search_n(iv.begin(), iv.end(), 2, 8);`
+* 查找 “连续三个小于 8 的元素” 所形成的子序列起点，可以这么写：
+  `iter2 = search_n(iv.begin(), iv.end(), 3, 8, less<int>());`
+
+```c++
+// 版本一
+// 查找 “元素 value 连续出现 count 次” 所形成的那个子序列，返回其起始位置
+template <class ForwardIterator, class Integer, class T>
+ForwardIterator search_n(ForwardIterator first, ForwardIterator last,
+                         Integer count, const T& value) {
+  if (count <= 0)
+    return first;
+  else {
+    first = find(first, last, value);				// 找出 value 第一次的出现位置
+    while (first != last) {							// 继续查找剩余元素
+      Integer n = count - 1;						// 剩余元素 value 还应出现 n 次
+      ForwardIterator i = first;
+      ++i;											// 从上一次出现的下一个位置开始找
+      while (i != last && n != 0 && *i == value) {
+        ++i;
+        --n;
+      }
+      if (n == 0)									// 如果 value 连续出现了 n 次
+        return first;								// 就返回 first
+      else
+        first = find(i, last, value);				// 从下一次出现 value 的地方开始找
+    }
+    return last;
+  }
+}
+```
+
+#### `swap_ranges`
+
+将两个区间内的元素互相交换。这两个序列可位于同一容器中，也可位于不同的容器中。返回一个迭代器，指向第二序列中的最后一个被交换元素的下一位置。
+
+```c++
+template <class ForwardIterator1, class ForwardIterator2>
+ForwardIterator2 swap_ranges(ForwardIterator1 first1, ForwardIterator1 last1,
+                             ForwardIterator2 first2) {
+  for ( ; first1 != last1; ++first1, ++first2)
+    iter_swap(first1, first2);
+  return first2;
+}
+```
+
+#### `transform`
+
+`tranform` 的第一版本以仿函数 op 作用于区间中的每一个元素身上，并以其结果产生出一个新序列。第二版本以仿函数 binary_op 作用于双元素身上（其中一个元素来自区间一，另一个元素来自区间二），并以其结果产生出一个新序列。
+
+两个版本都把执行结果放进迭代器 result 所标示的容器中。返回值指向结果序列的最后元素的下一位置。
+
+```c++
+// 版本一
+template <class InputIterator, class OutputIterator, class UnaryOperation>
+OutputIterator transform(InputIterator first, InputIterator last,
+                         OutputIterator result, UnaryOperation op) {
+  for ( ; first != last; ++first, ++result)
+    *result = op(*first);
+  return result;
+}
+
+// 版本二
+template <class InputIterator1, class InputIterator2, class OutputIterator,
+          class BinaryOperation>
+OutputIterator transform(InputIterator1 first1, InputIterator1 last1,
+                         InputIterator2 first2, OutputIterator result,
+                         BinaryOperation binary_op) {
+  for ( ; first1 != last1; ++first1, ++first2, ++result)
+    *result = binary_op(*first1, *first2);
+  return result;
+}
+```
+
+#### `unique_copy`
+
+从输入区间中将元素复制到以 result 开头的区间上，如果面对相邻重复元素群，只会复制其中第一个元素。返回的迭代器指向以 result 开头的区间的尾端。
+
+`unique_copy` 有两个版本，因为所谓 “相邻元素是否重复” 可有不同的定义。第一版本使用简单的相等测试，第二版本使用一个 Binary Predicate `binary_pred` 作为测试准则。
+
+```c++
+// 版本一
+template <class InputIterator, class OutputIterator>
+inline OutputIterator unique_copy(InputIterator first, InputIterator last,
+                                  OutputIterator result) {
+  if (first == last) return result;
+  // 根据 result 的 iterator category, 做不同的处理
+  return __unique_copy(first, last, result, iterator_category(result));
+}
+```
+
+1. ForwardIterator 版本
+
+   ```c++
+   template <class InputIterator, class ForwardIterator>
+   ForwardIterator __unique_copy(InputIterator first, InputIterator last,
+                                 ForwardIterator result, forward_iterator_tag) {
+     *result = *first;
+     while (++first != last)
+       if (*result != *first) *++result = *first;	// 元素不同就记录，否则就跳过
+     return ++result;
+   }
+   ```
+
+2. OutputIterator 版本
+
+   ```c++
+   template <class InputIterator, class OutputIterator>
+   inline OutputIterator __unique_copy(InputIterator first, InputIterator last,
+                                       OutputIterator result, 
+                                       output_iterator_tag) {
+     // OutputIterator 无法读取，所以必须先知道其 value type
+     return __unique_copy(first, last, result, value_type(first));
+   }
+   ```
+
+   ```c++
+   template <class InputIterator, class OutputIterator, class T>
+   OutputIterator __unique_copy(InputIterator first, InputIterator last,
+                                OutputIterator result, T*) {
+     T value = *first;			// 因为无法读取 OutputIterator，必须用 value 记录前一个值
+     *result = value;
+     while (++first != last)
+       if (value != *first) {
+         value = *first;
+         *++result = value;
+       }
+     return ++result;
+   }
+   ```
+
+#### `unique`
+
+移除区间内相邻的重复元素，**<font color='red'>如果你想要移除所有（包括不相邻的）重复元素，必须先将序列排序，使所有重复元素都相邻。</font>**
+
+`unique` 会返回一个迭代器指向新区间的尾端，新区间之内不含相邻的重复元素。`unique` 并不会改变区间内的元素个数，会有一些残余数据留下来，如下图所示，类似 `remove` 方法：
+
+ ![image-20221027154905666](/images/image-20221027154905666.png)
+
+`unique` 有两个版本，因为所谓 “相邻元素是否重复” 可有不同的定义。第一版本使用简单的相等测试，第二版本使用一个 Binary Predicate `binary_pred` 作为测试准则。
+
+```c++
+// 版本一
+template <class ForwardIterator>
+ForwardIterator unique(ForwardIterator first, ForwardIterator last) {
+  first = adjacent_find(first, last);		// 首先找到相邻重复元素的起点
+  return unique_copy(first, last, first);
+}
+
+// 版本二
+template <class ForwardIterator, class BinaryPredicate>
+ForwardIterator unique(ForwardIterator first, ForwardIterator last,
+                       BinaryPredicate binary_pred) {
+  first = adjacent_find(first, last, binary_pred);
+  return unique_copy(first, last, first, binary_pred);
+}
+```
+
+### 6.6.2 `lower_bound` （应用于有序区间）
+
+在已排序的 [first, last) 中寻找元素 value :
+
+* 如果其中具有与 value 相等的元素，便返回一个迭代器，指向其中**<font color='red'>第一个</font>**元素
+* 如果没有这样的元素存在，便返回一个迭代器，指向第一个**<font color='red'>大于 value </font>**的元素。
+* 如果区间中所有元素都小于 value，则返回 last
+
+换句话说，该算法找到区间中**<font color='red'>第一个大于等于 value 的元素</font>**
+
+这个算法有两个版本：
+
+* 版本一采用 `operator<` 进行比较，返回 [first,last) 中最远的迭代器 `i`, 使得 [first,i) 中的每个迭代器 `j` 都满足 `*j < value` 。
+* 版本二采用仿函数 comp，返回最远的迭代器 `i`, 使得 [first,i) 中的每个迭代器 `j` 都满足 `comp(*j, value)` 为 `true`。
+
+版本一的代码：
+
+```c++
+template <class ForwardIterator, class T>
+inline ForwardIterator lower_bound(ForwardIterator first, ForwardIterator last,
+                                   const T& value) {
+  return __lower_bound(first, last, value, distance_type(first),
+                       iterator_category(first));
+}
+```
+
+1. ForwardIterator 版本
+
+   ```c++
+   template <class ForwardIterator, class T, class Distance>
+   ForwardIterator __lower_bound(ForwardIterator first, ForwardIterator last,
+                                 const T& value, Distance*,
+                                 forward_iterator_tag) {
+     Distance len = 0;
+     distance(first, last, len);
+     Distance half;
+     ForwardIterator middle;
+   
+     while (len > 0) {
+       // 令 middle 从 first 开始，前进区间长度一半的距离，即 使 middle 指向区间的中点
+       half = len >> 1;
+       middle = first;
+       advance(middle, half);
+         
+       if (*middle < value) {		// 在右边的区间进行查找
+         first = middle;
+         ++first;					// // 对于 ForwardIterator，只能先赋值，再自增
+         len = len - half - 1;
+       }
+       else						// 在左边的区间进行查找，修正 len
+         len = half;				
+     }
+     return first;
+   }
+   ```
+
+2. RandomAccessIterator 版本
+
+   ```c++
+   template <class RandomAccessIterator, class T, class Distance>
+   RandomAccessIterator __lower_bound(RandomAccessIterator first,
+                                      RandomAccessIterator last, const T& value,
+                                      Distance*, random_access_iterator_tag) {
+     Distance len = last - first;
+     Distance half;
+     RandomAccessIterator middle;
+   
+     while (len > 0) {
+       half = len >> 1;
+       middle = first + half;		// 对于 RandomAccessIterator，不需要调用 advance
+       if (*middle < value) {
+         first = middle + 1;		// 对于 RandomAccessIterator，可以直接加1
+         len = len - half - 1;
+       }
+       else
+         len = half;
+     }
+     return first;
+   }
+   
+   ```
+
+### 6.6.3 upper_bound （应用于有序区间）
+
+在已排序的 [first, last) 中寻找元素 value :
+
+* 如果其中具有与 value 相等的元素，便返回一个迭代器，指向其中**<font color='red'>最后一个</font>**元素的**<font color='red'>下一个位置</font>**
+* 如果没有这样的元素存在，便返回一个迭代器，指向第一个**<font color='red'>大于 value </font>**的元素。
+* 如果区间中所有元素都小于 value，则返回 last
+
+换句话说，该算法找到区间中**<font color='red'>第一个大于 value 的元素</font>**
+
+ ![image-20221028113108174](/images/image-20221028113108174.png)
+
+这个算法有两个版本：
+
+* 版本一采用 `operator<` 进行比较，返回 [first,last) 中最远的迭代器 `i`, 使得 [first,i) 中的每个迭代器 `j` 都满足 ` value < *j` **<font color='red'>不为真</font>** 。
+* 版本二采用仿函数 comp，返回最远的迭代器 `i`, 使得 [first,i) 中的每个迭代器 `j` 都满足 `comp(value, *j)` 为 `false`。
+
+版本一的代码：
+
+```c++
+template <class ForwardIterator, class T>
+inline ForwardIterator upper_bound(ForwardIterator first, ForwardIterator last,
+                                   const T& value) {
+  return __upper_bound(first, last, value, distance_type(first),
+                       iterator_category(first));
+}
+```
+
+1. ForwardIterator 版本
+
+   ```c++
+   template <class ForwardIterator, class T, class Distance>
+   ForwardIterator __upper_bound(ForwardIterator first, ForwardIterator last,
+                                 const T& value, Distance*,
+                                 forward_iterator_tag) {
+     Distance len = 0;
+     distance(first, last, len);
+     Distance half;
+     ForwardIterator middle;
+   
+     while (len > 0) {
+       half = len >> 1;
+       middle = first;
+       advance(middle, half);
+       if (value < *middle)
+         len = half;
+       else {
+         first = middle;
+         ++first;
+         len = len - half - 1;
+       }
+     }
+     return first;
+   }
+   ```
+
+2. RandomAccessIterator 版本
+
+   ```c++
+   template <class RandomAccessIterator, class T, class Distance>
+   RandomAccessIterator __upper_bound(RandomAccessIterator first,
+                                      RandomAccessIterator last, const T& value,
+                                      Distance*, random_access_iterator_tag) {
+     Distance len = last - first;
+     Distance half;
+     RandomAccessIterator middle;
+   
+     while (len > 0) {
+       half = len >> 1;
+       middle = first + half;
+       if (value < *middle)
+         len = half;
+       else {
+         first = middle + 1;
+         len = len - half - 1;
+       }
+     }
+     return first;
+   }
+   ```
+
+### 6.6.4 `equal_range` （应用于有序区间）
+
+算法 `lower_bound` 返回区间 A 的第一个迭代器，算法 `upper_bound` 返回区间 A 的最后元素的下一位置，算法`equal_range` 则是以 `pair` 的形式将两者都返回。我们可把它想成是 [first,last）内 ”与value 等同” 的所有元素所形成的区间。
+
+本算法有两个版本，第一版本采用 `operator<` 进行比较，第二版本采用仿函数 comp 进行比较。
+
+```c++
+// 版本一
+template <class ForwardIterator, class T>
+inline pair<ForwardIterator, ForwardIterator>
+equal_range(ForwardIterator first, ForwardIterator last, const T& value) {
+  return __equal_range(first, last, value, distance_type(first),
+                       iterator_category(first));
+}
+```
+
+1. RandomAccessIterator 版本
+
+   ```c++
+   template <class RandomAccessIterator, class T, class Distance>
+   pair<RandomAccessIterator, RandomAccessIterator>
+   __equal_range(RandomAccessIterator first, RandomAccessIterator last,
+                 const T& value, Distance*, random_access_iterator_tag) {
+     Distance len = last - first;
+     Distance half;
+     RandomAccessIterator middle, left, right;
+   
+     while (len > 0) {						// 遍历整个区间
+       half = len >> 1;					
+       middle = first + half;				// 找出中间位置
+       if (*middle < value) {				// 如果中央元素 < 指定值
+         first = middle + 1;				// 将运作区间缩小（移至后半段）
+         len = len - half - 1;
+       }
+       else if (value < *middle)			// 如果中央元素 > 指定值
+         len = half;						// 将运作区间缩小（移至前半段）
+       else {
+         left = lower_bound(first, middle, value);			// 在前半段找 lower_bound
+         right = upper_bound(++middle, first + len, value);// 在后半段找 upper_bound
+         return pair<RandomAccessIterator, RandomAccessIterator>(left,
+                                                                 right);
+       }
+     }
+     return pair<RandomAccessIterator, RandomAccessIterator>(first, first);
+   }
+   ```
+
+2. ForwardIterator 版本
+
+   与 RandomAccessIterator  版本原理一样，只是迭代器移动方式不同：
+
+   ```c++
+   template <class ForwardIterator, class T, class Distance>
+   pair<ForwardIterator, ForwardIterator>
+   __equal_range(ForwardIterator first, ForwardIterator last, const T& value,
+                 Distance*, forward_iterator_tag) {
+     Distance len = 0;
+     distance(first, last, len);
+     Distance half;
+     ForwardIterator middle, left, right;
+   
+     while (len > 0) {
+       half = len >> 1;
+       middle = first;
+       advance(middle, half);
+       if (*middle < value) {
+         first = middle;
+         ++first;
+         len = len - half - 1;
+       }
+       else if (value < *middle)
+         len = half;
+       else {
+         left = lower_bound(first, middle, value);
+         advance(first, len);
+         right = upper_bound(++middle, first, value);
+         return pair<ForwardIterator, ForwardIterator>(left, right);
+       }
+     }
+     return pair<ForwardIterator, ForwardIterator>(first, first);
+   }
+   ```
+
+### 6.6.5 `binary_search` （应用于有序区间）
+
+二分查找，试图在已排序的区间中寻找元素 value。如果区间内有等同于value 的元素，便返回 `true`，否则返回 `false`。
+
+`binary_search` 有两个版本：
+
+* 第一版本采用 `operator<` 进行比较，当且仅当区间中存在一个迭代器 `i`，使得 `*i < value` 和 `value< *i` 皆不为真，返回 `true` 。
+* 第二版本采用仿函数 comp 进行比较，当且仅当区间中存在一个迭代器 `i`，使得 `comp(*i, value)` 和 `comp(value, *i)` 皆不为真，返回 `true` 。
+
+```c++
+template <class ForwardIterator, class T>
+bool binary_search(ForwardIterator first, ForwardIterator last,
+                   const T& value) {
+  ForwardIterator i = lower_bound(first, last, value);
+  // lower_bound 找到第一个大于等于 value 的元素
+  return i != last && !(value < *i);	// i != last 保证了 *i < value 不为真
+}
+
+template <class ForwardIterator, class T, class Compare>
+bool binary_search(ForwardIterator first, ForwardIterator last, const T& value,
+                   Compare comp) {
+  ForwardIterator i = lower_bound(first, last, value, comp);
+  return i != last && !comp(value, *i);
+}
+```
+
+### ⭐6.6.6 `next_permutation`
+
+STL 提供了两个用来计算排列组合关系的算法，分别是 `next_permutation` 和 `prev_permutation`。
+
+首先我们必须了解什么是 “下一个“ 排列组合，什么是 “前一个 “排列组合：
+
+考虑三个字符所组成的序列 {a,b,c} 。这个序列有六个可能的排列组合：abc, acb, bac, bca, cab, cba 。这些排列组合根据 less-than 操作符做**<font color='red'>字典顺序</font>**的排序。面对 bca，我们可以说其前一个排列组合是 bac，而其后一个排列组合是 cab。序列 abc 没有 “前一个“ 排列组合，cba 没有 ”后一个“ 排列组合。
+
+`next_permutation` 会取得 [first,last) 所标示的序列的下一个排列组合。如果没有下一个排列组合，便返回`false`，否则返回 `true` 。
+
+#### 算法思想
+
+1. 首先，从最尾端开始往前寻找两个相邻元素，令第一元素为 `*i`，第二元素为 `*ii`，且满足 `*i < *ii` 。即从后往前找到第一组非逆序数。
+2. 找到这样一组相邻元素后，再从最尾端开始往前检验，找出第一个大于 `*i` 的元素，令为 `*j`，将 `i`, `j` 元素对调。即从后往前找到一个大于 `i` 的元素，与 `i` 对调。
+3. 再将 `ii` 之后的所有元素颠倒排列。此即所求的 “下一个“ 排列组合。
+
+ 对于序列 {0,1,2,3,4}，下图为利用该算法，一步一步获得的下一个排列组合，图中框出了 `i` 和 `ii` 的位置：
+
+ ![image-20221028120141952](/images/image-20221028120141952.png)
+
+```c++
+template <class BidirectionalIterator>
+bool next_permutation(BidirectionalIterator first,
+                      BidirectionalIterator last) {
+  if (first == last) return false;			// 空区间，返回 false
+  BidirectionalIterator i = first;
+  ++i;
+  if (i == last) return false;				// 只有一个元素，返回 false
+  i = last;
+  --i;										// i 指向最后一个元素
+
+  for(;;) {
+    BidirectionalIterator ii = i;
+    --i;
+    if (*i < *ii) {							// 找到相邻的 i，ii
+      BidirectionalIterator j = last;
+      while (!(*i < *--j));					// 从后往前找到第一个大于 i 的 j
+      iter_swap(i, j);						// 交换 i 和 j
+      reverse(ii, last);					// 颠倒 i 之后的元素
+      return true;
+    }
+    if (i == first) {						// 进行至最前面了
+      reverse(first, last);					// 全部逆向重排
+      return false;							
+    }
+  }
+}
+```
+
+### 6.6.7 `prev_permutation`
+
+`prev_permutation` 会取得 [first,last) 所标示的序列的上一个排列组合。如果没有上一个排列组合，便返回`false`，否则返回 `true` 。
+
+#### 算法思想
+
+1. 首先，从最尾端开始往前寻找两个相邻元素，令第一元素为 `*i`，第二元素为 `*ii`，且满足 `*i > *ii` 。
+2. 找到这样一组相邻元素后，再从最尾端开始往前检验，找出第一个小于 `*i` 的元素，令为 `*j`，将 `i`, `j` 元素对调。
+3. 再将 `ii` 之后的所有元素颠倒排列。此即所求的 “下一个“ 排列组合。
+
+ 对于序列 {0,1,2,3,4}，下图为利用该算法，一步一步获得的下一个排列组合，图中框出了 `i` 和 `ii` 的位置：
+
+```c++
+template <class BidirectionalIterator>
+bool prev_permutation(BidirectionalIterator first,
+                      BidirectionalIterator last) {
+  if (first == last) return false;
+  BidirectionalIterator i = first;
+  ++i;
+  if (i == last) return false;
+  i = last;
+  --i;
+
+  for(;;) {
+    BidirectionalIterator ii = i;
+    --i;
+    if (*ii < *i) {
+      BidirectionalIterator j = last;
+      while (!(*--j < *i));
+      iter_swap(i, j);
+      reverse(ii, last);
+      return true;
+    }
+    if (i == first) {
+      reverse(first, last);
+      return false;
+    }
+  }
+}
+```
+
+### 6.6.8 `random_shuffle`
+
+这个算法将 [first,last) 的元素次序随机重排。也就是说，在 $$N!$$ 种可能的元素排列顺序中随机选出一种。此任何一个排列被选中的机率为 $$1 / N!$$  。
+
+`random_shuffle` 有两个版本，差别在于随机数的取得。版本一使用内部随机数产生器，版本二使用一个会产生随机随机数的仿函数：
+
+```c++
+// 版本一
+template <class RandomAccessIterator>
+inline void random_shuffle(RandomAccessIterator first,
+                           RandomAccessIterator last) {
+  __random_shuffle(first, last, distance_type(first));
+}
+
+template <class RandomAccessIterator, class Distance>
+void __random_shuffle(RandomAccessIterator first, RandomAccessIterator last,
+                      Distance*) {
+  if (first == last) return;
+  for (RandomAccessIterator i = first + 1; i != last; ++i) 
+      // rand() % ((i - first) + 1)) 从 0， 1，...，i - first 中产生一个随机数
+#ifdef __STL_NO_DRAND48
+    iter_swap(i, first + Distance(rand() % ((i - first) + 1)));
+#else
+  iter_swap(i, first + Distance(lrand48() % ((i - first) + 1)));
+#endif
+}
+// 版本二
+template <class RandomAccessIterator, class RandomNumberGenerator>
+void random_shuffle(RandomAccessIterator first, RandomAccessIterator last,
+                    RandomNumberGenerator& rand) {
+  if (first == last) return;
+  for (RandomAccessIterator i = first + 1; i != last; ++i)
+    iter_swap(i, first + rand((i - first) + 1));
+}
+```
+
+> 实现方式：从序列的第二个元素开始，将它与它前面的（包括它自己）任意一个元素互换
+
+### ⭐6.6.9 `partial_sort`
+
+本算法接受一个 middle 迭代器（位于序列 [first, last) 之内），然后重新安排 [first,last) ，使序列中的 middle －first 个最小元素以递增顺序排序，置于 [first, middle) 内。其余 last-middle 个元素安置于 [middle,last) 中，不保证有任何特定顺序。
+
+#### 算法原理
+
+`partial_sort` 有两个版本，其差别在于如何定义某个元素小于另一元素。第一版本使用 less-than 操作符，第二版本使用仿函数 comp 。**<font color='red'>算法内部采用 heap sort 来完成任务。</font>**
+
+`partial_sort`  的任务是找出 middle-first 个最小元素：
+
+1. 首先界定出区间 [first, middle) ，并利用 `make_heap` 将它组织成一个 max-heap
+2. 然后将区间 [middle,last) 中的每一个元素拿来与 max-heap 的最大值比较（max-heap 的最大值就在第一个元素身上，轻松可以获得）：如果小于该最大值，就互换位置并重新保持 max-heap 的状态。
+
+3. 如此一来，当我们走遍整个 [middle,last) 时，较大的元素都已经被抽离出 [first, middle) ，这时候再以 `sort＿heap` 将 [first, middle) 做一次排序，即功德圆满
+
+ ![image-20221028151708867](/images/image-20221028151708867.png)
+
+```c++
+template <class RandomAccessIterator, class T>
+void __partial_sort(RandomAccessIterator first, RandomAccessIterator middle,
+                    RandomAccessIterator last, T*) {
+  make_heap(first, middle);
+  for (RandomAccessIterator i = middle; i < last; ++i)
+    if (*i < *first) 
+      // __pop_heap 第三个参数 i 表示用该位置的元素与大根堆的根节点互换，并重新调整大根堆
+      __pop_heap(first, middle, i, T(*i), distance_type(first));
+  sort_heap(first, middle);
+}
+
+template <class RandomAccessIterator>
+inline void partial_sort(RandomAccessIterator first,
+                         RandomAccessIterator middle,
+                         RandomAccessIterator last) {
+  __partial_sort(first, middle, last, value_type(first));
+}
+```
+
+### ⭐6.6.10 `sort`
+
+STL 所提供的各式各样算法中，`sort` 是最复杂最庞大的一个。这个算法接受两个 RandomAccesslterator，然后将区间内的所有元素以递增的方式排列。第二个版本则允许用户指定一个仿函数做为排序标准。
+
+* STL 的所有关系型容器都拥有自动排序功能（底层结构采用RB-tree），所以不需要用到这个 `sort` 算法。
+* 序列式容器中的 `stack` 、`queue` 和 `priority_queue` 都有特别的出入口，不允许用户对元素排序。
+* 剩下的 `vector` 、`deque` 和 `list`：
+  * 前两者的迭代器属于 `RandomAccesslterators`，适合使用 `sort` 算法。
+  * `list` 的迭代器则属于 Bidirectioinallterators，不适合使用 `sort` 算法。如果要对 `list` 排序，应该
+    使用它们自己提供的 member function `sort`
+
+**<font color='red'>STL 的 `sort` 算法，数据量大时采用 Quick Sort，分段递归排序。一旦分段后的数据量小于某个门槛，为避 Quick Sort 的递归调用带来过大的额外负荷，就改用 Insertion Sort 。如果递归层次过深，还会改用 Heap Sort。</font>**
+
+#### Insertion Sort
+
+Insertion Sort 以双层循环的形式进行。外循环遍历整个序列，每次迭代决定出一个子区间。内循环遍历子区间，将子区间内的每一个 “逆转对(inversion) " 倒转过来：
+
+ ![image-20221028162409943](/images/image-20221028162409943.png)
+
+这个算法的复杂度为 $$O(N^2)$$，说起来并不理想，但是当数据量很少时，却有不错的效果，原因是实现上有一些技巧，而且不像其它较为复杂的排序算法有着诸如递归调用等操作带来的额外负荷。
+
+SG ISTL 的 Insertion Sort 有两个版本，版本一使用以渐增方式排序，也就是说，以 `operator<` 为两元素的比较函数，版本二允许用户指定一个仿函数作为两元素的比较函数。
+
+```c++
+template <class RandomAccessIterator>
+void __insertion_sort(RandomAccessIterator first, RandomAccessIterator last) {
+  if (first == last) return; 
+  for (RandomAccessIterator i = first + 1; i != last; ++i)	// 外循环
+    __linear_insert(first, i, value_type(first));			
+    // i 从第二个元素开始，形成 [first, i) 这样一个子区间
+}
+```
+
+```c++
+// 将 last 所指元素插入已经排序好的 [first, last) 区间中
+template <class RandomAccessIterator, class T>
+inline void __linear_insert(RandomAccessIterator first, 
+                            RandomAccessIterator last, T*) {
+  T value = *last;							// 将 i 所指元素插入 [first, i) 区间中
+  if (value < *first) {						// 如果该元素比头元素还小
+      										// 头元素是 [first, i) 区间中的最小值
+    copy_backward(first, last, last + 1);	// 就将整个区间向右移动一个位置
+    *first = value;
+  }
+  else
+    __unguarded_linear_insert(last, value);
+}
+```
+
+```c++
+// 将 value 所指元素插入已经排序好的 [first, last) 区间中
+template <class RandomAccessIterator, class T>
+void __unguarded_linear_insert(RandomAccessIterator last, T value) {
+  RandomAccessIterator next = last;
+  --next;
+  // 注意，一旦不再出现逆转对，循环就可以结束了
+  while (value < *next) {
+    *last = *next;			
+    last = next;
+    --next;
+  }
+  *last = value;
+}
+
+```
+
+> Insertion Sort 在面对小数据，“几近排序但尚未完成“ 的序列时，有很好的表现
+
+#### Quick Sort
+
+Quick Sort 的精神在于将大区间分割为小区间，分段排序，分段的原则通常采用 **<font color='blue'>median-of-three</font>**。每一个小区间排序完成后，串接起来的大区间也就完成了排序。**<font color='red'>最坏的情况发生在分割时产生出一个空的子区间</font>**
+
+#### Median-of-Three （三点中值）
+
+Quick Sort 中，任何一个元素都可以被选来当作 pivot，**<font color='red'>取整个序列的头、尾、中央三个位置的元素，以其中值作为枢轴</font>**。这种做法称为 median-of-three partitioning, 或称为 mediun-of-three-QuickSort 。为了能够快速取出中央位置的元素，显然迭代器必须能够随机定位，亦即必须是个RandomAccesslte「ators 。
+
+以下是 SGI STL 提供的三点中值决定函数：
+
+```c++
+template <class T>
+inline const T& __median(const T& a, const T& b, const T& c) {
+  if (a < b)
+    if (b < c)
+      return b;
+    else if (a < c)
+      return c;
+    else
+      return a;
+  else if (a < c)
+    return a;
+  else if (b < c)
+    return c;
+  else
+    return b;
+}
+```
+
+#### ⭐ Partitioining (分割）
+
+SGI 提供的分割的方法为：
+
+1. 令头端迭代器 first 向尾部移动，尾端迭代器 last 向头部移动。
+2. 当 *first 大于或等于枢轴时就停下来，当 *last 小于或等于枢轴时也停下来，然后检验两个迭代器是否交错：
+   * 如果 first 仍然在左而 last 仍然在右，就将两者元素互换，然后各自调整一个位置（向中央逼近），再继续进行相同的行为。
+   * 如果发现两个迭代器交错了（亦即 `!(first < last)`) ，表示整个序列已经调整完毕，以此时的 first 为轴，将序列分为左右两半，左半部所有元素值都小于或等于枢轴，右半部所有元素值都大于或等于枢轴。
+
+下面是 SGI STL 提供的分割函数，**<font color='red'>其返回值是为分割后的右段第一个位置</font>**：
+
+```c++
+template <class RandomAccessIterator, class T>
+RandomAccessIterator __unguarded_partition(RandomAccessIterator first, 
+                                           RandomAccessIterator last, 
+                                           T pivot) {
+  while (true) {
+    while (*first < pivot) ++first;			// first 找到 >= pivot 的元素就停下来
+    --last;
+    while (pivot < *last) --last;			// last 找到 <= pivot 的元素就停下来
+    if (!(first < last)) return first;		// first 与 last 交错，循环结束
+    iter_swap(first, last);					// 否则
+    ++first;
+  }
+}    
+```
+
+ ![image-20221029101453932](/images/image-20221029101453932.png)
+
+#### threshold (阈值）
+
+面对一个只有十来个元素的小型序列，使用像 Quick Sort 这样复杂的排序法，并不划算，甚至 Insertion Sort 也可能快过 Quick Sort——因为 Quick Sort 会为了极小的子序列而产生许多的函数递归调用。
+
+鉴于这种情况，适度评估序列的大小，然后决定采用 Quick Sort 或 Insertion Sort，是值得采纳的一种优化措施。
+
+#### intro sort
+
+不当的枢轴选择，导致不当的分割，导致 Quick Sort 恶化为 $$O(N^2)$$。由此提出了一种混合式排序算法：
+**<font color='blue'>Introspective Sorting</font>**，简称 lntroSort，其行为在大部分情况下几乎与 median-of-3 Quick Sort 完全相同。但是当分割行为有恶化为二次行为的倾向时，能够自我侦测，转而改用 Heap Sort，使效率维持在 Heap Sort 的$$O(NlogN)$$。又比一开始就使用 Heap Sort 来得好。
+
+#### SGI STL sort
+
+SGI STL sort 首先使用快速排序，其中若快速排序的分割层数大于 $$lgN$$ ，改用 heap sort。
+
+当快速排序划分出的某个区间中的元素小于 16 个时，该区间改用 insertion sort。
+
+```c++
+// 千万注意: sort 只适用于 RandomAccessIterator
+template <class RandomAccessIterator>
+inline void sort(RandomAccessIterator first, RandomAccessIterator last) {
+  if (first != last) {
+    __introsort_loop(first, last, value_type(first), __lg(last - first) * 2);
+    __final_insertion_sort(first, last);
+  }
+}
+
+// __lg 用来控制分割恶化的情况：
+// 找出2^k <= n 的最大值 K。例：n=7, 得k=2；n=20, 得k=4；n=8, 得k=3
+template <class Size>
+inline Size __lg(Size n) {
+  Size k;
+  for (k = 0; n > 1; n >>= 1) ++k;
+  return k;
+}
+```
+
+1. lntroSort 算法
+
+   ```c++
+   // 当元素个数为40 时，＿introsoft_loop 的最后一个参数将是 5*2, 意思是最多允许分割10 层。
+   template <class RandomAccessIterator, class T, class Size>
+   void __introsort_loop(RandomAccessIterator first,
+                         RandomAccessIterator last, T*,
+                         Size depth_limit) {
+     while (last - first > __stl_threshold) {		// > 16
+       if (depth_limit == 0) {						// 分割层数超过指定层，分割恶化
+         partial_sort(first, last, last);			// 改用 heapsort
+         return;
+       }
+       --depth_limit;
+       // 以下是 median-of-3 partition, 选择一个够好的枢轴并决定分割点
+   	// 分割点将落在迭代器 cut 身上
+       RandomAccessIterator cut = __unguarded_partition
+         (first, last, T(__median(*first, *(first + (last - first)/2),
+                                  *(last - 1))));
+       // 对右半段递归进行sort
+       __introsort_loop(cut, last, value_type(first), depth_limit);
+       last = cut;
+       // 令 last 等于 cut，现在回到 while 循环，准备对左半段递归进行sort
+   	// 这种写法可读性较差，效率并没有比较好
+   	// RW STL 采用一般教科书写法（直观地对左半段和右半段递归），较易阅读
+     }
+   }
+   ```
+
+2. `__final_insertion_sort`
+
+   当 `__introsort_loop` 结束，[first, lasy) 内有多个 “元素个数少于16" 的子序列，每个子序列都有相当程度的排序，但尚未完全排序（因为元素个数一旦小于 `__stl_threshold`，就被中止进一步的排序操作了）。此时调用插入排序即可完成最终的排序任务。
+
+   ```c++
+   template <class RandomAccessIterator>
+   void __final_insertion_sort(RandomAccessIterator first, 
+                               RandomAccessIterator last) {
+     if (last - first > __stl_threshold) {
+       __insertion_sort(first, first + __stl_threshold);
+       __unguarde.d_insertion_sort(first + __stl_threshold, last);
+     }
+     else
+       __insertion_sort(first, last);
+   }
+   ```
+
+   此函数首先判断元素个数是否大于 16：
+
+   * 如果答案为否，就调用 `__insertion_sort` 加以处理。
+   * 如果答案为是，就将 [first,last) 分割为长度 16 的一段子序列，和另一段剩余子序列，再针对两个子序列分别调用 `__insertion_sort` 和 `__unguarded_insertion_sort`。两个函数实际效果一样，均为插入排序。
+
+### ⭐6.6.11 `inplace_merge` （原地 merge，应用于有序区间）
+
+如果两个连接在一起的序列 [first,middle) 和 [middle,last) 都已排序，那么 `inplace_merge` 可将它们结合成单一一个序列，并仍保有序性。
+
+`inplace_merge` 有两个版本，其差别在于如何定义某元素小于另一个元素。第一版本使用 `operator<` 进行比较，第二版本使用仿函数 `comp` 进行比较。
+
+```c++
+// 版本一
+template <class BidirectionalIterator>
+inline void inplace_merge(BidirectionalIterator first,
+                          BidirectionalIterator middle,
+                          BidirectionalIterator last) {
+  if (first == middle || middle == last) return;	// 只要有任何一个序列为空，就直接返回
+  __inplace_merge_aux(first, middle, last, value_type(first),
+                      distance_type(first));
+}
+```
+
+```c++
+template <class BidirectionalIterator, class T, class Distance>
+inline void __inplace_merge_aux(BidirectionalIterator first,
+                                BidirectionalIterator middle,
+                                BidirectionalIterator last, T*, Distance*) {
+  Distance len1 = 0;				
+  distance(first, middle, len1);		// len1 表示区间一的长度
+  Distance len2 = 0;
+  distance(middle, last, len2);			// len2 表示区间二的长度
+
+  temporary_buffer<BidirectionalIterator, T> buf(first, last);
+  if (buf.begin() == 0)					// 内存配置失败
+    __merge_without_buffer(first, middle, last, len1, len2);
+  else									// 缓冲区配置成功
+    __merge_adaptive(first, middle, last, len1, len2,
+                     buf.begin(), Distance(buf.size()));
+}
+```
+
+这个算法如果有额外的内存（缓冲区）辅助，效率会好许多。可以将其中一个序列拷贝到缓冲区中，而后调用 `merge` 函数，并将结果放到原序列起始的位置。
+
+下面介绍不适用缓冲区的方式：
+
+假设原本的序列为 `AB`（`A` 和 `B` 分别为左右两个序列，均是有序的状态）：
+
+* 首先，选择两边较长的序列的中间的元素做为 pivot 元素，假如 `B` 序列较长，因为 `B` 是有序的，这个 pivot 就将 `B` 分成了两段，即 `B1B2`。
+* 然后我们利用 `upper_bound` 在 `A` 中找到第一个大于该 pivot 的元素，同理也将 `A` 分为了两端 `A1A2`。
+* 至此整个序列被分为：`A1A2B1B2`，其中 `A1`，`B1` 中的元素小于 pivot，`A2`，`B2` 中的元素大于 pivot。我们交换 `A2` 和 `B1`，可得到 `A1B1A2B2`，可以知道 `A2B2` 中的元素全都大于  `A1B1` 中的元素，同时 `A2`，`B2`，`A1`，`B1` 中的元素各自有序，我们只需要递归地分别对 `A2B2` 和 `A1B1` 进行 `inplace_merge` 即可。
+
+```c++
+template <class BidirectionalIterator, class Distance>
+void __merge_without_buffer(BidirectionalIterator first,
+                            BidirectionalIterator middle,
+                            BidirectionalIterator last,
+                            Distance len1, Distance len2) {
+  // 递归出口
+  if (len1 == 0 || len2 == 0) return;				// 有任意一个区间为空，则返回
+  if (len1 + len2 == 2) {							// 两个区间分别只有一个元素
+    if (*middle < *first) iter_swap(first, middle);
+    return;
+  }
+  BidirectionalIterator first_cut = first;
+  BidirectionalIterator second_cut = middle;
+  Distance len11 = 0;
+  Distance len22 = 0;
+  if (len1 > len2) {
+    len11 = len1 / 2;
+    advance(first_cut, len11);
+    second_cut = lower_bound(middle, last, *first_cut);
+    distance(middle, second_cut, len22);
+  }
+  else {												// 如果序列二比较长
+    len22 = len2 / 2;
+    // second_cut 指向序列二中间的位置
+    advance(second_cut, len22);							
+    // first_cut 指向序列一中第一个大于 *second_cut 的位置
+    first_cut = upper_bound(first, middle,  *second_cut);	
+    distance(first, first_cut, len11);
+  }
+  rotate(first_cut, middle, second_cut);
+  BidirectionalIterator new_middle = first_cut;
+  advance(new_middle, len22);
+  // 分别递归合并
+  __merge_without_buffer(first, first_cut, new_middle, len11, len22);
+  __merge_without_buffer(new_middle, second_cut, last, len1 - len11,
+                         len2 - len22);
+}
+```
+
+1. 输入：
+
+    ![image-20221030114639584](/images/image-20221030114639584.png)
+
+2. 选取 pivot，划分 `A1A2B1B2`。
+
+    ![image-20221030114802762](/images/image-20221030114802762.png)
+
+   其中 pivot 为第二个序列的中间元素 6，`A1` 为 [first, first_cut)，`A2` 为 [first_cut, middle)，`B1` 为 [middle, second_cut)，`B2` 为 [second_cut, last)
+
+3. 交换 `A2`，`B1`
+
+    ![image-20221030115124113](/images/image-20221030115124113.png)
+
+4. 分段处理
+
+   * 首先针对左段 [first, first_cut, new_middle)，也就是 `A1B1`，亦即 { 1,3,5,2,4} ，做递归调用：
+
+    ![image-20221030115347751](/images/image-20221030115347751.png)
+
+   * 再针对右段 [new_middle, first_cut, last)，也就是 `A2B2`，亦即 {7,6,8,10}，做递归调用：
+
+      ![image-20221030115522503](/images/image-20221030115522503.png)
+
+### 6.6.12 `nth_element`
+
+当采用默认的升序排序规则（即使用 `operator<` 比较相邻的两个元素）时，该函数可以从某个序列中找到第 n 小的元素 K，并将 K 移动到序列中第 n 的位置处。不仅如此，整个序列经过 `nth_element` 函数处理后，所有位于 K 之前的元素都比 K 小，所有位于 K 之后的元素都比 K 大。
+
+以下面这个序列为例：
+
+```c++
+3 4 1 2 5
+```
+
+假设按照升序排序，并通过 `nth_element` 函数查找此序列中第 3 小的元素，则最终得到的序列可能为：
+
+```c++
+2 1 3 4 5
+```
+
+`nth_element` 有两个版本，其差异在于如何定义某个元素小于另一个元素，第一版本使用 `operator<` 进行比较，第二个版本使用仿函数 `comp` 进行比较。
+
+`nth_element` 的做法是，不断地以 median-of-3 partitioning 将整个序列分割为更小的左、右子序列。如果 `nth_element` 迭代器落于左子序列，就再对左子序列进行分割，否则就再对右子序列进行分割。依此类推，直到分割后的子序列长度不大于3 （够小了），便对最后这个待分割的子序列做 Insertion Sort、
+
+```c++
+template <class RandomAccessIterator>
+inline void nth_element(RandomAccessIterator first, RandomAccessIterator nth,
+                        RandomAccessIterator last) {
+  __nth_element(first, nth, last, value_type(first));
+}
+
+template <class RandomAccessIterator, class T>
+void __nth_element(RandomAccessIterator first, RandomAccessIterator nth,
+                   RandomAccessIterator last, T*) {
+  while (last - first > 3) {			// 区间长度超过 3
+    // 使用 median-of-3 partitioning 划分区间
+    RandomAccessIterator cut = __unguarded_partition	
+      (first, last, T(__median(*first, *(first + (last - first)/2),
+                               *(last - 1))));
+    if (cut <= nth)						// 如果 nth 迭代器落于右区间
+      first = cut;						// 就继续划分右区间
+    else 
+      last = cut;						// 否则就继续划分左区间
+  }
+  __insertion_sort(first, last);		// 当区间长度 小于等于 3 时，采用插入排序对其排序
+}
+```
+
+ 下图为对序列调用 `nth_element(iv.begin(), iv.begin()+5, iv.end())` 的执行过程
+
+ ![image-20221030123722039](/images/image-20221030123722039.png)
+
+### 6.6.13 `merge_sort`
+
+Merge Sort 可以很轻易地使用 `inplace_merge` 实现出来：
+
+首先，将区间对半分割，左右两段各自排序，再利用 `inplace_merge` 重新组合为一个完整的有序序列。对半分
+割的操作可以递归进行，直到每一小段的长度为0 或1 （那么该小段也就自动完成了排序）。
+
+以下为一种实现方法：
+
+```c++
+template <class BidirectionalIter>
+void mergesort(BidirectionalIter first, BidirectionalIter last){
+    typename iterator_traits<BidirectionalIter>::difference_type n =
+    	distance(first, last);
+    if(n == 0 || n == 1)	return;
+    BidirectionalIter mid = first + n / 2;
+    mergesort(first, mid);
+    mergesort(mid, last);
+    inplace_merge(first, mid, last);
+}
+```
+
+# 第七章 仿函数
