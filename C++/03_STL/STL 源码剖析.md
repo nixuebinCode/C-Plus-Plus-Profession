@@ -7731,3 +7731,517 @@ struct select2nd : public unary_function<Pair, typename Pair::second_type> {
 ```
 
 # 第八章 配接器（adapters）
+
+Design Patterns 一书提到 23 个最普及的设计模式，其中对 adapter 样式的定义如下：将一个 class 的接口转换为另一个 class 的接口，使原本因接口不兼容而不能合作的 classes，可以一起运作。
+
+## 8.1 配接器之概观与分类
+
+STL 所提供的各种配接器中：
+
+* 改变仿函数接口的，我们称为 function adapter
+* 改变容器接口的，我们称为 container adapter
+* 改变迭代器接口的，我们称为 iterator adapter 
+
+### 8.1.1 容器配接器，container adapters
+
+STL 提供的两个容器 `queue` 和 `stack`，其实都只不过是一种配接器。它们修饰 `deque` 的接口而成就出另一种容器风貌。
+
+### 8.1.2 迭代器配接器，iterator adapters
+
+STL 提供了许多应用于迭代器身上的配接器：
+
+* insert iterators
+* reverse iterators
+* iostream iterators
+
+#### Insert Iterators
+
+所谓 insert iterators，可以将一般迭代器的赋值操作转变为插入操作。这样的迭代器包括”
+
+1. back_insert_iterator：用于尾端插入
+2. front_insert_iterator：用于头端插入
+3. insert_iterator：可以从任意位置插入
+
+由于这三个 iterator adapters 的使用接口不是十分直观，STL 提供了三个相应函数生存指定容器的对应 insert iterators:
+
+ ![image-20221030171202711](images/image-20221030171202711.png)
+
+#### Reverse Iterators
+
+所谓 reverse iterators，可以将一般迭代器的行进方向逆转，使原本应该前进的 `operator++` 变成了后退操作，使原本应该后退的 `operator--` 变成了前进操作。
+
+#### IOStream Iterators
+
+所谓 iostream iterators，可以将迭代器绑定到某个 iostream 对象身上。
+
+* 绑定到 istream 对象（例如 `std:::cin`）身上的，称为 `istream_iterator`, 拥有输入功能；
+* 绑定到 ostream 对象（例如 `std:::cout`）身上的，称为 `ostream_iterator`，拥有输出功能。
+
+**<font color='red'>以它为蓝图，稍加修改，便可适用于任何输出或输入装置上。例如，你可以在透彻了解 iostream Iterators 的技术后，完成一个绑定到磁盘目录上的一个迭代器。</font>**
+
+### 8.1.3 仿函数配接器，functor adapters
+
+仿函数配接器是所有配接器中数量最庞大的一个族群，常见的是使用 `bind` 函数对一个仿函数进行修改，通过修改原有的内建仿函数，可以无限地创造出各种可能地表达式，并搭配 STL 算法一起使用。
+
+## 8.2 容器配接器
+
+### 8.2.1 `stack`
+
+`stack` 的底层由 `deque` 构成。从以下接口可清楚看出 `stack` 与 `deque` 的关系：
+
+```c++
+template <class T, class Sequence = deque<T> >
+class stack{
+protected:
+    Sequence c;
+    ...
+};
+```
+
+`stack` 封住了所有的 `deque` 对外接口，只开放符合 `stack` 原则的几个函数，所以我们说 `stack` 是一个配接器，一个作用于容器之上的配接器。
+
+### 8.2.2 `queue`
+
+`queue` 的底层由 `deque` 构成。从以下接口可清楚看出 `queue` 与 `deque` 的关系：
+
+```c++
+template <class T, class Sequence = deque<T> >
+class queue{
+protected:
+    Sequence c;
+    ...
+};
+```
+
+`queue` 封住了所有的 `deque` 对外接口，只开放符合 `queue` 原则的几个函数，所以我们说 `queue` 是一个配接器，一个作用于容器之上的配接器。
+
+## 8.3 迭代器配接器
+
+### 8.3.1 insert iterators
+
+共有三种 insert iterators：`back_insert_iterator`，`front_insert_iterator`，`insert_iterator`。每一个 insert iterators 内部都维护有一个容器（必须由用户指定），容器有自己的迭代器，于是，当客户端对 insert iterators 做赋值操作时，就转为对该容器的迭代器做插入操作，也就是说，**<font color='red'>在 insert iterators 的 `operator=` 操作符中调用底层容器的 `push_front` 或 `push_back` 或 `insert` 操作函数。至于其它的迭代器惯常行为 `operator++`, `operator++(int)`,  `operator*` 等都被封住，换句话说，insert iterators 的前进、后退、取值、成员取用等操作都是没有意义的，甚至是不允许的。</font>**
+
+#### back_insert_iterator
+
+```c++
+template <class Container>
+class back_insert_iterator {
+protected:
+  Container* container;			// 指向底层容器的指针
+public:
+  typedef output_iterator_tag iterator_category;	// 类型为 output_iterator
+  typedef void                value_type;
+  typedef void                difference_type;
+  typedef void                pointer;
+  typedef void                reference;
+
+  // 下面这个 ctor 使 back_insert_iterator 与容器绑定起来
+  explicit back_insert_iterator(Container& x) : container(&x) {}
+  // 这里是关键，转而调用底层容器的 push_back
+  back_insert_iterator<Container>&
+  operator=(const typename Container::value_type& value) { 
+    container->push_back(value);
+    return *this;
+  }
+  // 以下三个操作符对 back_insert_iterator 不起作用（关闭功能）
+  // 三个操作符返回的都是 back_insert_iterator 自己
+  back_insert_iterator<Container>& operator*() { return *this; }
+  back_insert_iterator<Container>& operator++() { return *this; }
+  back_insert_iterator<Container>& operator++(int) { return *this; }
+};
+
+// 辅助函数，帮助我们方便使用 back_insert_iterator
+template <class Container>
+inline back_insert_iterator<Container> back_inserter(Container& x) {
+  return back_insert_iterator<Container>(x);
+}
+```
+
+#### front_insert_iterator
+
+实现原理与 `back_insert_iterator` 类似，只是赋值操作符调用了底层容器的 `push_front`
+
+```c++
+template <class Container>
+class front_insert_iterator {
+protected:
+  Container* container;
+public:
+  typedef output_iterator_tag iterator_category;
+  typedef void                value_type;
+  typedef void                difference_type;
+  typedef void                pointer;
+  typedef void                reference;
+
+  explicit front_insert_iterator(Container& x) : container(&x) {}
+  // 这里是关键，转而调用底层容器的 push_front
+  front_insert_iterator<Container>&
+  operator=(const typename Container::value_type& value) { 
+    container->push_front(value);
+    return *this;
+  }
+  front_insert_iterator<Container>& operator*() { return *this; }
+  front_insert_iterator<Container>& operator++() { return *this; }
+  front_insert_iterator<Container>& operator++(int) { return *this; }
+};
+
+// 辅助函数，帮助我们方便使用 front_insert_iterator
+template <class Container>
+inline front_insert_iterator<Container> front_inserter(Container& x) {
+  return front_insert_iterator<Container>(x);
+}
+```
+
+#### insert_iterator
+
+实现原理与 `back_insert_iterator` 类似，除了需要持有指向容器的指针，还需要持有指向插入位置的迭代器。赋值操作符调用了底层容器的 `insert`，并将迭代器右移一个位置。
+
+```c++
+template <class Container>
+class insert_iterator {
+protected:
+  Container* container;
+  typename Container::iterator iter;
+public:
+  typedef output_iterator_tag iterator_category;
+  typedef void                value_type;
+  typedef void                difference_type;
+  typedef void                pointer;
+  typedef void                reference;
+
+  insert_iterator(Container& x, typename Container::iterator i) 
+    : container(&x), iter(i) {}
+  
+  // 这里是关键，转调用 insert
+  insert_iterator<Container>&
+  operator=(const typename Container::value_type& value) { 
+    iter = container->insert(iter, value);
+    ++iter;						// 永远随其目标贴身移动
+    return *this;
+  }
+  insert_iterator<Container>& operator*() { return *this; }
+  insert_iterator<Container>& operator++() { return *this; }
+  insert_iterator<Container>& operator++(int) { return *this; }
+};
+
+// 辅助函数，帮助我们方便使用 inserter
+template <class Container, class Iterator>
+inline insert_iterator<Container> inserter(Container& x, Iterator i) {
+  typedef typename Container::iterator iter;
+  return insert_iterator<Container>(x, iter(i));
+}
+```
+
+### 8.3.2 reverse iterators
+
+所谓 reverse iterator，就是将迭代器的移动行为倒转。如果 STL 算法接受的是这种逆向迭代器，它就会以从尾到头的方向来处理序列中的元素。
+
+STL 容器都提供有 `rbegin` 和 `rend`，例如：
+
+```c++
+template <class T, class Alloc = alloc>
+class vector {
+public:
+	typedef T value_type;
+	typedef value_type* iterator;
+	typedef reverse_iterator<iterator> reverse_iterator;
+	reverse_iterator rbegin() { return reverse_iterator(end()); }
+	reverse_iterator rend() { return reverse_iterator(begin()); }
+    ...
+};
+
+template <class T, class Alloc = alloc, size_t BufSiz = 0>
+class deque {
+public:
+	typedef _deque_iterator<T, T&, T*, BufSiz> iterator;
+	typedef reverse_iterator<iterator> reverse_iterator;
+	iterator begin() { return start; }
+	iterator end () { return finish; }
+	reverse_iterator rbegin() { reverse_iterator(finish)); }
+	reverse_iterator rend() { reverse_iterator(start)); }
+	// 上述两式相当于：
+	// reverse_iterator rbegin() { return reverse_iterator(end()); }
+	// reverse_iterator rend() { return reverse_iterator(begin()); }
+    ...
+};
+```
+
+为了配合迭代器区间的 “前闭后开“ 习惯，当迭代器被逆转方向时，虽然其实体位置（真正的地址）不变，但其逻辑位置（迭代器所代表的元素）改变了:
+
+ ![image-20221031102848647](images/image-20221031102848647.png)
+
+#### reverse_iterator 的源代码
+
+```c++
+template <class Iterator>
+class reverse_iterator 
+{
+protected:
+  Iterator current;			// 记录对应的正向迭代器
+public:
+  // 逆向迭代器的 5 种相应型别都和其对应的正向迭代器相同
+  typedef typename iterator_traits<Iterator>::iterator_category
+          iterator_category;
+  typedef typename iterator_traits<Iterator>::value_type
+          value_type;
+  typedef typename iterator_traits<Iterator>::difference_type
+          difference_type;
+  typedef typename iterator_traits<Iterator>::pointer
+          pointer;
+  typedef typename iterator_traits<Iterator>::reference
+          reference;
+
+  typedef Iterator iterator_type;			// 正向迭代器型别
+  typedef reverse_iterator<Iterator> self;	// 逆向迭代器型别
+
+public:
+  reverse_iterator() {}
+  // 下面这个 ctor 将 reverse_iterator 与某个正向迭代器 x 联结起来
+  explicit reverse_iterator(iterator_type x) : current(x) {}
+
+  reverse_iterator(const self& x) : current(x.current) {}
+    
+  // 取出对应的正向迭代器
+  iterator_type base() const { return current; }
+  
+  // 对逆向迭代器取值，就是将 “对应的正向迭代器” 后退一格后取值
+  reference operator*() const {
+    Iterator tmp = current;
+    return *--tmp;
+  }
+  // 意义同上
+  pointer operator->() const { return &(operator*()); }
+
+  // 以下前进变后退，后退变前进
+  self& operator++() {
+    --current;
+    return *this;
+  }
+  self operator++(int) {
+    self tmp = *this;
+    --current;
+    return tmp;
+  }
+  self& operator--() {
+    ++current;
+    return *this;
+  }
+  self operator--(int) {
+    self tmp = *this;
+    ++current;
+    return tmp;
+  }
+
+  self operator+(difference_type n) const {
+    return self(current - n);
+  }
+  self& operator+=(difference_type n) {
+    current -= n;
+    return *this;
+  }
+  self operator-(difference_type n) const {
+    return self(current + n);
+  }
+  self& operator-=(difference_type n) {
+    current += n;
+    return *this;
+  }
+  // 调用 operator+(difference_type n) 和 operator* 完成下标操作
+  reference operator[](difference_type n) const { return *(*this + n); }  
+}; 
+```
+
+### 8.3.3 stream iterators
+
+所谓 iostream iterators，可以将迭代器绑定到某个 iostream 对象身上。
+
+* 绑定到 istream 对象（例如 `std:::cin`）身上的，称为 `istream_iterator`, 拥有输入功能；
+* 绑定到 ostream 对象（例如 `std:::cout`）身上的，称为 `ostream_iterator`，拥有输出功能。
+
+#### `istream_iterator`
+
+所谓绑定一个 istream 对象，其实就是在 istream_iterator 内部维护一个 istream 对象，**<font color='red'>客户端对这个迭代器所做的 operator++ 操作，会被转而调用迭代器内部所含的那个 istream 对象的输入操作（`operator>>`）。</font>**这个迭代器是个 Input Iterator，不具备 `operator--`。
+
+```c++
+template <class T, class Distance = ptrdiff_t> 
+class istream_iterator {
+  friend bool
+  operator== __STL_NULL_TMPL_ARGS (const istream_iterator<T, Distance>& x,
+                                   const istream_iterator<T, Distance>& y);
+protected:
+  istream* stream;				// 内部维护一个 istream 对象
+  T value;
+  bool end_marker;
+  void read() {
+    end_marker = (*stream) ? true : false;		// 读入前，检查 stream 的状态
+    if (end_marker) *stream >> value;			// 从 stream 中读出到 value 中	
+    end_marker = (*stream) ? true : false;		// 读入后，更新 stream 的状态
+  }
+public:
+  typedef input_iterator_tag iterator_category;	// 类型为 input_iterato
+  typedef T                  value_type;
+  typedef Distance           difference_type;
+  typedef const T*           pointer;
+  typedef const T&           reference;
+
+  istream_iterator() : stream(&cin), end_marker(false) {}
+  istream_iterator(istream& s) : stream(&s) { read(); }
+  // 以上两行的用法：
+  // istream_iterator<int> eos; 		造成 end_marker 为false 。
+  // istream_iterator<int> inter(cin);	引发 read，程序至此会等待输入
+    
+    
+  reference operator*() const { return value; }
+  pointer operator->() const { return &(operator*()); }
+    
+  // 迭代器前进一个位置，就代表要读取一个数据
+  istream_iterator<T, Distance>& operator++() { 
+    read(); 
+    return *this;
+  }
+  istream_iterator<T, Distance> operator++(int)  {
+    istream_iterator<T, Distance> tmp = *this;
+    read();
+    return tmp;
+  }
+};
+```
+
+#### ⭐`istream_iterator` 与 `copy`
+
+有如下客户端代码：
+
+```c++
+deque<int> id;
+istream_itertaor<int> inite(cin), eos;
+copy(inite, eos, inserter(id, id.begin()));
+```
+
+1. 当客户端初次定义了一个 `istream_itertaor` 对象并绑定到标准输入设备 `cin` 时，便调用了`istream_itertaor<T>::read` 从 `cin` 中读取一个类型为 `T` 的值，并将其存放在数据成员 `value` 中：
+
+   ```c++
+   istream_iterator(istream& s) : stream(&s) { read(); }
+   void read() {
+       end_marker = (*stream) ? true : false;		// 读入前，检查 stream 的状态
+       if (end_marker) *stream >> value;			// 从 stream 中读出到 value 中	
+       end_marker = (*stream) ? true : false;		// 读入后，更新 stream 的状态
+   }
+   ```
+
+2. 当读入完毕后，进入 `copy` 函数的执行：
+
+   ```c++
+   template <class InputIterator, class OutputIterator>
+   inline OutputIterator __copy(InputIterator first, InputIterator last,
+                                OutputIterator result, input_iterator_tag)
+   {
+     for ( ; first != last; ++result, ++first)
+       *result = *first;
+     return result;
+   }
+   ```
+
+   * 进入循环，首先执行：`*result = *first;`，根据 `istream_iterator::operator*` 的定义，将返回 `value`，即第一步中从 `cin` 中读取的一个 T 值：
+
+     ```c++
+     reference operator*() const { return value; }
+     ```
+
+     这个值将会被赋予 `*result`。
+
+   * 当 `copy` 中的 `for` 循环进人下一次迭代时，会引发 `++first`，而根据 `istream_iterator::operator++` 的定义，对 `first` 累加，就是再从 `cin` 中读一个值，并存放到 value 中，然后再通过  `istream_iterator::operator*` 将这个值赋予  `*result`：
+
+     ```c++
+     istream_iterator<T, Distance>& operator++() { 
+         read(); 
+         return *this;
+     }
+     ```
+
+#### `ostream_iterator`
+
+所谓绑定一个 ostream 对象，就是在其内部维护一个 ostream 对象，客户端**<font color='red'>对于这个迭代器所做的 `operator=` 操作，会被转而调用对应的（迭代器内部所含的）那个 ostream 对象的输出操作（`operator<<`）。</font>**
+
+```c++
+template <class T>
+class ostream_iterator {
+protected:
+  ostream* stream;
+  const char* string;			// 每次输出后的间隔符号
+public:
+  typedef output_iterator_tag iterator_category;
+  typedef void                value_type;
+  typedef void                difference_type;
+  typedef void                pointer;
+  typedef void                reference;
+
+  ostream_iterator(ostream& s) : stream(&s), string(0) {}
+  ostream_iterator(ostream& s, const char* c) : stream(&s), string(c)  {}
+    
+  // 对迭代器做赋值操作，就代表要输出对应的数据
+  ostream_iterator<T>& operator=(const T& value) { 
+    *stream << value;
+    if (string) *stream << string;
+    return *this;
+  }
+    
+  // 解引用和递增操作什么都不做，返回 *this
+  ostream_iterator<T>& operator*() { return *this; }
+  ostream_iterator<T>& operator++() { return *this; } 
+  ostream_iterator<T>& operator++(int) { return *this; } 
+};
+```
+
+#### ⭐`ostream_iterator` 与 `copy`
+
+有如下客户端代码：
+
+```c++
+ostream_iterator<int> outite(cout, ' ');
+copy(id.begin(), id.end(), outite);
+```
+
+定义完 `outite` 之后，将会进入到 `copy` 的执行：
+
+```c++
+template <class InputIterator, class OutputIterator>
+inline OutputIterator __copy(InputIterator first, InputIterator last,
+                             OutputIterator result, input_iterator_tag)
+{
+  for ( ; first != last; ++result, ++first)
+    *result = *first;
+  return result;
+}
+```
+
+我们发现，每次迭代都做这样的事情：
+
+```c++
+*result = *first;
+```
+
+根据 `ostream_iterator` 的定义：
+
+1. 对 `result` 取值，返回的是自己:
+
+   ```c++
+   ostream_iterator<T>& operator*() { return *this; }
+   ```
+
+2. 对 `result` 执行赋值操作，则是将 `=` 右边的东西输出到 `cout` 去：
+
+   ```c++
+   ostream_iterator<T>& operator=(const T& value) { 
+       *stream << value;
+       if (string) *stream << string;
+       return *this;
+   }
+   ```
+
+3. 当 `copy` 进入`for` 循环的下一次迭代时，会引发 `++result`，对 `result` 累加，返回的是自己：
+
+   ```c++
+   ostream_iterator<T>& operator++() { return *this; }
+   ```
+
+4. 如此持续下去，直到 `first = last` 为止。
